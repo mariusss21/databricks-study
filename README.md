@@ -4,7 +4,7 @@ Mario Carvalho's study notes toward the **Databricks Certified Data Engineer Ass
 
 ## Courses
 
-- Introduction to Apache Spark (Databricks Academy): lesson notes coming soon
+- [Introduction to Apache Spark](courses/introduction-to-apache-spark/README.md) (Databricks Academy)
 
 ## Explanations
 
