@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>4.1 Lecture - Basic ETL Operations with the DataFrame API</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<h1 id="4.1-Lecture---Basic-ETL-Operations-with-the-DataFrame-API">4.1 Lecture - Basic ETL Operations with the DataFrame API</h1><blockquote>
+<h4 id="The-transformation-toolkit-for-distributed-data-processing"><em>The transformation toolkit for distributed data processing</em></h4></blockquote>
+<p>This lecture covers the DataFrame methods, column references, built-in functions, and user defined functions you will use to build ETL pipelines, along with the Spark 4 ANSI mode behavior that affects type conversion.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Describe how distributed DataFrame transformations map to equivalent SQL operations</li>
+<li>Work with Column objects and built-in functions, including proper column referencing</li>
+<li>Handle missing and invalid values, using <code>try_cast()</code> under Spark 4 ANSI mode</li>
+<li>Apply user defined functions, and explain when pandas UDFs are preferable</li>
+</ul>
+
+<h2 id="A.-DataFrame-Transformation-Methods">A. DataFrame Transformation Methods</h2><p>The core methods for distributed data transformation:</p>
+<ul>
+<li>DataFrame operations are distributed automatically across all partitions, enabling parallel processing of large datasets</li>
+<li>All DataFrame transformations have equivalent SQL operations under the hood (e.g. <code>select()</code> maps to <code>SELECT</code>, <code>filter()</code> maps to <code>WHERE</code>)</li>
+<li>Methods return a new DataFrame rather than modifying the existing one, supporting immutable transformations</li>
+<li>Each operation builds upon the logical plan until an action triggers execution</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>DataFrame Method</th>
+<th>SQL Equivalent</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>select()</code>__</td>
+<td><code>SELECT</code></td>
+<td>Choose specific columns</td>
+</tr>
+<tr>
+<td>__<code>filter()</code>__, __<code>where()</code>__</td>
+<td><code>WHERE</code></td>
+<td>Filter rows based on a condition</td>
+</tr>
+<tr>
+<td>__<code>groupBy()</code>__</td>
+<td><code>GROUP BY</code></td>
+<td>Group rows for aggregation</td>
+</tr>
+<tr>
+<td>__<code>orderBy()</code>__, __<code>sort()</code>__</td>
+<td><code>ORDER BY</code></td>
+<td>Sort a DataFrame by columns</td>
+</tr>
+<tr>
+<td>__<code>join()</code>__</td>
+<td><code>JOIN</code></td>
+<td>Combine two DataFrames by a key</td>
+</tr>
+</tbody>
+</table>
+<p>For more information see the <a href="https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/dataframe.html" rel="noreferrer noopener" target="_blank">DataFrame API reference</a>.</p>
+
+<h2 id="B.-Handling-Missing-Values">B. Handling Missing Values</h2><p>Real data has gaps. Common functions for handling nulls:</p>
+<ul>
+<li><code>isNull()</code> / <code>isNotNull()</code> - check if values are null</li>
+<li><code>count(col)</code> - counts non-null values in a specific column</li>
+<li><code>df.fillna()</code> / <code>df.na.fill()</code> - replace nulls with values</li>
+<li><code>df.dropna()</code> / <code>df.na.drop()</code> - remove rows with nulls</li>
+</ul>
+<div><div><pre><code id="code-iguw05qau"><span># Drop rows with nulls in a specific column</span>
+df<span>.</span>dropna<span>(</span>subset<span>=</span><span>[</span><span>"my_column"</span><span>]</span><span>)</span>
+
+<span># ..or..</span>
+df<span>.</span>na<span>.</span>drop<span>(</span>subset<span>=</span><span>[</span><span>"my_column"</span><span>]</span><span>)</span>
+
+<span># Replace nulls with a value</span>
+df<span>.</span>fillna<span>(</span><span>"unknown"</span><span>)</span>
+
+<span># ..or..</span>
+df<span>.</span>na<span>.</span>fill<span>(</span><span>"unknown"</span><span>)</span></code></pre></div></div>
+
+<h2 id="C.-Referencing-DataFrame-Columns">C. Referencing DataFrame Columns</h2><p>There are several ways to reference a column, and they are not all equal:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Description</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Direct</td>
+<td>Simplest syntax, works for basic column selection</td>
+<td><code>df.select("name")</code></td>
+</tr>
+<tr>
+<td>By attribute</td>
+<td>Only works for column names that are valid Python identifiers</td>
+<td><code>df.select(df.first_name)</code></td>
+</tr>
+<tr>
+<td>Column expression</td>
+<td>Works with any column name, can be referenced across DataFrames (e.g. in joins)</td>
+<td><code>df.select(df["first-name"])</code></td>
+</tr>
+<tr>
+<td>Column object</td>
+<td>Required when building complex expressions or using column-specific operations like <code>alias()</code>, <code>cast()</code>, <code>asc()</code> or <code>desc()</code></td>
+<td><code>df.select(col("name").alias("customer_name"))</code></td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="Common-Column-Object-Methods">Common Column Object Methods</h3><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Description</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>alias()</code>__</td>
+<td>Rename a column</td>
+<td><code>col("name").alias("customer_name")</code></td>
+</tr>
+<tr>
+<td>__<code>cast()</code>__ / __<code>astype()</code>__</td>
+<td>Change data type</td>
+<td><code>col("age").cast("int")</code></td>
+</tr>
+<tr>
+<td>__<code>isNull()</code>__ / __<code>isNotNull()</code>__</td>
+<td>Check for nulls</td>
+<td><code>col("name").isNotNull()</code></td>
+</tr>
+<tr>
+<td>__<code>contains()</code>__</td>
+<td>String matching</td>
+<td><code>col("title").contains("Manager")</code></td>
+</tr>
+<tr>
+<td>__<code>asc()</code>__ / __<code>desc()</code>__</td>
+<td>Sort direction (used with <code>sort</code> / <code>orderBy</code>)</td>
+<td><code>df.sort(col("c1").desc(), col("c2").asc())</code></td>
+</tr>
+</tbody>
+</table>
+<p>For more information see the <a href="https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/column.html" rel="noreferrer noopener" target="_blank">Column API reference</a>.</p>
+
+<h2 id="D.-Built-in-Functions">D. Built-in Functions</h2><p>Spark ships with a large library of functions that operate on columns:</p>
+<ul>
+<li>Functions can operate on scalar (strings, ints, etc.) or complex data types (arrays, structs, etc.)</li>
+<li>Function categories include Math, Datetime, String, Collection, Aggregate, Window, and more</li>
+<li>The same functions are available in both DataFrame operations and SQL queries using the equivalent SQL function names</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Built-in Function</th>
+<th>SQL Equivalent</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>round(col, scale)</code>__</td>
+<td><code>ROUND</code></td>
+<td>Round a number to a scale</td>
+</tr>
+<tr>
+<td>__<code>concat(col1, col2)</code>__</td>
+<td><code>CONCAT</code></td>
+<td>Concatenate strings</td>
+</tr>
+<tr>
+<td>__<code>date_format(col, fmt)</code>__</td>
+<td><code>DATE_FORMAT</code></td>
+<td>Format dates as strings</td>
+</tr>
+<tr>
+<td>__<code>regexp_replace(col, pattern, replace)</code>__</td>
+<td><code>REGEXP_REPLACE</code></td>
+<td>Replace using a regex</td>
+</tr>
+<tr>
+<td>__<code>coalesce(col1, col2)</code>__</td>
+<td><code>COALESCE</code></td>
+<td>First non-null value</td>
+</tr>
+</tbody>
+</table>
+<p>For more information see the <a href="https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/functions.html" rel="noreferrer noopener" target="_blank">functions reference</a> and the <a href="https://spark.apache.org/docs/latest/api/sql/index.html" rel="noreferrer noopener" target="_blank">SQL function reference</a>.</p>
+
+<h2 id="E.-Type-Conversion-Under-ANSI-Mode">E. Type Conversion Under ANSI Mode</h2><p>Spark 4 enables <strong>ANSI SQL mode</strong> by default, which changes how invalid conversions behave:</p>
+<table>
+<thead>
+<tr>
+<th>Expression</th>
+<th>Spark 3 (ANSI off)</th>
+<th>Spark 4 (ANSI on)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>CAST('NA' AS INT)</code>__</td>
+<td>Returns <code>NULL</code> silently</td>
+<td>Raises an error</td>
+</tr>
+<tr>
+<td>__<code>try_cast('NA' AS INT)</code>__</td>
+<td>Returns <code>NULL</code></td>
+<td>Returns <code>NULL</code></td>
+</tr>
+<tr>
+<td>Integer overflow</td>
+<td>Wraps around silently</td>
+<td>Raises an error</td>
+</tr>
+</tbody>
+</table>
+
+<div>
+<div>
+<span>⚠️</span>
+<div>
+<strong>Use try_cast() for Dirty Data</strong>
+<p>When cleaning data of unknown quality, use <code>try_cast()</code> (or the Column method <code>col("c").try_cast("int")</code>) so invalid values become <code>NULL</code> that you can then detect and handle, instead of failing the whole job. The flight data demo uses this pattern throughout.</p>
+</div>
+</div>
+</div>
+
+<h2 id="F.-User-Defined-Functions">F. User Defined Functions</h2><p>UDFs allow you to apply your own Python functions to DataFrame columns:</p>
+<div><div><pre><code id="code-0az1m8128"><span>from</span> pyspark<span>.</span>sql<span>.</span>functions <span>import</span> udf
+
+<span># define your function</span>
+<span>@udf</span><span>(</span><span>"string"</span><span>)</span>
+<span>def</span> <span>make_greeting</span><span>(</span>name<span>)</span><span>:</span>
+    <span>return</span> <span><span>f"Hello, </span><span><span>{</span>name<span>}</span></span><span>!"</span></span>
+
+<span># use your function</span>
+df<span>.</span>select<span>(</span>make_greeting<span>(</span><span>"name"</span><span>)</span><span>)</span></code></pre></div></div>
+
+
+
+
+
+<ul>
+<li>UDFs allow developers to create reusable custom functions</li>
+<li>UDFs can adversely impact performance: they cannot be optimized by the Catalyst optimizer and add serialization overhead between the JVM and the Python worker</li>
+</ul>
+
+<h3 id="Pandas-UDFs-and-Apache-Arrow">Pandas UDFs and Apache Arrow</h3><p>Pandas UDFs let you write Python functions that operate on <strong>batches of rows</strong> instead of single rows, leveraging Apache Arrow for more efficient Python-JVM serialization.</p>
+<div><div><pre><code id="code-ol83b0r4p"><span>from</span> pyspark<span>.</span>sql<span>.</span>functions <span>import</span> pandas_udf
+
+<span># define your pandas udf</span>
+<span>@pandas_udf</span><span>(</span><span>"integer"</span><span>)</span>
+<span>def</span> <span>age_plus_one</span><span>(</span>age_series<span>)</span><span>:</span>
+    <span>return</span> age_series <span>+</span> <span>1</span>
+
+<span># use your pandas udf</span>
+df<span>.</span>select<span>(</span>age_plus_one<span>(</span><span>"age"</span><span>)</span><span>)</span></code></pre></div></div>
+
+
+
+
+
+<ul>
+<li>More efficient than their non-pandas counterparts</li>
+<li>In Spark 4 you can also accelerate row-based UDFs with Arrow serialization: <code>@udf("string", useArrow=True)</code></li>
+<li>You should still use a built-in function if one is available - built-ins are always fastest because the optimizer understands them</li>
+</ul>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>DataFrame transformations map one-to-one to SQL operations and are distributed across partitions automatically</li>
+<li>Use Column objects (<code>col()</code>) for complex expressions and column methods like <code>alias()</code> and <code>cast()</code></li>
+<li>Prefer built-in functions; reach for pandas UDFs when custom logic is unavoidable</li>
+<li>Spark 4 ANSI mode makes invalid casts fail loudly; <code>try_cast()</code> provides the permissive alternative for cleaning dirty data</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>2.2 Lecture - Reading and Writing Data</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<h1 id="2.2-Lecture---Reading-and-Writing-Data">2.2 Lecture - Reading and Writing Data</h1><blockquote>
+<h4 id="DataFrame-I/O,-schemas,-data-types,-and-Spark-SQL"><em>DataFrame I/O, schemas, data types, and Spark SQL</em></h4></blockquote>
+<p>This lecture covers the interfaces Spark provides for getting data into and out of DataFrames, how schemas and data types work, and how Spark SQL and the metastore fit in.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Use the <code>DataFrameReader</code> and <code>DataFrameWriter</code> interfaces for data I/O</li>
+<li>Define DataFrame schemas by inference, with <code>StructType</code> objects, and with DDL strings</li>
+<li>Identify common primitive and complex Spark data types, including the <code>VARIANT</code> type</li>
+<li>Explain how Spark SQL and metastores (Unity Catalog) relate to DataFrames</li>
+</ul>
+
+<h2 id="A.-DataFrameReader-and-DataFrameWriter">A. DataFrameReader and DataFrameWriter</h2><p>The DataFrame API provides two interfaces for data I/O.</p>
+<p><strong><code>DataFrameReader</code></strong> (accessed as <code>spark.read</code>):</p>
+<ul>
+<li>Supports multiple formats (CSV, JSON, Parquet, ORC, Delta, and more)</li>
+<li>Provides schema inference</li>
+</ul>
+<div><div><pre><code id="code-dl09fezzj">df <span>=</span> spark<span>.</span>read<span>.</span><span>format</span><span>(</span><span>"csv"</span><span>)</span><span>.</span>option<span>(</span><span>"header"</span><span>,</span> <span>"true"</span><span>)</span><span>.</span>load<span>(</span><span>"/path/to/csv-dir"</span><span>)</span>
+
+<span># or using predefined format readers</span>
+df <span>=</span> spark<span>.</span>read<span>.</span>csv<span>(</span><span>"/Volumes/catalog/schema/files/csv-dir"</span><span>)</span>
+df <span>=</span> spark<span>.</span>read<span>.</span>parquet<span>(</span><span>"s3://mybucket/parquet-dir"</span><span>)</span></code></pre></div></div>
+<p><strong><code>DataFrameWriter</code></strong> (accessed as <code>dataframe.write</code>):</p>
+<ul>
+<li>Flexible output formats and partitioning</li>
+<li>Supports various save modes (<code>overwrite</code>, <code>append</code>, and more)</li>
+</ul>
+<div><div><pre><code id="code-1kjf1asru">df<span>.</span>write<span>.</span><span>format</span><span>(</span><span>"parquet"</span><span>)</span><span>.</span>mode<span>(</span><span>"overwrite"</span><span>)</span><span>.</span>save<span>(</span><span>"/path/to/output-dir"</span><span>)</span>
+
+<span># or using predefined format writers</span>
+df<span>.</span>write<span>.</span>csv<span>(</span><span>"/Volumes/catalog/schema/files/csv-out"</span><span>)</span>
+df<span>.</span>write<span>.</span>saveAsTable<span>(</span><span>"my_catalog.my_schema.my_table"</span><span>)</span></code></pre></div></div>
+
+<h2 id="B.-DataFrame-Schemas">B. DataFrame Schemas</h2><p>Every DataFrame has a defined schema - the structure and data types of all its columns. A schema can be inferred from the data or explicitly specified (more efficient):</p>
+<div><div><pre><code id="code-kokrbj5h0"><span># Defining a schema explicitly</span>
+<span>from</span> pyspark<span>.</span>sql<span>.</span>types <span>import</span> StructType<span>,</span> StructField<span>,</span> StringType<span>,</span> IntegerType
+schema <span>=</span> StructType<span>(</span><span>[</span>
+    StructField<span>(</span><span>"name"</span><span>,</span> StringType<span>(</span><span>)</span><span>)</span><span>,</span>
+    StructField<span>(</span><span>"age"</span><span>,</span> IntegerType<span>(</span><span>)</span><span>)</span>
+<span>]</span><span>)</span></code></pre></div></div>
+
+
+
+
+
+<ul>
+<li>Self-describing formats like Parquet and Delta include schema information, so no inference is needed</li>
+<li>Use the <code>printSchema()</code> method to print out a DataFrame's schema</li>
+</ul>
+<div>
+<div>
+<span>⚠️</span>
+<div>
+<strong>Schema Inference Costs</strong>
+<p>Inferring a schema requires an extra pass over the data and can guess wrong (for example reading a postal code as an integer). For production pipelines, define schemas explicitly.</p>
+</div>
+</div>
+</div>
+
+<h3 id="DDL-Schemas">DDL Schemas</h3><p>Instead of defining schemas using <code>StructType</code> objects, you can use DDL (Data Definition Language) strings for more readable schema definitions:</p>
+<div><div><pre><code id="code-qbyr4ikkf"><span># Defining a DDL schema</span>
+ddl_schema <span>=</span> <span>"name STRING NOT NULL, age INT, city STRING"</span>
+
+<span># Using the schema</span>
+df <span>=</span> spark<span>.</span>read<span>.</span>csv<span>(</span><span>"/Volumes/catalog/schema/files/csv-dir"</span><span>,</span> schema<span>=</span>ddl_schema<span>)</span>
+df<span>.</span>printSchema<span>(</span><span>)</span></code></pre></div></div>
+
+<h2 id="C.-DataFrame-Data-Types">C. DataFrame Data Types</h2><p>Spark defines a rich set of primitive data types, exposed both as Python type objects and SQL type names:</p>
+<table>
+<thead>
+<tr>
+<th>pyspark.sql.types</th>
+<th>Spark SQL Type</th>
+<th>Python equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>ByteType</code>__</td>
+<td><code>TINYINT</code></td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td>__<code>ShortType</code>__</td>
+<td><code>SMALLINT</code></td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td>__<code>IntegerType</code>__</td>
+<td><code>INT</code></td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td>__<code>LongType</code>__</td>
+<td><code>BIGINT</code></td>
+<td><code>int</code></td>
+</tr>
+<tr>
+<td>__<code>FloatType</code>__</td>
+<td><code>FLOAT</code></td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td>__<code>DoubleType</code>__</td>
+<td><code>DOUBLE</code></td>
+<td><code>float</code></td>
+</tr>
+<tr>
+<td>__<code>BooleanType</code>__</td>
+<td><code>BOOLEAN</code></td>
+<td><code>bool</code></td>
+</tr>
+<tr>
+<td>__<code>StringType</code>__</td>
+<td><code>STRING</code></td>
+<td><code>str</code></td>
+</tr>
+<tr>
+<td>__<code>BinaryType</code>__</td>
+<td><code>BINARY</code></td>
+<td><code>bytearray</code></td>
+</tr>
+<tr>
+<td>__<code>TimestampType</code>__</td>
+<td><code>TIMESTAMP</code></td>
+<td><code>datetime.datetime</code></td>
+</tr>
+<tr>
+<td>__<code>DateType</code>__</td>
+<td><code>DATE</code></td>
+<td><code>datetime.date</code></td>
+</tr>
+</tbody>
+</table>
+
+<h3 id="Complex-and-Semi-Structured-Data-Types">Complex and Semi-Structured Data Types</h3><p>Spark also supports complex types for nested data, plus the <code>VARIANT</code> type introduced in Spark 4:</p>
+<table>
+<thead>
+<tr>
+<th>DataType</th>
+<th>SQL Type</th>
+<th>Python equivalent</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>ArrayType</code>__</td>
+<td><code>ARRAY</code></td>
+<td><code>list</code> (or <code>tuple</code>)</td>
+<td>Ordered elements of the same type</td>
+</tr>
+<tr>
+<td>__<code>MapType</code>__</td>
+<td><code>MAP</code></td>
+<td><code>dict</code></td>
+<td>Keys and values can have different types</td>
+</tr>
+<tr>
+<td>__<code>StructType</code>__</td>
+<td><code>STRUCT</code></td>
+<td><code>tuple</code>, <code>dict</code>, <code>namedtuple</code></td>
+<td>Named fields with specified types</td>
+</tr>
+<tr>
+<td>__<code>VariantType</code>__</td>
+<td><code>VARIANT</code></td>
+<td>-</td>
+<td>Open semi-structured values (such as JSON) stored in an optimized binary form; new in Spark 4</td>
+</tr>
+</tbody>
+</table>
+<p>For more information see the <a href="https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/data_types.html" rel="noreferrer noopener" target="_blank">data types reference</a>.</p>
+
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>VARIANT for JSON</strong>
+<p>Before Spark 4, semi-structured JSON was typically stored as a <code>STRING</code> and parsed on every query. <code>VARIANT</code> stores the parsed structure in a binary form, so path expressions like <code>data:order.items[0].sku</code> are both more convenient and significantly faster.</p>
+</div>
+</div>
+</div>
+
+<h2 id="D.-Spark-SQL">D. Spark SQL</h2><p>Spark SQL is the SQL interface to the same engine that runs DataFrames - the two are interchangeable.</p>
+<p><strong>DataFrame registration:</strong></p>
+<ul>
+<li>Temporary views: <code>createOrReplaceTempView()</code></li>
+<li>Global temp views: <code>createGlobalTempView()</code></li>
+<li>Registration enables SQL queries against DataFrames</li>
+</ul>
+<p><strong>SQL query execution:</strong></p>
+<ul>
+<li>Use <code>spark.sql()</code> to run SQL statements from Python</li>
+<li>Results come back as DataFrames, so SQL and DataFrame code compose seamlessly</li>
+<li>Full SQL support including complex types, expressions, and the built-in functions library</li>
+</ul>
+<div><div><pre><code id="code-wdit84s53">df<span>.</span>createOrReplaceTempView<span>(</span><span>"flights_temp"</span><span>)</span>
+result_df <span>=</span> spark<span>.</span>sql<span>(</span><span>"SELECT carrier, COUNT(*) AS flights FROM flights_temp GROUP BY carrier"</span><span>)</span></code></pre></div></div>
+
+<h2 id="E.-A-Primer-on-Metastores">E. A Primer on Metastores</h2><p>A <strong>metastore</strong> provides the metadata management for Spark SQL. It is responsible for:</p>
+<ul>
+<li>Defining table schemas and locations</li>
+<li>Defining table partitions</li>
+<li>Storing properties and information for objects including tables, views, and functions</li>
+</ul>
+<p><strong>Unity Catalog</strong> is the centralized metadata service provided for Databricks accounts and assigned to Databricks workspaces. It enables fine-grained security and governance across all data assets, organizing them in a three-level namespace: <code>catalog.schema.table</code>.</p>
+
+<h2 id="Summary">Summary</h2><ul>
+<li><code>spark.read</code> (the <code>DataFrameReader</code>) and <code>df.write</code> (the <code>DataFrameWriter</code>) handle all DataFrame I/O</li>
+<li>Schemas can be inferred, defined with <code>StructType</code> objects, or defined with readable DDL strings - explicit is preferred</li>
+<li>Spark provides primitive, complex, and (new in Spark 4) <code>VARIANT</code> data types</li>
+<li>Spark SQL and the DataFrame API are two interfaces to the same engine; temp views bridge between them</li>
+<li>Unity Catalog is the metastore in Databricks, governing tables, views, volumes, and more</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

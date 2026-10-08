@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>1.1 Lecture - What is Apache Spark</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<h1 id="1.1-Lecture---What-is-Apache-Spark">1.1 Lecture - What is Apache Spark</h1><blockquote>
+<h4 id="A-unified-large-scale-data-processing-and-analytics-framework"><em>A unified large-scale data processing and analytics framework</em></h4></blockquote>
+<p>This lecture introduces Apache Spark: what it is, where it came from, and what makes up the Spark 4 component stack.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Describe Apache Spark and the workloads it supports</li>
+<li>Summarize the history of the Spark project and its relationship to Databricks</li>
+<li>Identify the major components of the Spark 4 stack and how they relate to the DataFrame API</li>
+</ul>
+
+<h2 id="A.-What-is-Apache-Spark?">A. What is Apache Spark?</h2><p>Apache Spark is an open-source, distributed, unified analytics engine for fast, large-scale data processing. Click any card to flip it and reveal more detail.</p>
+<div>
+<div id="flip-unified">
+<div>
+<div>
+<div>Unified</div>
+<div>Native support for SQL, streaming data, machine learning, and graph processing through a consistent API.</div>
+<div>Click to flip</div>
+</div>
+<div>
+<div>Unified API</div>
+<ul>
+<li>The same DataFrame code can power a batch ETL job, a streaming pipeline, or feature preparation for machine learning, so teams learn one API rather than four separate systems.</li>
+<li>SQL, Python, Scala, Java, and R interfaces all compile down to the same execution engine, producing the same query plans regardless of language.</li>
+</ul>
+</div>
+</div>
+</div>
+<div id="flip-distributed">
+<div>
+<div>
+<div>Distributed</div>
+<div>Work is split across many machines, allowing datasets far larger than any single machine could hold.</div>
+<div>Click to flip</div>
+</div>
+<div>
+<div>Distributed Execution</div>
+<ul>
+<li>Spark splits data into partitions and processes them in parallel across a cluster of machines, scaling horizontally by adding nodes.</li>
+<li>Fault tolerance is built in: if a node fails, Spark recomputes only the lost partitions using the lineage recorded in the query plan.</li>
+</ul>
+</div>
+</div>
+</div>
+<div id="flip-fast">
+<div>
+<div>
+<div>Fast</div>
+<div>High performance through in-memory computation, making it significantly faster than disk-based processing frameworks.</div>
+<div>Click to flip</div>
+</div>
+<div>
+<div>In-Memory Performance</div>
+<ul>
+<li>Intermediate results are held in memory wherever possible, avoiding the repeated disk writes that limit older frameworks such as Hadoop MapReduce.</li>
+<li>On Databricks, the Photon engine further accelerates execution by processing data in vectorized batches.</li>
+</ul>
+</div>
+</div>
+</div>
+<div id="flip-open">
+<div>
+<div>
+<div>Open</div>
+<div>Operates seamlessly with diverse data sources including cloud storage (AWS S3, Azure, Google Cloud), local files, and databases.</div>
+<div>Click to flip</div>
+</div>
+<div>
+<div>Open and Interoperable</div>
+<ul>
+<li>Built-in connectors read and write cloud object storage (Amazon S3, Azure Data Lake Storage, Google Cloud Storage), local and distributed file systems, and JDBC databases.</li>
+<li>Open file and table formats such as Parquet, JSON, CSV, Delta Lake, and Apache Iceberg avoid lock-in to any single storage system.</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+
+<h2 id="B.-A-Brief-History-of-Spark-and-Databricks">B. A Brief History of Spark and Databricks</h2><p>Spark began as a research project at UC Berkeley and has grown into one of the most active open-source projects in data. Databricks was founded by the original creators of Spark. Click the bar below to reveal the timeline, grouped into four eras.</p>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Spark and Databricks timeline</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg style="width:100%; height:auto; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" viewBox="0 0 960 400">
+<text fill="#1B5162" font-size="17" font-weight="bold" text-anchor="middle" x="480" y="24">Spark and Databricks Milestones</text>
+<rect fill="#1B5162" height="46" rx="8" width="226" x="10" y="44"></rect>
+<text fill="#ffffff" font-size="14" font-weight="bold" text-anchor="middle" x="123" y="66">Origins</text>
+<text fill="#cfe0e5" font-size="11" text-anchor="middle" x="123" y="82">2009–2013</text>
+<rect fill="#1B5162" height="46" rx="8" width="226" x="248" y="44"></rect>
+<text fill="#ffffff" font-size="14" font-weight="bold" text-anchor="middle" x="361" y="66">Apache Project</text>
+<text fill="#cfe0e5" font-size="11" text-anchor="middle" x="361" y="82">2014–2016</text>
+<rect fill="#1B5162" height="46" rx="8" width="226" x="486" y="44"></rect>
+<text fill="#ffffff" font-size="14" font-weight="bold" text-anchor="middle" x="599" y="66">Lakehouse</text>
+<text fill="#cfe0e5" font-size="11" text-anchor="middle" x="599" y="82">2018–2021</text>
+<rect fill="#1B5162" height="46" rx="8" width="226" x="724" y="44"></rect>
+<text fill="#ffffff" font-size="14" font-weight="bold" text-anchor="middle" x="837" y="66">Spark 4</text>
+<text fill="#cfe0e5" font-size="11" text-anchor="middle" x="837" y="82">2023–2025</text>
+<text fill="#618794" font-size="20" text-anchor="middle" x="242" y="75">›</text>
+<text fill="#618794" font-size="20" text-anchor="middle" x="480" y="75">›</text>
+<text fill="#618794" font-size="20" text-anchor="middle" x="718" y="75">›</text>
+<rect fill="#ffffff" height="84" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="206" x="20" y="110"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="34" y="134">2009</text>
+<text fill="#333" font-size="11.5" x="34" y="155">Originates at UC Berkeley</text>
+<text fill="#333" font-size="11.5" x="34" y="173">AMPLab</text>
+<rect fill="#ffffff" height="84" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="206" x="20" y="206"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="34" y="230">2010</text>
+<text fill="#333" font-size="11.5" x="34" y="251">Initial Spark release</text>
+<rect fill="#ffffff" height="84" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="206" x="20" y="302"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="34" y="326">2013</text>
+<text fill="#333" font-size="11.5" x="34" y="347">Databricks founded;</text>
+<text fill="#333" font-size="11.5" x="34" y="365">Spark to Apache</text>
+<rect fill="#ffffff" height="84" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="206" x="258" y="110"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="272" y="134">2014</text>
+<text fill="#333" font-size="11.5" x="272" y="155">Apache top-level project</text>
+<rect fill="#ffffff" height="84" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="206" x="258" y="206"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="272" y="230">2015</text>
+<text fill="#333" font-size="11.5" x="272" y="251">DataFrame API released</text>
+<rect fill="#ffffff" height="84" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="206" x="258" y="302"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="272" y="326">2016</text>
+<text fill="#333" font-size="11.5" x="272" y="347">Spark 2.0 and</text>
+<text fill="#333" font-size="11.5" x="272" y="365">Structured Streaming</text>
+<rect fill="#ffffff" height="84" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="206" x="496" y="110"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="510" y="134">2018</text>
+<text fill="#333" font-size="11.5" x="510" y="155">Delta Lake introduced</text>
+<rect fill="#ffffff" height="84" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="206" x="496" y="206"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="510" y="230">2020</text>
+<text fill="#333" font-size="11.5" x="510" y="251">Spark 3.0 and Adaptive</text>
+<text fill="#333" font-size="11.5" x="510" y="269">Query Execution</text>
+<rect fill="#ffffff" height="84" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="206" x="496" y="302"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="510" y="326">2021</text>
+<text fill="#333" font-size="11.5" x="510" y="347">Unity Catalog announced</text>
+<rect fill="#ffffff" height="84" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="206" x="734" y="110"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="748" y="134">2023</text>
+<text fill="#333" font-size="11.5" x="748" y="155">Spark 3.4 and</text>
+<text fill="#333" font-size="11.5" x="748" y="173">Spark Connect</text>
+<rect fill="#ffffff" height="84" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="206" x="734" y="206"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="748" y="230">2025</text>
+<text fill="#333" font-size="11.5" x="748" y="251">Spark 4.0 released</text>
+</svg>
+</div>
+</details><br>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Expand for More Details</strong>
+</div>
+</div>
+</summary>
+<div>
+<div>From Research Project to Industry Standard</div>
+<ul>
+<li>Spark was created at UC Berkeley's AMPLab in 2009 to address the performance limits of Hadoop MapReduce, particularly for iterative workloads such as machine learning.</li>
+<li>The project was donated to the Apache Software Foundation in 2013 and became a top-level project in 2014, the same period in which the original creators founded Databricks.</li>
+<li>The DataFrame API (2015) and the unified <code>SparkSession</code> entry point in Spark 2.0 (2016) shifted Spark development from low-level RDD code to declarative, optimizer-friendly operations.</li>
+</ul>
+<div>The Spark 4 Era</div>
+<ul>
+<li>Spark 3.x introduced Adaptive Query Execution (3.0) and Spark Connect (3.4), a client-server protocol that decouples the client application from the cluster.</li>
+<li>Spark 4.0, released in 2025, made ANSI SQL mode the default, added the <code>VARIANT</code> data type for semi-structured data, and promoted Spark Connect to a first-class architecture. Databricks Runtime 17.x is built on Spark 4.0.</li>
+</ul>
+</div>
+</details>
+
+<h2 id="C.-The-Spark-Component-Stack">C. The Spark Component Stack</h2><p>Spark is organized in layers. Specialized libraries sit on top of the DataFrame API, which in turn runs on Spark Core. Click the bar below to reveal the diagram.</p>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Spark component stack diagram</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg style="width:100%; height:auto; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" viewBox="0 0 960 360">
+<defs>
+<marker id="comp-arrow" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="9" refY="5" viewBox="0 0 10 10">
+<path d="M0,0 L10,5 L0,10 z" fill="#618794"></path>
+</marker>
+</defs>
+<rect fill="#ffffff" height="72" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="166" x="20" y="18"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" text-anchor="middle" x="103" y="44">Structured Streaming</text>
+<text fill="#555" font-size="10.5" font-style="italic" text-anchor="middle" x="103" y="61">Real-time processing</text>
+<text fill="#555" font-size="10.5" font-style="italic" text-anchor="middle" x="103" y="77">with DataFrame semantics</text>
+<rect fill="#ffffff" height="72" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="166" x="198" y="18"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" text-anchor="middle" x="281" y="44">MLlib</text>
+<text fill="#555" font-size="10.5" font-style="italic" text-anchor="middle" x="281" y="63">Machine learning library</text>
+<rect fill="#ffffff" height="72" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="166" x="376" y="18"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" text-anchor="middle" x="459" y="44">Spark SQL</text>
+<text fill="#555" font-size="10.5" font-style="italic" text-anchor="middle" x="459" y="61">SQL interface for</text>
+<text fill="#555" font-size="10.5" font-style="italic" text-anchor="middle" x="459" y="77">structured data</text>
+<rect fill="#ffffff" height="72" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="166" x="554" y="18"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" text-anchor="middle" x="637" y="44">pandas API on Spark</text>
+<text fill="#555" font-size="10.5" font-style="italic" text-anchor="middle" x="637" y="61">pandas-compatible</text>
+<text fill="#555" font-size="10.5" font-style="italic" text-anchor="middle" x="637" y="77">DataFrame interface</text>
+<rect fill="#ffffff" height="72" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="180" x="760" y="18"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" text-anchor="middle" x="850" y="44">GraphX</text>
+<text fill="#555" font-size="10.5" font-style="italic" text-anchor="middle" x="850" y="63">Graph processing library</text>
+<rect fill="#DCE0E2" height="62" rx="8" stroke="#618794" stroke-width="2" width="700" x="20" y="150"></rect>
+<text fill="#1B5162" font-size="15" font-weight="bold" text-anchor="middle" x="370" y="178">DataFrame API</text>
+<text fill="#3d5c66" font-size="12" font-style="italic" text-anchor="middle" x="370" y="197">High-level API for structured data operations</text>
+<rect fill="#FFCC66" height="62" rx="8" stroke="#CD7F32" stroke-width="2" width="920" x="20" y="278"></rect>
+<text fill="#6b4a12" font-size="15" font-weight="bold" text-anchor="middle" x="480" y="315">Spark Core (RDD API)</text>
+<line marker-end="url(#comp-arrow)" stroke="#618794" stroke-width="2" x1="103" x2="103" y1="90" y2="148"></line>
+<line marker-end="url(#comp-arrow)" stroke="#618794" stroke-width="2" x1="281" x2="281" y1="90" y2="148"></line>
+<line marker-end="url(#comp-arrow)" stroke="#618794" stroke-width="2" x1="459" x2="459" y1="90" y2="148"></line>
+<line marker-end="url(#comp-arrow)" stroke="#618794" stroke-width="2" x1="637" x2="637" y1="90" y2="148"></line>
+<line marker-end="url(#comp-arrow)" stroke="#618794" stroke-width="2" x1="370" x2="370" y1="212" y2="276"></line>
+<line marker-end="url(#comp-arrow)" stroke="#618794" stroke-width="2" x1="850" x2="850" y1="90" y2="276"></line>
+</svg>
+</div>
+</details><br>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Expand for More Details</strong>
+</div>
+</div>
+</summary>
+<div>
+<div>The Libraries</div>
+<ul>
+<li><strong>Structured Streaming</strong> processes unbounded data using the same DataFrame operations you use for batch, so a streaming pipeline looks almost identical to a batch one.</li>
+<li><strong>MLlib</strong> provides distributed implementations of common machine learning algorithms and feature transformers.</li>
+<li><strong>Spark SQL</strong> exposes the engine through standard SQL, and shares the optimizer and execution engine with the DataFrame API.</li>
+<li><strong>pandas API on Spark</strong> offers a pandas-compatible interface for Python users, executing pandas-style code at cluster scale.</li>
+<li><strong>GraphX</strong> supports graph algorithms; in practice most graph work in Python uses the GraphFrames package built on DataFrames.</li>
+</ul>
+<div>The Foundation Layers</div>
+<ul>
+<li>The <strong>DataFrame API</strong> is the primary programming interface in modern Spark. It is declarative: you describe the result you want, and the Catalyst optimizer determines how to compute it.</li>
+<li><strong>Spark Core</strong> implements scheduling, memory management, fault recovery, and the low-level RDD (Resilient Distributed Dataset) abstraction. In Spark 4 you rarely program against RDDs directly, and the RDD API is not available over Spark Connect, but everything still executes on this layer.</li>
+<li>The R language binding (SparkR) is deprecated as of Spark 4.0; R users are directed to the community-supported sparklyr package.</li>
+</ul>
+</div>
+</details>
+
+<h2 id="D.-What-is-New-in-Spark-4">D. What is New in Spark 4</h2><p>This course is based on <strong>Apache Spark 4</strong>, the version that ships with <strong>Databricks Runtime 17.x</strong>. The table below summarizes the headline changes you will encounter in this course.</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>What it Means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ANSI SQL mode by default</td>
+<td>Invalid casts and arithmetic overflows now raise errors instead of silently returning <code>NULL</code>. Use <code>try_cast()</code> for permissive conversions.</td>
+</tr>
+<tr>
+<td>Spark Connect</td>
+<td>A client-server architecture that decouples your application from the cluster using a thin client and the gRPC protocol.</td>
+</tr>
+<tr>
+<td><code>VARIANT</code> data type</td>
+<td>A native type for semi-structured data (such as JSON) that is faster and more flexible than storing JSON as strings.</td>
+</tr>
+<tr>
+<td>Native plotting</td>
+<td>Plot directly from a PySpark DataFrame with <code>df.plot</code> (backed by plotly), without converting to pandas first.</td>
+</tr>
+<tr>
+<td>SQL scripting</td>
+<td>Procedural SQL with <code>BEGIN ... END</code> blocks, variables, conditionals, and loops. The course setup notebooks use this.</td>
+</tr>
+<tr>
+<td>Arrow-optimized Python UDFs</td>
+<td>Python user defined functions can use Apache Arrow for serialization, reducing the Python-JVM overhead.</td>
+</tr>
+</tbody>
+</table>
+<p>You will meet ANSI mode and <code>try_cast()</code> in the ETL demo, native plotting in Section 4, and SQL scripting in the course setup notebooks.</p>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>Apache Spark is an open-source, distributed, unified analytics engine for large-scale data processing</li>
+<li>Spark originated at UC Berkeley in 2009; Databricks was founded by its creators in 2013</li>
+<li>Specialized libraries (Structured Streaming, MLlib, Spark SQL, pandas API on Spark) sit on the DataFrame API, which runs on Spark Core</li>
+<li>Spark 4 brings ANSI SQL mode by default, Spark Connect, the <code>VARIANT</code> type, native plotting, and SQL scripting</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

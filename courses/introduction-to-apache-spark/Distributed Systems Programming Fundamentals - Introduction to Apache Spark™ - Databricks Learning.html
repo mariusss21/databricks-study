@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>3.1 Lecture - Distributed Systems Programming Fundamentals</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<h1 id="3.1-Lecture---Distributed-Systems-Programming-Fundamentals">3.1 Lecture - Distributed Systems Programming Fundamentals</h1><blockquote>
+<h4 id="How-Spark-divides-data-and-moves-it-between-machines"><em>How Spark divides data and moves it between machines</em></h4></blockquote>
+<p>This lecture covers the distributed systems concepts behind Spark's execution model. Understanding partitioning and the shuffle explains both why Spark scales and where its costs come from.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Describe core distributed system concepts including shared-nothing architecture, partitioning, and parallel processing</li>
+<li>Explain how data moves between nodes in distributed operations, particularly during shuffle operations like <code>groupBy</code> and <code>join</code></li>
+<li>Describe the MapReduce algorithm for parallel data processing and its application in the DataFrame API</li>
+</ul>
+
+<h2 id="A.-Shared-Nothing-Architecture">A. Shared Nothing Architecture</h2><p>Spark follows the <strong>shared nothing</strong> model of distributed computing: nodes cooperate on a job without sharing memory or disk.</p>
+<div>
+<div>
+<div>Independence</div>
+<div>Each node works independently and manages its own resources (CPU, memory, disk).</div>
+</div>
+<div>
+<div>Scalability</div>
+<div>Adding more nodes can improve performance without resource contention.</div>
+</div>
+<div>
+<div>Fault Tolerance</div>
+<div>Failures are isolated to individual nodes, minimizing system-wide impacts.</div>
+</div>
+<div>
+<div>Resource Partitioning</div>
+<div>Data and workloads are partitioned across nodes to eliminate contention.</div>
+</div>
+</div>
+
+<h2 id="B.-Partitioning">B. Partitioning</h2><p>Partitioning is how Spark distributes data across the cluster.</p>
+<p><strong>Data distribution:</strong></p>
+<ul>
+<li>Data is divided into mutually exclusive in-memory partitions</li>
+<li>Default partitioning is based upon the input and can be manipulated</li>
+<li>The size and number of partitions affect parallelism</li>
+</ul>
+<p><strong>Processing model:</strong></p>
+<ul>
+<li>Each partition is processed independently</li>
+<li>Multiple partitions can run in parallel</li>
+<li>One partition = one task in Spark</li>
+<li>Partitioning impacts performance and shuffle operations</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Partitions distributed across Workers</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg style="height:auto; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" viewBox="0 0 760 320" width="100%">
+<defs><marker id="pt-arrow" markerHeight="8" markerUnits="strokeWidth" markerWidth="10" orient="auto" refX="7" refY="3"><path d="M0,0 L8,3 L0,6 Z" fill="#618794"></path></marker></defs>
+<path d="M20,105 A55,12 0 0 1 130,105 L130,195 A55,12 0 0 1 20,195 Z" fill="#DCE0E2" stroke="#618794" stroke-width="2"></path>
+<ellipse cx="75" cy="105" fill="#DCE0E2" rx="55" ry="12" stroke="#618794" stroke-width="2"></ellipse>
+<text fill="#1B5162" font-size="15" font-weight="700" text-anchor="middle" x="75" y="146">Input</text>
+<text fill="#1B5162" font-size="15" font-weight="700" text-anchor="middle" x="75" y="166">Data Set</text>
+<line marker-end="url(#pt-arrow)" stroke="#618794" stroke-width="2" x1="134" x2="366" y1="150" y2="59"></line>
+<line marker-end="url(#pt-arrow)" stroke="#618794" stroke-width="2" x1="134" x2="366" y1="150" y2="160"></line>
+<line marker-end="url(#pt-arrow)" stroke="#618794" stroke-width="2" x1="134" x2="366" y1="150" y2="261"></line>
+<g><rect fill="#FFFFFF" height="86" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="374" x="370" y="16"></rect><text fill="#618794" font-size="13" x="384" y="36">Worker</text><rect fill="#F9F7F4" height="48" rx="6" stroke="#DCE0E2" stroke-width="1.5" width="346" x="384" y="44"></rect><text fill="#618794" font-size="12" x="398" y="62">Executor</text><rect fill="#FFFFFF" height="34" rx="6" stroke="#618794" stroke-width="1.5" width="160" x="560" y="50"></rect><text fill="#333" font-size="14" text-anchor="middle" x="640" y="72">Partition 0</text></g>
+<g><rect fill="#FFFFFF" height="86" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="374" x="370" y="117"></rect><text fill="#618794" font-size="13" x="384" y="137">Worker</text><rect fill="#F9F7F4" height="48" rx="6" stroke="#DCE0E2" stroke-width="1.5" width="346" x="384" y="145"></rect><text fill="#618794" font-size="12" x="398" y="163">Executor</text><rect fill="#FFFFFF" height="34" rx="6" stroke="#618794" stroke-width="1.5" width="160" x="560" y="151"></rect><text fill="#333" font-size="14" text-anchor="middle" x="640" y="173">Partition 1</text></g>
+<g><rect fill="#FFFFFF" height="86" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="374" x="370" y="218"></rect><text fill="#618794" font-size="13" x="384" y="238">Worker</text><rect fill="#F9F7F4" height="48" rx="6" stroke="#DCE0E2" stroke-width="1.5" width="346" x="384" y="246"></rect><text fill="#618794" font-size="12" x="398" y="264">Executor</text><rect fill="#FFFFFF" height="34" rx="6" stroke="#618794" stroke-width="1.5" width="160" x="560" y="252"></rect><text fill="#333" font-size="14" text-anchor="middle" x="640" y="274">Partition 2</text></g>
+</svg>
+</div>
+</details>
+
+<h2 id="C.-The-Shuffle-Operation">C. The Shuffle Operation</h2><p>The shuffle is how data moves between partitions in distributed processing.</p>
+<p><strong>What is shuffling?</strong></p>
+<ul>
+<li>Redistributing data across partitions</li>
+<li>Required for operations like <code>groupBy</code> and <code>join</code></li>
+<li>The most expensive operation in Spark - it involves serializing data and moving it over the network</li>
+</ul>
+<p><strong>When it occurs:</strong></p>
+<ul>
+<li>Wide transformations (where output partitions depend on many input partitions)</li>
+<li>Key-based operations</li>
+<li>Data repartitioning</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>All-to-all data movement between stages</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg style="height:auto; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" viewBox="0 0 820 340" width="100%">
+<defs><marker id="shuf-arrow" markerHeight="8" markerUnits="strokeWidth" markerWidth="10" orient="auto" refX="7" refY="3"><path d="M0,0 L8,3 L0,6 Z" fill="#618794"></path></marker></defs>
+<rect fill="#F9F7F4" height="308" rx="10" stroke="#618794" stroke-width="2" width="300" x="16" y="16"></rect>
+<text fill="#1B5162" font-size="15" font-weight="700" text-anchor="middle" x="166" y="42">Stage 1 - map side</text>
+<rect fill="#FFFFFF" height="64" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="250" x="41" y="64"></rect><text fill="#333" font-size="14" font-weight="600" text-anchor="middle" x="166" y="92">partition 0</text><text fill="#555" font-size="12" text-anchor="middle" x="166" y="114">keys k1, k2</text>
+<rect fill="#FFFFFF" height="64" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="250" x="41" y="148"></rect><text fill="#333" font-size="14" font-weight="600" text-anchor="middle" x="166" y="176">partition 1</text><text fill="#555" font-size="12" text-anchor="middle" x="166" y="198">keys k1, k2</text>
+<rect fill="#FFFFFF" height="64" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="250" x="41" y="232"></rect><text fill="#333" font-size="14" font-weight="600" text-anchor="middle" x="166" y="260">partition 2</text><text fill="#555" font-size="12" text-anchor="middle" x="166" y="282">keys k1, k2</text>
+<rect fill="#FFCC66" height="220" rx="10" stroke="#CD7F32" stroke-width="2" width="300" x="504" y="60"></rect>
+<text fill="#7a4a10" font-size="15" font-weight="700" text-anchor="middle" x="654" y="86">Stage 2 - reduce side</text>
+<rect fill="#FFFFFF" height="64" rx="8" stroke="#CD7F32" stroke-width="1.5" width="250" x="529" y="104"></rect><text fill="#333" font-size="14" font-weight="600" text-anchor="middle" x="654" y="132">partition 0</text><text fill="#555" font-size="12" text-anchor="middle" x="654" y="154">all k1 rows</text>
+<rect fill="#FFFFFF" height="64" rx="8" stroke="#CD7F32" stroke-width="1.5" width="250" x="529" y="192"></rect><text fill="#333" font-size="14" font-weight="600" text-anchor="middle" x="654" y="220">partition 1</text><text fill="#555" font-size="12" text-anchor="middle" x="654" y="242">all k2 rows</text>
+<line marker-end="url(#shuf-arrow)" stroke="#618794" stroke-width="1.5" x1="293" x2="527" y1="90" y2="130"></line>
+<line marker-end="url(#shuf-arrow)" stroke="#618794" stroke-width="1.5" x1="293" x2="527" y1="104" y2="216"></line>
+<line marker-end="url(#shuf-arrow)" stroke="#618794" stroke-width="1.5" x1="293" x2="527" y1="174" y2="136"></line>
+<line marker-end="url(#shuf-arrow)" stroke="#618794" stroke-width="1.5" x1="293" x2="527" y1="188" y2="222"></line>
+<line marker-end="url(#shuf-arrow)" stroke="#618794" stroke-width="1.5" x1="293" x2="527" y1="256" y2="142"></line>
+<line marker-end="url(#shuf-arrow)" stroke="#618794" stroke-width="1.5" x1="293" x2="527" y1="270" y2="228"></line>
+<rect fill="#FFFFFF" height="15" width="20" x="299" y="79"></rect><text fill="#1B5162" font-size="11" text-anchor="middle" x="309" y="91">k1</text>
+<rect fill="#FFFFFF" height="15" width="20" x="299" y="99"></rect><text fill="#1B5162" font-size="11" text-anchor="middle" x="309" y="111">k2</text>
+<rect fill="#FFFFFF" height="15" width="20" x="299" y="163"></rect><text fill="#1B5162" font-size="11" text-anchor="middle" x="309" y="175">k1</text>
+<rect fill="#FFFFFF" height="15" width="20" x="299" y="183"></rect><text fill="#1B5162" font-size="11" text-anchor="middle" x="309" y="195">k2</text>
+<rect fill="#FFFFFF" height="15" width="20" x="299" y="245"></rect><text fill="#1B5162" font-size="11" text-anchor="middle" x="309" y="257">k1</text>
+<rect fill="#FFFFFF" height="15" width="20" x="299" y="265"></rect><text fill="#1B5162" font-size="11" text-anchor="middle" x="309" y="277">k2</text>
+</svg>
+</div>
+</details>
+<br>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Expand for More Details</strong>
+</div>
+</div>
+</summary>
+<div>
+<div>Why the Shuffle is Expensive</div>
+<ul>
+<li>Every map-side partition may hold rows for every key, so each reduce-side partition must collect data from <em>all</em> map-side partitions - an all-to-all exchange across the network.</li>
+<li>Shuffled data is serialized, written to disk on the map side, transferred, and deserialized on the reduce side. This is why a stage boundary appears at every shuffle in the DAG.</li>
+<li>Minimizing shuffles - by filtering early and aggregating as late as possible with as little data as possible - is the single most effective Spark performance habit.</li>
+</ul>
+<div>Adaptive Query Execution Helps</div>
+<ul>
+<li>Since Spark 3 (and on by default in Spark 4), Adaptive Query Execution inspects the actual shuffle output at runtime and coalesces small shuffle partitions, picks better join strategies, and rebalances skewed partitions automatically.</li>
+</ul>
+</div>
+</details>
+
+<h2 id="D.-MapReduce-in-Action">D. MapReduce in Action</h2><p>MapReduce is the classic pattern for parallel data processing, and it is exactly what a DataFrame pipeline compiles down to. Consider this small ETL job, which reads sales records, filters them, and totals the amount per id:</p>
+<div><div><pre><code id="code-c1evkft2j"><span># READ: scan the source file into a DataFrame</span>
+input_df <span>=</span> spark<span>.</span>read<span>.</span>csv<span>(</span><span>"sales_data.csv"</span><span>)</span>
+
+<span># MAP: narrow, per-partition transformations - no data movement</span>
+filtered_df <span>=</span> input_df<span>.</span>select<span>(</span><span>"id"</span><span>,</span> <span>"amt"</span><span>)</span><span>.</span><span>filter</span><span>(</span><span>"amt &gt; 50"</span><span>)</span>
+
+<span># SHUFFLE: groupBy sets the key, so all rows for the same id must be</span>
+<span># moved onto the same partition (the exchange) before aggregation</span>
+grouped_df <span>=</span> filtered_df<span>.</span>groupBy<span>(</span><span>"id"</span><span>)</span>
+
+<span># REDUCE: aggregate each group after the shuffle - sum amt per id</span>
+aggregated_df <span>=</span> grouped_df<span>.</span>agg<span>(</span><span>{</span><span>"amt"</span><span>:</span> <span>"sum"</span><span>}</span><span>)</span>
+
+<span># WRITE: each partition writes its slice of the result</span>
+aggregated_df<span>.</span>write<span>.</span>csv<span>(</span><span>"/Volumes/catalog/schema/output/sales_by_id"</span><span>)</span></code></pre></div></div>
+
+
+
+
+
+<p>Click the bar below to trace the data through the map stage, the shuffle, and the reduce stage.</p>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>MapReduce data flow for the sales pipeline</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg style="height:auto; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" viewBox="0 0 800 766" width="100%">
+<defs><marker id="mr-arrow" markerHeight="8" markerUnits="strokeWidth" markerWidth="10" orient="auto" refX="7" refY="3"><path d="M0,0 L8,3 L0,6 Z" fill="#618794"></path></marker></defs>
+<g font-family="Consolas,Monaco,monospace">
+<g><rect fill="#FFFFFF" height="110" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="180" x="16" y="16"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="14" font-weight="700" text-anchor="middle" x="106" y="38">file 1</text><text fill="#888" font-size="11" text-anchor="middle" x="106" y="58">id,amt,region</text><text fill="#333" font-size="12" text-anchor="middle" x="106" y="78">A,100,US</text><text fill="#333" font-size="12" text-anchor="middle" x="106" y="96">C,200,US</text><text fill="#999" font-size="12" text-anchor="middle" x="106" y="114">B,30,EU</text></g>
+<g><rect fill="#FFFFFF" height="110" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="180" x="212" y="16"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="14" font-weight="700" text-anchor="middle" x="302" y="38">file 2</text><text fill="#888" font-size="11" text-anchor="middle" x="302" y="58">id,amt,region</text><text fill="#333" font-size="12" text-anchor="middle" x="302" y="78">C,60,EU</text><text fill="#333" font-size="12" text-anchor="middle" x="302" y="96">D,150,EU</text><text fill="#333" font-size="12" text-anchor="middle" x="302" y="114">B,75,US</text></g>
+<g><rect fill="#FFFFFF" height="110" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="180" x="408" y="16"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="14" font-weight="700" text-anchor="middle" x="498" y="38">file 3</text><text fill="#888" font-size="11" text-anchor="middle" x="498" y="58">id,amt,region</text><text fill="#333" font-size="12" text-anchor="middle" x="498" y="78">A,120,US</text><text fill="#333" font-size="12" text-anchor="middle" x="498" y="96">A,90,EU</text><text fill="#999" font-size="12" text-anchor="middle" x="498" y="114">D,50,EU</text></g>
+<g><rect fill="#FFFFFF" height="110" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="180" x="604" y="16"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="14" font-weight="700" text-anchor="middle" x="694" y="38">file 4</text><text fill="#888" font-size="11" text-anchor="middle" x="694" y="58">id,amt,region</text><text fill="#333" font-size="12" text-anchor="middle" x="694" y="78">C,80,US</text><text fill="#333" font-size="12" text-anchor="middle" x="694" y="96">C,140,EU</text><text fill="#333" font-size="12" text-anchor="middle" x="694" y="114">B,110,US</text></g>
+<line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="106" x2="106" y1="126" y2="154"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="302" x2="302" y1="126" y2="154"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="498" x2="498" y1="126" y2="154"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="694" x2="694" y1="126" y2="154"></line>
+<rect fill="#FABFBA" height="64" rx="8" stroke="#CD7F32" stroke-width="2" width="768" x="16" y="156"></rect><text fill="#7a2018" font-family="-apple-system,sans-serif" font-size="14" font-weight="700" text-anchor="middle" x="400" y="183">Map stage: select('id', 'amt') + filter('amt &gt; 50')</text><text fill="#8a4038" font-family="-apple-system,sans-serif" font-size="12" font-style="italic" text-anchor="middle" x="400" y="204">projection and filtering are narrow transformations</text>
+<line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="106" x2="106" y1="220" y2="248"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="302" x2="302" y1="220" y2="248"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="498" x2="498" y1="220" y2="248"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="694" x2="694" y1="220" y2="248"></line>
+<g><rect fill="#FFFFFF" height="88" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="180" x="16" y="250"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="13" font-weight="700" text-anchor="middle" x="106" y="272">part0</text><text fill="#333" font-size="12" text-anchor="middle" x="106" y="294">A,100</text><text fill="#333" font-size="12" text-anchor="middle" x="106" y="312">C,200</text></g>
+<g><rect fill="#FFFFFF" height="88" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="180" x="212" y="250"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="13" font-weight="700" text-anchor="middle" x="302" y="272">part1</text><text fill="#333" font-size="12" text-anchor="middle" x="302" y="294">C,60</text><text fill="#333" font-size="12" text-anchor="middle" x="302" y="311">D,150</text><text fill="#333" font-size="12" text-anchor="middle" x="302" y="328">B,75</text></g>
+<g><rect fill="#FFFFFF" height="88" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="180" x="408" y="250"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="13" font-weight="700" text-anchor="middle" x="498" y="272">part2</text><text fill="#333" font-size="12" text-anchor="middle" x="498" y="294">A,120</text><text fill="#333" font-size="12" text-anchor="middle" x="498" y="312">A,90</text></g>
+<g><rect fill="#FFFFFF" height="88" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="180" x="604" y="250"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="13" font-weight="700" text-anchor="middle" x="694" y="272">part3</text><text fill="#333" font-size="12" text-anchor="middle" x="694" y="294">C,80</text><text fill="#333" font-size="12" text-anchor="middle" x="694" y="311">C,140</text><text fill="#333" font-size="12" text-anchor="middle" x="694" y="328">B,110</text></g>
+<line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="106" x2="106" y1="338" y2="366"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="302" x2="302" y1="338" y2="366"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="498" x2="498" y1="338" y2="366"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="694" x2="694" y1="338" y2="366"></line>
+<path d="M40,368 L760,368 L784,398 L760,428 L40,428 L16,398 Z" fill="#DCE0E2" stroke="#618794" stroke-width="2"></path><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="14" font-weight="700" text-anchor="middle" x="400" y="403">Shuffle: groupBy('id') co-locates rows by key</text>
+<line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="240" x2="240" y1="428" y2="456"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="560" x2="560" y1="428" y2="456"></line>
+<g><rect fill="#FFFFFF" height="96" rx="8" stroke="#618794" stroke-width="1.5" width="260" x="110" y="458"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="13" font-weight="700" text-anchor="middle" x="240" y="480">part0</text><text fill="#333" font-size="12" text-anchor="middle" x="240" y="503">A,100  A,120  A,90</text><text fill="#333" font-size="12" text-anchor="middle" x="240" y="522">B,75  B,110</text></g>
+<g><rect fill="#FFFFFF" height="96" rx="8" stroke="#618794" stroke-width="1.5" width="260" x="430" y="458"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="13" font-weight="700" text-anchor="middle" x="560" y="480">part1</text><text fill="#333" font-size="12" text-anchor="middle" x="560" y="503">C,200  C,60  C,80  C,140</text><text fill="#333" font-size="12" text-anchor="middle" x="560" y="522">D,150</text></g>
+<line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="240" x2="240" y1="554" y2="582"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="560" x2="560" y1="554" y2="582"></line>
+<rect fill="#FFCC66" height="56" rx="8" stroke="#CD7F32" stroke-width="2" width="768" x="16" y="584"></rect><text fill="#7a4a10" font-family="-apple-system,sans-serif" font-size="14" font-weight="700" text-anchor="middle" x="400" y="617">Reduce stage: agg sum('amt'), then write</text>
+<line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="240" x2="240" y1="640" y2="668"></line><line marker-end="url(#mr-arrow)" stroke="#618794" stroke-width="2" x1="560" x2="560" y1="640" y2="668"></line>
+<g><rect fill="#F9F7F4" height="80" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="260" x="110" y="670"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="13" font-weight="700" text-anchor="middle" x="240" y="692">part-00000.csv</text><text fill="#333" font-size="12" text-anchor="middle" x="240" y="715">A,310</text><text fill="#333" font-size="12" text-anchor="middle" x="240" y="733">B,185</text></g>
+<g><rect fill="#F9F7F4" height="80" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="260" x="430" y="670"></rect><text fill="#1B5162" font-family="-apple-system,sans-serif" font-size="13" font-weight="700" text-anchor="middle" x="560" y="692">part-00001.csv</text><text fill="#333" font-size="12" text-anchor="middle" x="560" y="715">C,480</text><text fill="#333" font-size="12" text-anchor="middle" x="560" y="733">D,150</text></g>
+</g>
+</svg>
+</div>
+</details>
+<br>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Expand for More Details</strong>
+</div>
+</div>
+</summary>
+<div>
+<div>Map Stage</div>
+<ul>
+<li>Each input file becomes a partition, and the projection (<code>select</code>) and filter are applied to each partition independently - no data movement is required, so these are <em>narrow</em> transformations pipelined into one stage.</li>
+<li>Note how <code>B,30</code> and <code>D,50</code> disappear at this stage: they fail the <code>amt &gt; 50</code> filter. Filtering early shrinks everything downstream, including the expensive shuffle.</li>
+</ul>
+<div>Shuffle</div>
+<ul>
+<li><code>groupBy('id')</code> requires all rows with the same id to be in the same partition, so Spark redistributes the four map-side partitions into reduce-side partitions by hashing the key.</li>
+</ul>
+<div>Reduce Stage</div>
+<ul>
+<li>With each key's rows co-located, the sum is computed per key, and each reduce partition writes its own output file - which is why the result is a directory containing <code>part-00000.csv</code> and <code>part-00001.csv</code> rather than a single file.</li>
+</ul>
+</div>
+</details>
+
+<h2 id="E.-Spark's-Implementation">E. Spark's Implementation</h2><p>MapReduce sits at the core of everything Spark does.</p>
+<p><strong>Fundamental pattern:</strong></p>
+<ul>
+<li>Every Spark operation maps to Map / Shuffle / Reduce</li>
+<li>Even simple transformations follow this model</li>
+<li>It is the core building block for all distributed operations</li>
+</ul>
+<p><strong>Common examples:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Map</th>
+<th>Shuffle</th>
+<th>Reduce</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>groupBy</code>__</td>
+<td>Extract keys</td>
+<td>Redistribute by key</td>
+<td>Aggregate</td>
+</tr>
+<tr>
+<td>__<code>join</code>__</td>
+<td>Prepare keys</td>
+<td>Co-locate matching keys</td>
+<td>Combine rows</td>
+</tr>
+<tr>
+<td>__<code>filter</code>__</td>
+<td>Evaluate condition</td>
+<td>Not required</td>
+<td>Not required</td>
+</tr>
+</tbody>
+</table>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>Spark uses shared-nothing execution: independent nodes process mutually exclusive partitions in parallel</li>
+<li>One partition = one task; partition count and size determine parallelism</li>
+<li>The shuffle redistributes data by key between stages and is the most expensive operation in Spark</li>
+<li>Every DataFrame pipeline compiles down to the MapReduce pattern: narrow transformations pipeline within a stage, wide transformations create shuffle boundaries</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>2.1 Lecture - Introduction to DataFrames</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<h1 id="2.1-Lecture---Introduction-to-DataFrames">2.1 Lecture - Introduction to DataFrames</h1><blockquote>
+<h4 id="Structured-data-processing-in-Apache-Spark"><em>Structured data processing in Apache Spark</em></h4></blockquote>
+<p>This lecture introduces the DataFrame, the primary data abstraction in modern Spark, and explains how DataFrame operations are lazily evaluated and optimized before they run.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Describe the DataFrame abstraction, including schema enforcement and distributed storage</li>
+<li>Distinguish transformations from actions and explain lazy evaluation</li>
+<li>Describe how the Catalyst optimizer and Photon engine optimize DataFrame execution</li>
+<li>Explain why columnar storage suits analytical workloads</li>
+</ul>
+
+<h2 id="A.-What-is-a-DataFrame?">A. What is a DataFrame?</h2><p>DataFrames are distributed collections of records, all with the same pre-defined structure (schema):</p>
+<ul>
+<li>Built on Spark's core concepts but with structure, optimization, and familiar SQL-like operations for data manipulation</li>
+<li>DataFrames track their schema and provide native support for many common SQL functions and relational operators (<code>JOIN</code>, <code>GROUP BY</code>, and so on)</li>
+<li>DataFrames are evaluated as DAGs, using <em>lazy evaluation</em>, and carry lineage information that provides fault tolerance</li>
+<li>A DataFrame looks like a single table to you, but its rows are physically split into partitions spread across the Executors of the cluster</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>One logical table, many physical partitions</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg aria-label="One DataFrame split into three partitions across executors" role="img" style="width:100%; max-width:720px; height:auto; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" viewBox="0 0 720 290" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="part-arrow" markerHeight="8" markerUnits="strokeWidth" markerWidth="10" orient="auto" refX="7" refY="3"><path d="M0,0 L8,3 L0,6 Z" fill="#618794"></path></marker>
+</defs>
+<line marker-end="url(#part-arrow)" stroke="#618794" stroke-width="2" x1="360" x2="120" y1="88" y2="200"></line>
+<line marker-end="url(#part-arrow)" stroke="#618794" stroke-width="2" x1="360" x2="360" y1="88" y2="200"></line>
+<line marker-end="url(#part-arrow)" stroke="#618794" stroke-width="2" x1="360" x2="600" y1="88" y2="200"></line>
+<rect fill="#DCE0E2" height="68" rx="8" stroke="#618794" stroke-width="2" width="360" x="180" y="20"></rect>
+<text fill="#1B5162" font-size="17" font-weight="700" text-anchor="middle" x="360" y="49">DataFrame</text>
+<text fill="#555" font-size="12.5" font-style="italic" text-anchor="middle" x="360" y="71">logical view: named, typed columns</text>
+<rect fill="#FFFFFF" height="64" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="200" x="20" y="205"></rect>
+<text fill="#333" font-size="15" font-weight="600" text-anchor="middle" x="120" y="234">Partition 0</text>
+<text fill="#555" font-size="12.5" text-anchor="middle" x="120" y="255">on Executor 1</text>
+<rect fill="#FFFFFF" height="64" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="200" x="260" y="205"></rect>
+<text fill="#333" font-size="15" font-weight="600" text-anchor="middle" x="360" y="234">Partition 1</text>
+<text fill="#555" font-size="12.5" text-anchor="middle" x="360" y="255">on Executor 2</text>
+<rect fill="#FFFFFF" height="64" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="200" x="500" y="205"></rect>
+<text fill="#333" font-size="15" font-weight="600" text-anchor="middle" x="600" y="234">Partition 2</text>
+<text fill="#555" font-size="12.5" text-anchor="middle" x="600" y="255">on Executor 3</text>
+</svg>
+</div>
+</details>
+
+<h2 id="B.-Creating-DataFrames">B. Creating DataFrames</h2><p>DataFrames can be created from:</p>
+<ul>
+<li>JSON, CSV, Parquet, ORC, text, or binary files</li>
+<li>Delta Lake or other table storage format directories</li>
+<li>A table or view in a catalog (like Unity Catalog)</li>
+<li>An external database</li>
+<li>An existing RDD (classic compute only)</li>
+</ul>
+<div><div><pre><code id="code-lyb4yoir0"><span># From a file</span>
+df <span>=</span> spark<span>.</span>read<span>.</span>csv<span>(</span><span>"/Volumes/my_catalog/my_schema/files/people.csv"</span><span>)</span>
+
+<span># From a table</span>
+df <span>=</span> spark<span>.</span>read<span>.</span>table<span>(</span><span>"my_catalog.my_schema.people"</span><span>)</span>
+
+<span># From a range of numbers</span>
+df <span>=</span> spark<span>.</span><span>range</span><span>(</span><span>1000</span><span>)</span></code></pre></div></div>
+
+<h2 id="C.-Transformations-and-Actions">C. Transformations and Actions</h2><p>DataFrames are <strong>immutable</strong> - once created, their data cannot be modified. Instead:</p>
+<ul>
+<li><strong>Transformations</strong> create new DataFrames from existing ones; they describe <em>what</em> to compute, not <em>when</em></li>
+<li><strong>Actions</strong> (like counting, showing, or saving output) trigger actual computation and produce final results</li>
+</ul>
+<p>Multiple transformations can be chained; the job is only created when an action is requested - a process called <strong>lazy evaluation</strong>.</p>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Lazy evaluation: transformations build a plan, actions run it</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg aria-label="Transformations build a plan lazily; an action triggers the Spark job" role="img" style="width:100%; max-width:1090px; height:auto; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" viewBox="0 0 1090 200" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="lazy-arrow" markerHeight="8" markerUnits="strokeWidth" markerWidth="10" orient="auto" refX="7" refY="3"><path d="M0,0 L8,3 L0,6 Z" fill="#618794"></path></marker>
+</defs>
+<rect fill="#F9F7F4" height="128" rx="10" stroke="#618794" stroke-width="2" width="680" x="10" y="40"></rect>
+<text fill="#1B5162" font-size="13.5" font-weight="700" text-anchor="middle" x="350" y="64">Transformations — build the plan, nothing executes</text>
+<rect fill="#FFFFFF" height="52" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="140" x="25" y="92"></rect>
+<text fill="#1B5162" font-family="Consolas,Monaco,monospace" font-size="14" text-anchor="middle" x="95" y="123">spark.read</text>
+<rect fill="#FFFFFF" height="52" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="140" x="185" y="92"></rect>
+<text fill="#1B5162" font-family="Consolas,Monaco,monospace" font-size="14" text-anchor="middle" x="255" y="123">select()</text>
+<rect fill="#FFFFFF" height="52" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="140" x="345" y="92"></rect>
+<text fill="#1B5162" font-family="Consolas,Monaco,monospace" font-size="14" text-anchor="middle" x="415" y="123">filter()</text>
+<rect fill="#FFFFFF" height="52" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="140" x="505" y="92"></rect>
+<text fill="#1B5162" font-family="Consolas,Monaco,monospace" font-size="14" text-anchor="middle" x="575" y="123">withColumn()</text>
+<line marker-end="url(#lazy-arrow)" stroke="#618794" stroke-width="2" x1="165" x2="183" y1="118" y2="118"></line>
+<line marker-end="url(#lazy-arrow)" stroke="#618794" stroke-width="2" x1="325" x2="343" y1="118" y2="118"></line>
+<line marker-end="url(#lazy-arrow)" stroke="#618794" stroke-width="2" x1="485" x2="503" y1="118" y2="118"></line>
+<line marker-end="url(#lazy-arrow)" stroke="#618794" stroke-width="2" x1="648" x2="738" y1="118" y2="118"></line>
+<rect fill="#FFFFFF" height="56" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="150" x="740" y="90"></rect>
+<text fill="#333" font-family="Consolas,Monaco,monospace" font-size="15" text-anchor="middle" x="815" y="114">count()</text>
+<text fill="#555" font-size="12" font-style="italic" text-anchor="middle" x="815" y="133">an Action</text>
+<line marker-end="url(#lazy-arrow)" stroke="#618794" stroke-width="2" x1="890" x2="918" y1="118" y2="118"></line>
+<rect fill="#FFCC66" height="56" rx="8" stroke="#CD7F32" stroke-width="2" width="160" x="920" y="90"></rect>
+<text fill="#333" font-size="14" font-weight="700" text-anchor="middle" x="1000" y="114">Spark job runs</text>
+<text fill="#333" font-size="12.5" text-anchor="middle" x="1000" y="133">on the cluster</text>
+</svg>
+</div>
+</details>
+<br>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Expand for More Details</strong>
+</div>
+</div>
+</summary>
+<div>
+<div>Why Lazy Evaluation Matters</div>
+<ul>
+<li>Because Spark sees the whole chain of transformations before anything runs, the optimizer can rearrange, combine, and prune work - for example pushing a filter down to the file scan so less data is read in the first place.</li>
+<li>Lineage (the recorded chain of transformations) is also what makes DataFrames fault tolerant: a lost partition can be recomputed by replaying its lineage.</li>
+<li>A common surprise for new users: defining ten transformations takes milliseconds and runs nothing. The cost is paid when an action such as <code>count()</code>, <code>display()</code>, or <code>write</code> executes the accumulated plan.</li>
+</ul>
+</div>
+</details>
+
+<h3 id="Common-DataFrame-API-Methods">Common DataFrame API Methods</h3><p>The most frequently used transformations:</p>
+<table>
+<thead>
+<tr>
+<th>Transformation</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>select()</code>__</td>
+<td>Choose specific columns from a DataFrame</td>
+</tr>
+<tr>
+<td>__<code>filter()</code>__</td>
+<td>Filter rows based on a condition, alias <code>where()</code></td>
+</tr>
+<tr>
+<td>__<code>withColumn()</code>__</td>
+<td>Add or modify a column in a DataFrame</td>
+</tr>
+<tr>
+<td>__<code>groupBy()</code>__</td>
+<td>Group rows in a DataFrame by specified columns</td>
+</tr>
+<tr>
+<td>__<code>agg()</code>__</td>
+<td>Aggregate rows in a DataFrame after grouping</td>
+</tr>
+</tbody>
+</table>
+<p>And the most frequently used actions, which trigger execution:</p>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>count()</code>__</td>
+<td>Return the number of rows in a DataFrame</td>
+</tr>
+<tr>
+<td>__<code>show()</code>__</td>
+<td>Display DataFrame contents</td>
+</tr>
+<tr>
+<td>__<code>take(n)</code>__</td>
+<td>Return the first n rows from a DataFrame</td>
+</tr>
+<tr>
+<td>__<code>first()</code>__</td>
+<td>Return the first row from a DataFrame</td>
+</tr>
+<tr>
+<td>__<code>write</code>__</td>
+<td>Save a DataFrame to storage</td>
+</tr>
+</tbody>
+</table>
+<p>For more information see the <a href="https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/dataframe.html" rel="noreferrer noopener" target="_blank">DataFrame API reference</a>.</p>
+
+<h2 id="D.-DataFrame-API-Optimizations">D. DataFrame API Optimizations</h2><p>Because DataFrame operations are declarative, Spark is free to optimize how they execute:</p>
+<ul>
+<li><strong>Adaptive Query Execution (AQE)</strong> - dynamic plan adjustments (cost-based optimization) during runtime based on actual data characteristics and execution patterns</li>
+<li><strong>In-Memory Columnar Storage</strong> - an in-memory columnar format for DataFrames enabling efficient analytical query performance and a reduced memory footprint</li>
+<li><strong>Built-in Statistics</strong> - automatic statistics collection when saving to optimized formats (Parquet, Delta) enables smarter query planning and execution</li>
+<li><strong>Catalyst Optimizer and Photon</strong> - discussed below</li>
+</ul>
+
+<h2 id="E.-DataFrame-(or-Query)-Planning">E. DataFrame (or Query) Planning</h2><p>When a DataFrame is evaluated, the Driver creates an optimized execution plan through a series of transformations - converting the logical plan into an efficient physical execution plan that minimizes resource usage and execution time.</p>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>From unresolved plan to executed code</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg aria-label="Catalyst planning stages from unresolved logical plan to execution" role="img" style="width:100%; max-width:1100px; height:auto; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif" viewBox="0 0 1100 175" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="plan-arrow" markerHeight="8" markerUnits="strokeWidth" markerWidth="10" orient="auto" refX="7" refY="3"><path d="M0,0 L8,3 L0,6 Z" fill="#618794"></path></marker>
+</defs>
+<rect fill="#FFFFFF" height="60" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="150" x="15" y="80"></rect>
+<text fill="#333" font-size="14" font-weight="600" text-anchor="middle" x="90" y="106">Unresolved</text>
+<text fill="#333" font-size="14" text-anchor="middle" x="90" y="125">Logical Plan</text>
+<rect fill="#FFFFFF" height="60" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="150" x="245" y="80"></rect>
+<text fill="#333" font-size="14" font-weight="600" text-anchor="middle" x="320" y="106">Analyzed</text>
+<text fill="#333" font-size="14" text-anchor="middle" x="320" y="125">Logical Plan</text>
+<rect fill="#FFFFFF" height="60" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="150" x="475" y="80"></rect>
+<text fill="#333" font-size="14" font-weight="600" text-anchor="middle" x="550" y="106">Optimized</text>
+<text fill="#333" font-size="14" text-anchor="middle" x="550" y="125">Logical Plan</text>
+<rect fill="#FFFFFF" height="60" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="150" x="705" y="80"></rect>
+<text fill="#333" font-size="14" font-weight="600" text-anchor="middle" x="780" y="106">Physical</text>
+<text fill="#333" font-size="14" text-anchor="middle" x="780" y="125">Plan</text>
+<rect fill="#FFCC66" height="60" rx="8" stroke="#CD7F32" stroke-width="2" width="150" x="935" y="80"></rect>
+<text fill="#333" font-size="14" font-weight="700" text-anchor="middle" x="1010" y="106">Execution on</text>
+<text fill="#333" font-size="14" text-anchor="middle" x="1010" y="125">the Cluster</text>
+<line marker-end="url(#plan-arrow)" stroke="#618794" stroke-width="2" x1="167" x2="243" y1="110" y2="110"></line>
+<line marker-end="url(#plan-arrow)" stroke="#618794" stroke-width="2" x1="397" x2="473" y1="110" y2="110"></line>
+<line marker-end="url(#plan-arrow)" stroke="#618794" stroke-width="2" x1="627" x2="703" y1="110" y2="110"></line>
+<line marker-end="url(#plan-arrow)" stroke="#618794" stroke-width="2" x1="857" x2="933" y1="110" y2="110"></line>
+<text fill="#1B5162" font-size="12" text-anchor="middle" x="205" y="97">Analysis</text>
+<text fill="#1B5162" font-size="12" text-anchor="middle" x="435" y="90">Logical</text>
+<text fill="#1B5162" font-size="12" text-anchor="middle" x="435" y="103">Optimization</text>
+<text fill="#1B5162" font-size="12" text-anchor="middle" x="665" y="90">Physical</text>
+<text fill="#1B5162" font-size="12" text-anchor="middle" x="665" y="103">Planning</text>
+<text fill="#1B5162" font-size="12" text-anchor="middle" x="895" y="90">Code</text>
+<text fill="#1B5162" font-size="12" text-anchor="middle" x="895" y="103">Generation</text>
+</svg>
+</div>
+</details>
+<br>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Expand for More Details</strong>
+</div>
+</div>
+</summary>
+<div>
+<div>The Planning Phases</div>
+<ul>
+<li><strong>Analysis</strong> resolves names against the catalog: which table does <code>customers</code> refer to, what type is <code>account_balance</code>, does the referenced column exist?</li>
+<li><strong>Logical optimization</strong> applies rule-based rewrites such as predicate pushdown (filter as early as possible), column pruning (read only the columns used), and constant folding.</li>
+<li><strong>Physical planning</strong> selects concrete execution strategies - for example choosing a broadcast join over a shuffle join when one side is small.</li>
+<li><strong>Code generation</strong> compiles the chosen plan into efficient JVM bytecode (or hands it to Photon for vectorized native execution on Databricks).</li>
+<li>You can inspect the plans for any DataFrame with <code>df.explain()</code> - the ETL demo in Section 4 does exactly this.</li>
+</ul>
+</div>
+</details>
+
+<h3 id="Catalyst-Optimizer-and-Photon">Catalyst Optimizer and Photon</h3><p><strong>Catalyst Optimizer:</strong></p>
+<ul>
+<li>The query optimization engine that converts DataFrame operations into an optimized execution plan</li>
+<li>Applies rule-based and cost-based optimizations to improve query performance</li>
+</ul>
+<p><strong>Photon Engine:</strong></p>
+<ul>
+<li>The Databricks-native vectorized query engine that accelerates query execution</li>
+<li>Processes data in batches rather than row-by-row for better performance</li>
+<li>Runs by default on Databricks SQL warehouses and serverless compute</li>
+<li>Can be enabled on All-Purpose and Job Clusters in Databricks</li>
+</ul>
+
+<h2 id="F.-More-on-Columnar-Storage">F. More on Columnar Storage</h2><p>Columnar storage organizes data by column rather than by row, enabling efficient scanning and analysis. It is particularly efficient for analytical workloads and is implemented both in the DataFrame internal storage format and in physical file formats such as <strong>Parquet</strong> and ORC.</p>
+<p>In <strong>row-oriented storage</strong>, all the values of a record are stored together. Reading one column means reading every row in full:</p>
+<table>
+<tbody><tr><td>id: 1</td><td>name: Ada</td><td>amt: 100</td></tr>
+<tr><td>id: 2</td><td>name: Ben</td><td>amt: 250</td></tr>
+<tr><td>id: 3</td><td>name: Cy</td><td>amt: 75</td></tr>
+</tbody></table>
+<p>In <strong>column-oriented storage</strong>, all the values of a column are stored together. A query that sums <code>amt</code> touches only the last block, skipping the rest entirely:</p>
+<table>
+<tbody><tr><td>id: 1</td><td>id: 2</td><td>id: 3</td></tr>
+<tr><td>name: Ada</td><td>name: Ben</td><td>name: Cy</td></tr>
+<tr><td>amt: 100</td><td>amt: 250</td><td>amt: 75</td></tr>
+</tbody></table>
+<p>Columnar layouts also compress better, because values within a column are of the same type and often similar.</p>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>DataFrames are distributed, immutable collections of records with a schema</li>
+<li>Transformations describe work lazily; actions trigger execution of the accumulated plan</li>
+<li>The Catalyst optimizer turns your code into an optimized physical plan; Photon accelerates execution on Databricks</li>
+<li>Columnar storage (in memory and in formats like Parquet) makes analytical scans and aggregations efficient</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

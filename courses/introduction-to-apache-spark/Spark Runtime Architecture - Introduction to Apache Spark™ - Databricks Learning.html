@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>1.2 Lecture - Spark Runtime Architecture</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<h1 id="1.2-Lecture---Spark-Runtime-Architecture">1.2 Lecture - Spark Runtime Architecture</h1><blockquote>
+<h4 id="How-Spark-plans,-distributes,-and-monitors-work-across-a-cluster"><em>How Spark plans, distributes, and monitors work across a cluster</em></h4></blockquote>
+<p>This lecture examines the components of a running Spark application - the Driver, Cluster Manager, Workers, and Executors - and how Spark breaks work into jobs, stages, and tasks that you can observe in the Spark UI.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Identify the roles of the Driver, Workers, and Executors in Spark applications</li>
+<li>Explain how the <code>SparkSession</code> serves as the unified entry point for Spark applications</li>
+<li>Describe how a Spark application is decomposed into jobs, stages, and tasks</li>
+<li>Use the Spark UI to monitor application progress, DAG visualizations, and resource allocation</li>
+</ul>
+
+<h2 id="A.-The-Runtime-Architecture-at-a-Glance">A. The Runtime Architecture at a Glance</h2><p>A Spark application is a coordinated set of processes. The Driver plans the work, the Cluster Manager allocates resources, and Executors on Worker nodes do the computation. Click the bar below to reveal the diagram.</p>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Spark runtime architecture diagram</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" style="width:100%; height:auto" viewBox="0 0 960 440" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="rt-arrow" markerHeight="10" markerUnits="strokeWidth" markerWidth="10" orient="auto" refX="8" refY="3"><path d="M0,0 L8,3 L0,6 Z" fill="#618794"></path></marker>
+<marker id="rt-arrow-start" markerHeight="10" markerUnits="strokeWidth" markerWidth="10" orient="auto" refX="0" refY="3"><path d="M8,0 L0,3 L8,6 Z" fill="#618794"></path></marker>
+</defs>
+<line marker-end="url(#rt-arrow)" marker-start="url(#rt-arrow-start)" stroke="#618794" stroke-width="2" x1="140" x2="176" y1="222" y2="222"></line>
+<line marker-end="url(#rt-arrow)" marker-start="url(#rt-arrow-start)" stroke="#618794" stroke-width="2" x1="376" x2="426" y1="225" y2="225"></line>
+<line marker-end="url(#rt-arrow)" stroke="#618794" stroke-width="2" x1="600" x2="686" y1="215" y2="122"></line>
+<line marker-end="url(#rt-arrow)" stroke="#618794" stroke-width="2" x1="600" x2="686" y1="245" y2="350"></line>
+<path d="M295,150 C 420,45 600,45 705,108" fill="none" stroke="#618794" stroke-dasharray="6 4" stroke-width="2"></path>
+<path d="M295,300 C 420,415 600,415 705,352" fill="none" stroke="#618794" stroke-dasharray="6 4" stroke-width="2"></path>
+<rect fill="#FFFFFF" height="64" rx="32" stroke="#DCE0E2" stroke-width="1.5" width="124" x="16" y="190"></rect>
+<text fill="#333" font-size="15" text-anchor="middle" x="78" y="226">Client / Job</text>
+<rect fill="#DCE0E2" height="150" rx="8" stroke="#618794" stroke-width="2" width="194" x="180" y="150"></rect>
+<text fill="#1B5162" font-size="14" font-weight="bold" x="192" y="172">Driver</text>
+<rect fill="#FFFFFF" height="96" rx="6" stroke="#618794" stroke-width="1.5" width="154" x="200" y="188"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="277" y="230">SparkSession /</text>
+<text fill="#333" font-size="14" text-anchor="middle" x="277" y="250">SparkContext</text>
+<rect fill="#FFCC66" height="72" rx="8" stroke="#CD7F32" stroke-width="2" width="170" x="430" y="192"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="515" y="222">Cluster Manager</text>
+<text fill="#333" font-size="14" text-anchor="middle" x="515" y="244">(Master)</text>
+<rect fill="#FFFFFF" height="160" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="252" x="690" y="40"></rect>
+<text fill="#1B5162" font-size="14" font-weight="bold" x="704" y="62">Worker</text>
+<rect fill="#F9F7F4" height="104" rx="6" stroke="#618794" stroke-width="1.5" width="216" x="708" y="78"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="718" y="98">Executor + Cache</text>
+<rect fill="#FFFFFF" height="56" rx="6" stroke="#DCE0E2" stroke-width="1.5" width="90" x="724" y="110"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="769" y="142">Task</text>
+<rect fill="#FFFFFF" height="56" rx="6" stroke="#DCE0E2" stroke-width="1.5" width="90" x="820" y="110"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="865" y="142">Task</text>
+<rect fill="#FFFFFF" height="160" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="252" x="690" y="270"></rect>
+<text fill="#1B5162" font-size="14" font-weight="bold" x="704" y="292">Worker</text>
+<rect fill="#F9F7F4" height="104" rx="6" stroke="#618794" stroke-width="1.5" width="216" x="708" y="308"></rect>
+<text fill="#1B5162" font-size="13" font-weight="bold" x="718" y="328">Executor + Cache</text>
+<rect fill="#FFFFFF" height="56" rx="6" stroke="#DCE0E2" stroke-width="1.5" width="90" x="724" y="340"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="769" y="372">Task</text>
+<rect fill="#FFFFFF" height="56" rx="6" stroke="#DCE0E2" stroke-width="1.5" width="90" x="820" y="340"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="865" y="372">Task</text>
+<text fill="#666" font-size="12" font-style="italic" text-anchor="middle" x="480" y="424">Dashed lines: the Driver schedules tasks on Executors directly</text>
+</svg>
+</div>
+</details>
+<p>The four roles:</p>
+<ul>
+<li><strong>Driver</strong> - the brain of a Spark application, responsible for planning and coordinating execution</li>
+<li><strong>Cluster Manager (Master)</strong> - manages cluster resources and allocates them to the Driver</li>
+<li><strong>Workers</strong> - nodes in the cluster that host Executors</li>
+<li><strong>Executors</strong> - processes on Worker nodes that execute tasks assigned by the Driver</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Expand for More Details</strong>
+</div>
+</div>
+</summary>
+<div>
+<div>How the Pieces Interact</div>
+<ul>
+<li>The client (a notebook, a job, or an application) submits work to the Driver. The Driver negotiates with the Cluster Manager for Executor resources, then communicates directly with those Executors to schedule tasks and collect results - shown as the dashed lines in the diagram.</li>
+<li>Each Executor holds a cache, a region of memory for partitions you explicitly persist. Cached partitions can be reused across jobs without recomputation.</li>
+<li>In Databricks, the Cluster Manager role is handled by the platform itself: when you create a cluster, Databricks provisions a Driver node and Worker nodes and wires them together for you.</li>
+</ul>
+<div>Spark Connect: a Thinner Client</div>
+<ul>
+<li>Spark 4 promotes <strong>Spark Connect</strong>, a client-server protocol in which your application holds only a lightweight client; the Driver runs remotely and receives query plans over gRPC.</li>
+<li>This is how Databricks Serverless compute and Databricks Connect work: your notebook or IDE is the thin client, and the heavy lifting happens on the server side. The DataFrame code you write is identical either way.</li>
+</ul>
+</div>
+</details>
+
+<h2 id="B.-The-Spark-Driver">B. The Spark Driver</h2><p>The Driver plans, coordinates, and manages task execution. It:</p>
+<ul>
+<li>Creates the <code>SparkSession</code>, the entry point for all Spark applications</li>
+<li>Analyzes the Spark application and constructs a Directed Acyclic Graph (DAG)</li>
+<li>Schedules and distributes tasks to Executors for execution</li>
+<li>Monitors the progress of tasks and handles failures</li>
+<li>Returns results to the client</li>
+</ul>
+
+<h2 id="C.-The-SparkSession">C. The SparkSession</h2><p>Introduced in Spark 2.0 as the unified entry point for all Spark functionality, replacing the separate <code>SparkContext</code>, <code>SQLContext</code>, <code>HiveContext</code>, and <code>StreamingContext</code> objects that earlier versions required.</p>
+<div><div><pre><code id="code-m563xgtab"><span>from</span> pyspark<span>.</span>sql <span>import</span> SparkSession
+spark <span>=</span> <span>(</span>SparkSession<span>.</span>builder
+    <span>.</span>appName<span>(</span><span>"MySparkApplication"</span><span>)</span>
+    <span>.</span>config<span>(</span><span>"spark.some.config.option"</span><span>,</span> <span>"some-value"</span><span>)</span>
+    <span>.</span>getOrCreate<span>(</span><span>)</span><span>)</span></code></pre></div></div>
+
+
+
+
+
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>Already Created in Databricks</strong>
+<p>In Databricks notebooks the <code>SparkSession</code> is created for you automatically and made available as the variable <code>spark</code>. You will almost never construct one yourself.</p>
+</div>
+</div>
+</div>
+
+<h2 id="D.-Executors">D. Executors</h2><p>Executors are the processes that do the actual work:</p>
+<ul>
+<li>Run on Worker nodes in a Spark cluster and host <strong>Tasks</strong> (for I/O and data processing)</li>
+<li>Typically each Worker node runs one Executor, which has its own:<ul>
+<li>RAM cache</li>
+<li>Disk cache</li>
+<li>CPU cores</li>
+</ul>
+</li>
+<li>Interact with the Driver for task coordination and data transfer</li>
+</ul>
+
+<h2 id="E.-The-Spark-DAG">E. The Spark DAG</h2><p>Spark represents each job as a <strong>Directed Acyclic Graph</strong> of stages:</p>
+<ul>
+<li>Spark jobs are broken down into <strong>Stages</strong> - groups of tasks that can be executed in parallel</li>
+<li>Computations flow in one direction through the stages (the <em>Directed</em> bit)</li>
+<li>Stages never loop back, ensuring the job terminates (the <em>Acyclic</em> bit)</li>
+<li>Stages are organized into a dependency graph for execution flow (the <em>Graph</em> bit)</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Example DAG with two stages</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" style="width:100%; height:auto" viewBox="0 0 700 540" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="dag-arrow" markerHeight="10" markerUnits="strokeWidth" markerWidth="10" orient="auto" refX="8" refY="3"><path d="M0,0 L8,3 L0,6 Z" fill="#618794"></path></marker>
+</defs>
+<line marker-end="url(#dag-arrow)" stroke="#618794" stroke-width="2" x1="350" x2="350" y1="104" y2="130"></line>
+<line marker-end="url(#dag-arrow)" stroke="#618794" stroke-width="2" x1="350" x2="350" y1="180" y2="206"></line>
+<line marker-end="url(#dag-arrow)" stroke="#618794" stroke-width="2" x1="350" x2="350" y1="270" y2="328"></line>
+<line marker-end="url(#dag-arrow)" stroke="#618794" stroke-width="2" x1="350" x2="350" y1="414" y2="440"></line>
+<rect fill="#DCE0E2" height="250" rx="8" stroke="#618794" stroke-width="2" width="300" x="200" y="20"></rect>
+<text fill="#1B5162" font-size="15" font-weight="bold" x="212" y="44">Stage 1</text>
+<rect fill="#FFFFFF" height="48" rx="6" stroke="#618794" stroke-width="1.5" width="200" x="250" y="56"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="350" y="86">Scan source files</text>
+<rect fill="#FFFFFF" height="48" rx="6" stroke="#618794" stroke-width="1.5" width="200" x="250" y="132"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="350" y="162">Filter rows</text>
+<rect fill="#FFFFFF" height="48" rx="6" stroke="#618794" stroke-width="1.5" width="200" x="250" y="208"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="350" y="238">Project columns</text>
+<rect fill="#FFCC66" height="182" rx="8" stroke="#CD7F32" stroke-width="2" width="300" x="200" y="328"></rect>
+<text fill="#8a5a12" font-size="15" font-weight="bold" x="212" y="352">Stage 2</text>
+<rect fill="#FFFFFF" height="48" rx="6" stroke="#CD7F32" stroke-width="1.5" width="200" x="250" y="364"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="350" y="394">Aggregate by key</text>
+<rect fill="#FFFFFF" height="48" rx="6" stroke="#CD7F32" stroke-width="1.5" width="200" x="250" y="440"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="350" y="470">Return results</text>
+<rect fill="#FFFFFF" height="24" rx="4" stroke="#DCE0E2" stroke-width="1" width="136" x="282" y="288"></rect>
+<text fill="#333" font-size="12" text-anchor="middle" x="350" y="305">shuffle (exchange)</text>
+</svg>
+</div>
+</details><br>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Expand for More Details</strong>
+</div>
+</div>
+</summary>
+<div>
+<div>Why Stages Exist</div>
+<ul>
+<li>Operations that can be applied to each partition independently (filter, project) are pipelined together into a single stage and execute in parallel across partitions.</li>
+<li>A stage boundary appears wherever data must be redistributed across the cluster - the <em>shuffle</em>. Aggregating by key requires all rows for a key to be on the same Executor, so a new stage begins after the exchange.</li>
+<li>In the Spark UI you will see this DAG rendered for every job, with each stage's operators and the dependencies between stages. Section 3 examines the shuffle in depth.</li>
+</ul>
+</div>
+</details>
+
+<h2 id="F.-Spark-Application-Execution">F. Spark Application Execution</h2><p>A Spark application decomposes into a hierarchy: an application runs one or more <strong>jobs</strong>, each job consists of one or more <strong>stages</strong>, and each stage executes many <strong>tasks</strong> in parallel.</p>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Application, job, stage, and task hierarchy</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" style="width:100%; height:auto" viewBox="0 0 786 310" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="hier-arrow" markerHeight="10" markerUnits="strokeWidth" markerWidth="10" orient="auto" refX="8" refY="3"><path d="M0,0 L8,3 L0,6 Z" fill="#618794"></path></marker>
+</defs>
+<line marker-end="url(#hier-arrow)" stroke="#618794" stroke-width="2" x1="166" x2="222" y1="202" y2="117"></line>
+<line marker-end="url(#hier-arrow)" stroke="#618794" stroke-width="2" x1="166" x2="222" y1="202" y2="275"></line>
+<line marker-end="url(#hier-arrow)" stroke="#618794" stroke-width="2" x1="346" x2="432" y1="117" y2="85"></line>
+<line marker-end="url(#hier-arrow)" stroke="#618794" stroke-width="2" x1="346" x2="432" y1="117" y2="175"></line>
+<line marker-end="url(#hier-arrow)" stroke="#618794" stroke-width="2" x1="556" x2="642" y1="85" y2="46"></line>
+<line marker-end="url(#hier-arrow)" stroke="#618794" stroke-width="2" x1="556" x2="642" y1="85" y2="104"></line>
+<line marker-end="url(#hier-arrow)" stroke="#618794" stroke-width="2" x1="556" x2="642" y1="85" y2="162"></line>
+<rect fill="#DCE0E2" height="64" rx="8" stroke="#618794" stroke-width="2" width="150" x="16" y="170"></rect>
+<text fill="#1B5162" font-size="14" font-weight="bold" text-anchor="middle" x="91" y="197">Spark</text>
+<text fill="#1B5162" font-size="14" font-weight="bold" text-anchor="middle" x="91" y="217">Application</text>
+<rect fill="#FFFFFF" height="50" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="120" x="226" y="92"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="286" y="123">Job 1</text>
+<rect fill="#FFFFFF" height="50" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="120" x="226" y="250"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="286" y="281">Job 2</text>
+<rect fill="#FFFFFF" height="50" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="120" x="436" y="60"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="496" y="91">Stage 1</text>
+<rect fill="#FFFFFF" height="50" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="120" x="436" y="150"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="496" y="181">Stage 2</text>
+<rect fill="#FFFFFF" height="44" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="120" x="646" y="24"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="706" y="52">Task 1</text>
+<rect fill="#FFFFFF" height="44" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="120" x="646" y="82"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="706" y="110">Task 2</text>
+<rect fill="#FFFFFF" height="44" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="120" x="646" y="140"></rect>
+<text fill="#333" font-size="14" text-anchor="middle" x="706" y="168">Task 3</text>
+</svg>
+</div>
+</details>
+<div>
+<div>
+<span>📝</span>
+<div>
+<strong>Shared Nothing</strong>
+<p>Tasks within a stage run in parallel and do not communicate with each other - a model known as <em>shared nothing</em> execution. One task processes one partition of data.</p>
+</div>
+</div>
+</div>
+
+<h2 id="G.-The-Spark-UI">G. The Spark UI</h2><p>Spark provides web user interfaces for monitoring and management, including:</p>
+<ul>
+<li><strong>Application UI</strong> - per application (one per <code>SparkSession</code>)<ul>
+<li>Application progress and task execution</li>
+<li>DAG visualization and stage details</li>
+<li>Resource usage and performance metrics</li>
+</ul>
+</li>
+<li><strong>Master UI</strong> - per cluster<ul>
+<li>Worker node status, health, and cluster-wide resource allocation</li>
+<li>Shows all running applications and available resources</li>
+</ul>
+</li>
+</ul>
+<p>In Databricks, the Spark UI is available from the cluster page (<strong>Compute</strong> -&gt; your cluster -&gt; <strong>Spark UI</strong>) and from the <strong>View</strong> links that appear under each executed notebook cell. The demo that follows explores the <strong>Jobs</strong>, <strong>Executors</strong>, and <strong>Storage</strong> tabs.</p>
+
+<h2 id="H.-Spark-Clusters-in-Databricks">H. Spark Clusters in Databricks</h2><p>The Databricks platform offers several options for running Spark workloads:</p>
+<table>
+<thead>
+<tr>
+<th>Compute Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All-Purpose Clusters</td>
+<td>Interactive clusters that support notebooks, jobs, and dashboards with configurable auto-termination</td>
+</tr>
+<tr>
+<td>Job Clusters</td>
+<td>Ephemeral clusters that start when a job runs and terminate automatically upon completion, optimized for non-interactive workloads</td>
+</tr>
+<tr>
+<td>SQL Warehouses</td>
+<td>Optimized compute for SQL query performance with fast startup and auto-scaling to balance cost and performance</td>
+</tr>
+<tr>
+<td>Serverless</td>
+<td>Fully managed compute where Databricks operates the cluster; your notebook connects as a thin client via Spark Connect</td>
+</tr>
+</tbody>
+</table>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>The Driver plans and coordinates; the Cluster Manager allocates resources; Executors on Workers run tasks</li>
+<li>The <code>SparkSession</code> (available as <code>spark</code> in Databricks) is the unified entry point for all Spark functionality</li>
+<li>Applications decompose into jobs, jobs into stages, and stages into parallel shared-nothing tasks</li>
+<li>Stage boundaries occur at shuffles, where data is redistributed across the cluster</li>
+<li>The Spark UI visualizes jobs, stages, the DAG, executors, and cached data</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>
