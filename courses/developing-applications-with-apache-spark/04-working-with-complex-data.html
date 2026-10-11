@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>4.1 Lecture - Working with Complex Data</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<div>
+
+<div>
+<span>Developing Applications with Apache Spark</span>
+<span>|</span>
+<span>4. Working with Complex Data</span>
+</div>
+</div>
+
+<h1 id="4.1-Lecture---Working-with-Complex-Data">4.1 Lecture - Working with Complex Data</h1><blockquote>
+<p><em>Structured data beyond simple types</em></p>
+</blockquote>
+<p>This lecture covers Spark's complex data types - arrays, structs, and maps - including converting JSON strings to structured types, the functions for manipulating arrays, aggregating values into collections, and the best practices that keep complex data operations performant.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Describe Apache Spark's support for arrays, maps, and structs, and when these data types commonly appear in real-world scenarios</li>
+<li>Use functions for creating collections (<code>collect_list()</code>, <code>collect_set()</code>) in aggregation pipelines</li>
+<li>Manipulate and transform array-type columns using functions like <code>explode()</code>, <code>array_contains()</code>, and <code>element_at()</code></li>
+<li>Work effectively with nested struct types, including accessing fields and flattening complex structures</li>
+</ul>
+
+<h2 id="A.-Complex-Data-Types-in-Spark">A. Complex Data Types in Spark</h2><p>Complex data types are common in modern data pipelines, especially when working with JSON data, nested analytics results, or feature engineering:</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>PySpark Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__Array__</td>
+<td><code>pyspark.sql.types.ArrayType</code></td>
+<td>Ordered collection of elements (e.g. <code>[1, 2, 3]</code>)</td>
+</tr>
+<tr>
+<td>__Struct__</td>
+<td><code>pyspark.sql.types.StructType</code></td>
+<td>Nested structure with predefined named fields</td>
+</tr>
+<tr>
+<td>__Map__</td>
+<td><code>pyspark.sql.types.MapType</code></td>
+<td>Key-value pairs (keys are not predefined)</td>
+</tr>
+</tbody>
+</table>
+
+<h2 id="B.-JSON-Strings-vs-Structs">B. JSON Strings vs Structs</h2><p>Semi-structured data often arrives as JSON strings. Convert it early:</p>
+<ul>
+<li>JSON strings require parsing overhead and waste memory</li>
+<li>Structs give type safety and better performance</li>
+<li>Convert early using <code>from_json()</code> with a schema</li>
+</ul>
+<p>Given this example input data:</p>
+<pre><code>+---+--------------------------------------------+
+|id |json_data                                   |
++---+--------------------------------------------+
+|1  |{"user_id": 100, "features": {"score":0.8}} |
++---+--------------------------------------------+
+</code></pre>
+<div><div><pre><code id="code-lsj5waf1g"><span># Define a schema matching the JSON structure</span>
+schema <span>=</span> StructType<span>(</span><span>[</span>
+    StructField<span>(</span><span>"user_id"</span><span>,</span> LongType<span>(</span><span>)</span><span>)</span><span>,</span>
+    StructField<span>(</span><span>"features"</span><span>,</span> MapType<span>(</span>StringType<span>(</span><span>)</span><span>,</span> DoubleType<span>(</span><span>)</span><span>)</span><span>)</span>
+<span>]</span><span>)</span>
+
+<span># Convert JSON strings to a struct type</span>
+df2 <span>=</span> df<span>.</span>withColumn<span>(</span><span>"parsed"</span><span>,</span> from_json<span>(</span>col<span>(</span><span>"json_data"</span><span>)</span><span>,</span> schema<span>)</span><span>)</span></code></pre></div></div>
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>Don't Know the Schema?</strong>
+<p>Use <code>schema_of_json()</code> on a representative sample value to infer a schema, or use the Spark 4 <code>VARIANT</code> data type (<code>parse_json()</code>) to store semi-structured data without declaring a schema at all - <code>VARIANT</code> keeps the full structure queryable with dot notation while tolerating schema drift.</p>
+</div>
+</div>
+</div>
+
+<h2 id="C.-Working-with-Struct-Types">C. Working with Struct Types</h2><p>Struct types maintain a logical grouping of related fields - like a table within a column:</p>
+<ul>
+<li>Struct fields can be accessed and operated on using dot notation or the <code>getField()</code> column function</li>
+</ul>
+<p>Given input data with struct column 'user':</p>
+<pre><code>user: struct&amp;lt;name:string, age:int, scores:array&amp;lt;double&amp;gt;&amp;gt;;
+</code></pre>
+<div><div><pre><code id="code-r3eowf3xt"><span># Accessing struct fields</span>
+df<span>.</span>select<span>(</span>
+    col<span>(</span><span>"user.name"</span><span>)</span><span>,</span> <span># Direct field access</span>
+    col<span>(</span><span>"user"</span><span>)</span><span>.</span>getField<span>(</span><span>"age"</span><span>)</span><span>,</span> <span># Alternative access</span>
+    col<span>(</span><span>"user.scores"</span><span>)</span><span>[</span><span>0</span><span>]</span><span>.</span>alias<span>(</span><span>"first_score"</span><span>)</span> <span># Nested access</span>
+<span>)</span></code></pre></div></div>
+
+<h2 id="D.-The-explode()-Function">D. The explode() Function</h2><p>Unnesting arrays while preserving other columns - one row per array element:</p>
+<p>Input: DataFrame with array column:</p>
+<pre><code>+---+----------------+
+|id |items           |
++---+----------------+
+|1  |["a", "b", "c"] |
+|2  |["x", "y"]      |
++---+----------------+
+</code></pre>
+<div><div><pre><code id="code-ipxa96ai9">df<span>.</span>select<span>(</span><span>"id"</span><span>,</span> explode<span>(</span><span>"items"</span><span>)</span><span>.</span>alias<span>(</span><span>"item"</span><span>)</span><span>)</span></code></pre></div></div>
+<p>Results in...</p>
+<pre><code>+---+----+
+|id |item|
++---+----+
+|1  |a   |
+|1  |b   |
+|1  |c   |
+|2  |x   |
+|2  |y   |
++---+----+
+</code></pre>
+
+<h2 id="E.-Common-Array-Column-Operations">E. Common Array Column Operations</h2><p>Common functions for array column manipulation:</p>
+<table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Purpose</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>array_contains(col, val)</code>__</td>
+<td>Tests if the array contains a specific value</td>
+<td><code>array_contains(items, "a")</code></td>
+</tr>
+<tr>
+<td>__<code>size(col)</code>__ / __<code>array_size(col)</code>__</td>
+<td>Returns the number of elements</td>
+<td><code>array_size(items)</code></td>
+</tr>
+<tr>
+<td>__<code>element_at(col, n)</code>__</td>
+<td>Returns the nth element (1-based indexing)</td>
+<td><code>element_at(items, 2)</code></td>
+</tr>
+<tr>
+<td>__<code>array_distinct(col)</code>__</td>
+<td>Removes duplicates from an array column</td>
+<td><code>array_distinct(items)</code></td>
+</tr>
+</tbody>
+</table>
+
+<h2 id="F.-Aggregating-to-Collections">F. Aggregating to Collections</h2><p>Collection aggregates are the inverse of <code>explode()</code> - they gather rows into arrays:</p>
+<ul>
+<li><code>collect_list()</code> is an aggregate function that gathers all values from a column into an array - commonly used with <code>groupBy()</code> to build arrays of related values within each group</li>
+<li><code>collect_set()</code> works similarly but removes duplicates, producing arrays of unique values</li>
+</ul>
+<div><div><pre><code id="code-40ivq8x2z"><span># Get a list (array) of products for each region</span>
+df<span>.</span>groupBy<span>(</span><span>"region"</span><span>)</span> \
+  <span>.</span>agg<span>(</span>
+    collect_list<span>(</span><span>"product"</span><span>)</span><span>.</span>alias<span>(</span><span>"all_products"</span><span>)</span><span>,</span>    <span># keeps duplicates</span>
+    collect_set<span>(</span><span>"product"</span><span>)</span><span>.</span>alias<span>(</span><span>"unique_products"</span><span>)</span>   <span># unique only</span>
+  <span>)</span></code></pre></div></div>
+
+<h2 id="G.-Best-Practices-for-Complex-Data-Types">G. Best Practices for Complex Data Types</h2><p>Considerations when working with nested structures:</p>
+<ul>
+<li><code>explode()</code> on large arrays can cause data explosion - 1 row becomes N rows, which can overwhelm memory and processing</li>
+<li><code>collect_list()</code> / <code>collect_set()</code> can be memory-intensive when groups are large, as they hold all values per group in memory</li>
+<li>Consider <code>collect_set()</code> when duplicates aren't needed and order doesn't matter:<ul>
+<li>Uses less memory because it removes duplicates</li>
+<li>Less shuffle overhead as duplicate values don't need to be collected</li>
+</ul>
+</li>
+</ul>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>Arrays, structs, and maps let one column carry structure; they are the natural shape of JSON and event data</li>
+<li>Convert JSON strings to structs early with <code>from_json()</code> - structs are typed, compact, and optimizer-friendly; Spark 4 <code>VARIANT</code> covers the schema-unknown case</li>
+<li><code>explode()</code> turns array elements into rows; <code>collect_list()</code> and <code>collect_set()</code> do the reverse</li>
+<li>Watch the memory cost: exploding large arrays multiplies rows, and collection aggregates hold whole groups in memory</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

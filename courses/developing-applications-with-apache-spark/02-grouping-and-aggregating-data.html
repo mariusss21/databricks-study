@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>2.1 Lecture - Grouping and Aggregating Data</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<div>
+
+<div>
+<span>Developing Applications with Apache Spark</span>
+<span>|</span>
+<span>2. Grouping and Aggregating Data</span>
+</div>
+</div>
+
+<h1 id="2.1-Lecture---Grouping-and-Aggregating-Data">2.1 Lecture - Grouping and Aggregating Data</h1><blockquote>
+<p><em>From rows to insight: distributed aggregation in Spark</em></p>
+</blockquote>
+<p>This lecture covers grouping and aggregation with the DataFrame API: how <code>groupBy()</code> works across a cluster, the core aggregation methods, combining multiple aggregations, and window functions for analytics that preserve row-level detail.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Describe distributed grouping transformations for data aggregation and their mapping to SQL <code>GROUP BY</code> syntax</li>
+<li>Apply and combine multiple aggregation functions using both DataFrame methods and SQL expressions</li>
+<li>Use window functions for advanced analytics including ranking, running calculations, and comparative analysis across rows</li>
+</ul>
+
+<h2 id="A.-Introduction-to-groupBy-Operations">A. Introduction to groupBy Operations</h2><p>The foundation of data aggregation in Spark:</p>
+<ul>
+<li><code>groupBy()</code> operations in Spark partition data across nodes based on the grouping columns</li>
+<li>Aggregations execute in parallel across partitions for optimal performance</li>
+<li>Similar to SQL <code>GROUP BY</code> syntax but with more flexible options</li>
+<li>Supports multiple columns for complex grouping patterns</li>
+<li><code>groupBy()</code> returns a <code>GroupedData</code> object that lets you chain aggregation methods like <code>count()</code>, <code>sum()</code>, <code>avg()</code> - this is lazily evaluated until an action triggers execution</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Grouping shuffles rows so each group lands on one Executor</strong>
+</div>
+</div>
+</summary>
+<div><svg aria-label="groupBy triggers a shuffle across partitions" font-family="DM Sans,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" role="img" style="width:100%;height:auto;display:block" viewBox="0 0 1180 560" xmlns="http://www.w3.org/2000/svg"><title>groupBy triggers a shuffle across partitions</title><defs><marker id="ah_asp2_shuffle" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="8.5" refY="5" viewBox="0 0 10 10"><path d="M0,1 L10,5 L0,9 z" fill="#3C4B52"></path></marker></defs><rect fill="#F9F7F4" height="470" rx="14" stroke="#DCE0E2" stroke-width="2" width="400" x="30" y="70"></rect><text fill="#0B2026" font-size="19" font-weight="700" text-anchor="middle" x="230" y="102">Input partitions</text><rect fill="#E8F5E9" height="470" rx="14" stroke="#4CAF50" stroke-width="2" width="400" x="750" y="70"></rect><text fill="#0B2026" font-size="19" font-weight="700" text-anchor="middle" x="950" y="102">Grouped partitions</text><rect fill="#FFFFFF" height="110" rx="10" stroke="#618794" stroke-width="2" width="340" x="60" y="130"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="230.0" y="180.7">Partition 0</text><text fill="#4A5A62" font-size="16" font-style="italic" text-anchor="middle" x="230.0" y="204.4">keys: A, B, C</text><rect fill="#FFFFFF" height="110" rx="10" stroke="#618794" stroke-width="2" width="340" x="60" y="265"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="230.0" y="315.7">Partition 1</text><text fill="#4A5A62" font-size="16" font-style="italic" text-anchor="middle" x="230.0" y="339.4">keys: A, C</text><rect fill="#FFFFFF" height="110" rx="10" stroke="#618794" stroke-width="2" width="340" x="60" y="400"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="230.0" y="450.7">Partition 2</text><text fill="#4A5A62" font-size="16" font-style="italic" text-anchor="middle" x="230.0" y="474.4">keys: B, C</text><rect fill="#E8F5E9" height="110" rx="10" stroke="#4CAF50" stroke-width="2" width="340" x="780" y="130"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="950.0" y="190.9">All key A rows</text><rect fill="#E8F5E9" height="110" rx="10" stroke="#4CAF50" stroke-width="2" width="340" x="780" y="265"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="950.0" y="325.9">All key B rows</text><rect fill="#E8F5E9" height="110" rx="10" stroke="#4CAF50" stroke-width="2" width="340" x="780" y="400"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="950.0" y="460.9">All key C rows</text><path d="M400,185 L778,185" fill="none" marker-end="url(#ah_asp2_shuffle)" stroke="#8494A0" stroke-width="2"></path><path d="M400,185 L778,320" fill="none" marker-end="url(#ah_asp2_shuffle)" stroke="#8494A0" stroke-width="2"></path><path d="M400,320 L778,185" fill="none" marker-end="url(#ah_asp2_shuffle)" stroke="#8494A0" stroke-width="2"></path><path d="M400,320 L778,455" fill="none" marker-end="url(#ah_asp2_shuffle)" stroke="#8494A0" stroke-width="2"></path><path d="M400,455 L778,320" fill="none" marker-end="url(#ah_asp2_shuffle)" stroke="#8494A0" stroke-width="2"></path><path d="M400,455 L778,455" fill="none" marker-end="url(#ah_asp2_shuffle)" stroke="#8494A0" stroke-width="2"></path><rect fill="#FFFFFF" height="27.2" rx="5" stroke="#D8DEE2" stroke-width="1" width="81.2" x="549.4" y="45.6"></rect><text fill="#4A5A62" font-size="16" font-style="italic" text-anchor="middle" x="590" y="65.6">shuffle</text></svg></div>
+</details>
+
+<h3 id="groupBy-Examples">groupBy Examples</h3><p>Grouping is generally a precursor to aggregation:</p>
+<div><div><pre><code id="code-3n9ylhizm"><span># Basic grouping</span>
+df<span>.</span>groupBy<span>(</span><span>"department"</span><span>)</span><span>.</span>count<span>(</span><span>)</span>
+
+<span># Multi-column grouping</span>
+df<span>.</span>groupBy<span>(</span><span>"department"</span><span>,</span> <span>"location"</span><span>)</span><span>.</span>avg<span>(</span><span>"salary"</span><span>)</span>
+
+<span># Using column expressions</span>
+df<span>.</span>groupBy<span>(</span>col<span>(</span><span>"department"</span><span>)</span><span>,</span> year<span>(</span><span>"hire_date"</span><span>)</span><span>)</span><span>.</span><span>sum</span><span>(</span><span>"revenue"</span><span>)</span></code></pre></div></div>
+
+<h2 id="B.-Basic-Aggregation-Methods">B. Basic Aggregation Methods</h2><p>The most common aggregation methods available on grouped data:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>SQL Equivalent</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>count()</code>__</td>
+<td><code>COUNT(*)</code></td>
+<td>Count rows in each group</td>
+</tr>
+<tr>
+<td>__<code>sum(col)</code>__</td>
+<td><code>SUM(col)</code></td>
+<td>Sum values in a column for each group</td>
+</tr>
+<tr>
+<td>__<code>avg(col)</code>__</td>
+<td><code>AVG(col)</code></td>
+<td>Average of column values for each group</td>
+</tr>
+<tr>
+<td>__<code>min(col)</code>__ / __<code>max(col)</code>__</td>
+<td><code>MIN</code> / <code>MAX</code></td>
+<td>Extremes of column values for each group</td>
+</tr>
+</tbody>
+</table>
+<p>For more information see the <a href="https://spark.apache.org/docs/latest/api/python/reference/pyspark.sql/grouping.html" rel="noreferrer noopener" target="_blank">grouping API reference</a>.</p>
+
+<h2 id="C.-Combining-Multiple-Aggregations">C. Combining Multiple Aggregations</h2><p>Multiple aggregations can be performed on the same <code>GroupedData</code> object using the <code>agg()</code> function:</p>
+<div><div><pre><code id="code-jfcro0xmp"><span># Using aggregate functions directly</span>
+df<span>.</span>groupBy<span>(</span><span>"department"</span><span>)</span> \
+  <span>.</span>agg<span>(</span><span>sum</span><span>(</span><span>"salary"</span><span>)</span><span>.</span>alias<span>(</span><span>"total_salary"</span><span>)</span><span>,</span>
+       avg<span>(</span><span>"age"</span><span>)</span><span>.</span>alias<span>(</span><span>"avg_age"</span><span>)</span><span>)</span>
+
+<span># Alternative syntax using a dictionary</span>
+df<span>.</span>groupBy<span>(</span><span>"department"</span><span>)</span><span>.</span>agg<span>(</span><span>{</span>
+    <span>"salary"</span><span>:</span> <span>"sum"</span><span>,</span>
+    <span>"age"</span><span>:</span> <span>"avg"</span>
+<span>}</span><span>)</span></code></pre></div></div>
+<div>
+<div>
+<span>ℹ️</span>
+<div>
+<strong>agg() and Aliases</strong>
+<p><code>agg()</code> is also needed when you want to alias the result of a single aggregation function - the shortcut methods like <code>sum()</code> generate column names such as <code>sum(salary)</code> that are awkward to reference downstream.</p>
+</div>
+</div>
+</div>
+
+<h2 id="D.-Window-Functions">D. Window Functions</h2><p>Aggregation without losing row-level detail:</p>
+<ul>
+<li><strong>What are they?</strong> Special functions that perform calculations across a set of rows related to the current row</li>
+<li><strong>When to use:</strong><ul>
+<li>Calculating running totals and averages</li>
+<li>Ranking records within groups</li>
+<li>Accessing previous and next row values</li>
+<li>Comparing row values to group aggregates</li>
+</ul>
+</li>
+</ul>
+
+<h3 id="Window-Example">Window Example</h3><p>A window specification defines how rows are partitioned and ordered; window functions are then applied <code>over()</code> it:</p>
+<div><div><pre><code id="code-puxrj0uuy"><span>from</span> pyspark<span>.</span>sql<span>.</span>window <span>import</span> Window
+<span>from</span> pyspark<span>.</span>sql<span>.</span>functions <span>import</span> rank<span>,</span> <span>sum</span><span>,</span> lag
+
+<span># Window specification</span>
+windowSpec <span>=</span> Window<span>.</span>partitionBy<span>(</span><span>"department"</span><span>)</span><span>.</span>orderBy<span>(</span><span>"salary"</span><span>)</span>
+
+<span># Using window functions</span>
+df<span>.</span>withColumn<span>(</span><span>"rank"</span><span>,</span> rank<span>(</span><span>)</span><span>.</span>over<span>(</span>windowSpec<span>)</span><span>)</span> \
+  <span>.</span>withColumn<span>(</span><span>"running_total"</span><span>,</span> <span>sum</span><span>(</span><span>"salary"</span><span>)</span><span>.</span>over<span>(</span>windowSpec<span>)</span><span>)</span> \
+  <span>.</span>withColumn<span>(</span><span>"prev_salary"</span><span>,</span> lag<span>(</span><span>"salary"</span><span>)</span><span>.</span>over<span>(</span>windowSpec<span>)</span><span>)</span></code></pre></div></div>
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>groupBy vs Window</strong>
+<p><code>groupBy()</code> collapses each group to a single output row. A window function adds the aggregate to <strong>every</strong> row, preserving the original detail - choose based on whether you still need the individual rows.</p>
+</div>
+</div>
+</div>
+
+<h2 id="Summary">Summary</h2><ul>
+<li><code>groupBy()</code> redistributes rows by key (a shuffle) and aggregates each group in parallel, mirroring SQL <code>GROUP BY</code></li>
+<li>Shortcut methods (<code>count()</code>, <code>sum()</code>, <code>avg()</code>, <code>min()</code>, <code>max()</code>) cover single aggregations; <code>agg()</code> combines several and supports aliases</li>
+<li>Window functions calculate aggregates, rankings, and offsets across related rows while keeping row-level detail</li>
+<li>Everything is lazily evaluated - the shuffle and aggregation only run when an action is triggered</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

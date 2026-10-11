@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>3.1 Lecture - DataFrame Relational Operations</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<div>
+
+<div>
+<span>Developing Applications with Apache Spark</span>
+<span>|</span>
+<span>3. DataFrame Relational Operations</span>
+</div>
+</div>
+
+<h1 id="3.1-Lecture---DataFrame-Relational-Operations">3.1 Lecture - DataFrame Relational Operations</h1><blockquote>
+<p><em>Combining distributed datasets with joins and set operations</em></p>
+</blockquote>
+<p>This lecture covers the relational side of the DataFrame API: join types and conditions, set operations for comparing datasets, and the performance practices that keep joins fast on distributed data.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Describe different types of DataFrame joins (inner, outer, left, right, cross) and their applications in combining datasets</li>
+<li>Use set operations like union, intersect, and subtract for combining or finding differences between DataFrames</li>
+<li>Apply best practices for optimizing relational operations, including choosing appropriate join strategies and handling data skew</li>
+</ul>
+
+<h2 id="A.-DataFrame-Join-Operations">A. DataFrame Join Operations</h2><p>Joins combine two DataFrames based on matching key column(s):</p>
+<ul>
+<li>Multiple join types supported: inner, outer, left, right, cross</li>
+<li>The join condition can use single or multiple columns</li>
+<li>Column naming conflicts are handled with DataFrame aliases or by renaming columns before the join</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Join Type (<code>how=</code>)</th>
+<th>Returns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>inner</code>__ (default)</td>
+<td>Rows with matching keys in both DataFrames</td>
+</tr>
+<tr>
+<td>__<code>left</code>__</td>
+<td>All left rows, with nulls where the right side has no match</td>
+</tr>
+<tr>
+<td>__<code>right</code>__</td>
+<td>All right rows, with nulls where the left side has no match</td>
+</tr>
+<tr>
+<td>__<code>full_outer</code>__</td>
+<td>All rows from both sides, with nulls for missing matches</td>
+</tr>
+<tr>
+<td>__<code>left_semi</code>__</td>
+<td>Left rows that have a match (no right columns)</td>
+</tr>
+<tr>
+<td>__<code>left_anti</code>__</td>
+<td>Left rows that have no match</td>
+</tr>
+<tr>
+<td>__<code>cross</code>__</td>
+<td>Every combination of rows (use with care)</td>
+</tr>
+</tbody>
+</table>
+
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Anatomy of a distributed join</strong>
+</div>
+</div>
+</summary>
+<div><svg aria-label="Anatomy of a join" font-family="DM Sans,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" role="img" style="width:100%;height:auto;display:block" viewBox="0 0 1120 360" xmlns="http://www.w3.org/2000/svg"><title>Anatomy of a join</title><defs><marker id="ah_asp2_join" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="8.5" refY="5" viewBox="0 0 10 10"><path d="M0,1 L10,5 L0,9 z" fill="#3C4B52"></path></marker></defs><rect fill="#DCE0E2" height="110" rx="10" stroke="#618794" stroke-width="2" width="300" x="40" y="40"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="190.0" y="100.9">users DataFrame</text><rect fill="#DCE0E2" height="110" rx="10" stroke="#618794" stroke-width="2" width="300" x="40" y="210"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="190.0" y="270.9">orders DataFrame</text><polygon fill="#FFF3E0" points="512,120 648,120 690,180.0 648,240 512,240 470,180.0" stroke="#FF9800" stroke-width="2"></polygon><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="580.0" y="187.0">join on user_id</text><rect fill="#E8F5E9" height="120" rx="10" stroke="#4CAF50" stroke-width="2" width="290" x="800" y="120"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="945.0" y="175.7">Combined DataFrame</text><text fill="#4A5A62" font-size="16" font-style="italic" text-anchor="middle" x="945.0" y="199.4">user and order columns</text><path d="M340,95 L476,154.0" fill="none" marker-end="url(#ah_asp2_join)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M340,265 L476,206.0" fill="none" marker-end="url(#ah_asp2_join)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M690,180.0 L800,180.0" fill="none" marker-end="url(#ah_asp2_join)" stroke="#3C4B52" stroke-width="2.2"></path></svg></div>
+</details>
+
+<h3 id="join-Examples">join Examples</h3><div><div><pre><code id="code-t0q5g32pp"><span># Basic join example</span>
+df1<span>.</span>join<span>(</span>df2<span>,</span> <span>"user_id"</span><span>)</span>  <span># Inner join by default</span>
+
+<span># Specifying join type</span>
+df1<span>.</span>join<span>(</span>df2<span>,</span>
+    on<span>=</span>df1<span>.</span>user_id <span>==</span> df2<span>.</span>user_id<span>,</span>
+    how<span>=</span><span>"left"</span><span>)</span>
+
+<span># Multiple conditions with DataFrame aliases</span>
+<span>from</span> pyspark<span>.</span>sql<span>.</span>functions <span>import</span> col
+users<span>.</span>alias<span>(</span><span>"u"</span><span>)</span><span>.</span>join<span>(</span>
+    orders<span>.</span>alias<span>(</span><span>"o"</span><span>)</span><span>,</span>
+    <span>[</span>col<span>(</span><span>"u.id"</span><span>)</span> <span>==</span> col<span>(</span><span>"o.user_id"</span><span>)</span><span>,</span>
+     col<span>(</span><span>"u.region"</span><span>)</span> <span>==</span> col<span>(</span><span>"o.region"</span><span>)</span><span>]</span><span>,</span>
+    <span>"inner"</span><span>)</span></code></pre></div></div>
+
+<h2 id="B.-Set-Operations">B. Set Operations</h2><p>Set operations treat DataFrames as sets of rows, helping you understand relationships within datasets. Given <code>A = [1, 2, 3]</code> and <code>B = [2, 3, 4]</code>:</p>
+<ul>
+<li><strong>UNION</strong> - includes all unique elements from both sets, no duplicates: <code>A UNION B -&gt; [1, 2, 3, 4]</code></li>
+<li><strong>INTERSECTION</strong> - includes elements in both sets: <code>A INTERSECT B -&gt; [2, 3]</code></li>
+<li><strong>SUBTRACTION</strong> - includes elements in A only: <code>A MINUS B -&gt; [1]</code></li>
+</ul>
+<p>All DataFrame set operations require matching schemas. The methods:</p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Description</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__<code>union()</code>__</td>
+<td>Combines all rows from both DataFrames by position</td>
+<td><code>df1.union(df2)</code></td>
+</tr>
+<tr>
+<td>__<code>unionByName()</code>__</td>
+<td>Combines DataFrames matching by column names</td>
+<td><code>df1.unionByName(df2)</code></td>
+</tr>
+<tr>
+<td>__<code>intersect()</code>__</td>
+<td>Returns only rows present in both DataFrames</td>
+<td><code>df1.intersect(df2)</code></td>
+</tr>
+<tr>
+<td>__<code>subtract()</code>__</td>
+<td>Returns rows in the first DataFrame but not in the second</td>
+<td><code>df1.subtract(df2)</code></td>
+</tr>
+</tbody>
+</table>
+
+<div>
+<div>
+<span>ℹ️</span>
+<div>
+<strong>Duplicates</strong>
+<p><code>union()</code> in Spark behaves like SQL <code>UNION ALL</code> - it keeps duplicates (deduplicate with <code>distinct()</code>). <code>intersect()</code> and <code>subtract()</code> remove duplicates; use the <code>intersectAll()</code> and <code>exceptAll()</code> variants to preserve them.</p>
+</div>
+</div>
+</div>
+
+<h2 id="C.-Join-Performance-Considerations">C. Join Performance Considerations</h2><p>Optimizing relational operations in a distributed environment:</p>
+<ul>
+<li><strong>Join strategy selection</strong> - Spark automatically chooses the join strategy; reference the smaller DataFrame first where practical</li>
+<li><strong>Broadcast joins</strong> - Spark can avoid shuffling the large side entirely by copying a small DataFrame to every Executor; use the <code>broadcast()</code> hint to request this explicitly</li>
+</ul>
+<div><div><pre><code id="code-d7ev8450g"><span># Good - small_df is smaller</span>
+small_df<span>.</span>join<span>(</span>large_df<span>,</span> <span>"key"</span><span>)</span>
+
+<span># Less efficient - large_df is larger</span>
+large_df<span>.</span>join<span>(</span>small_df<span>,</span> <span>"key"</span><span>)</span>
+
+<span># Broadcasting a small DataFrame</span>
+<span>from</span> pyspark<span>.</span>sql<span>.</span>functions <span>import</span> broadcast
+large_df<span>.</span>join<span>(</span>broadcast<span>(</span>small_df<span>)</span><span>,</span> <span>"key"</span><span>)</span></code></pre></div></div>
+
+<h3 id="More-Join-Performance-Considerations">More Join Performance Considerations</h3><ul>
+<li><strong>Data skew handling</strong><ul>
+<li>Uneven distribution of join keys can impact performance</li>
+<li>Consider repartitioning in some cases</li>
+</ul>
+</li>
+<li><strong>Memory management</strong><ul>
+<li>Monitor shuffle spill metrics for joins</li>
+<li>Consider caching frequently joined DataFrames</li>
+<li>Use projection to select only needed columns before joining</li>
+</ul>
+</li>
+</ul>
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>Use the Spark UI</strong>
+<p>Use the Spark UI to monitor join performance and identify bottlenecks - the SQL tab shows the chosen join strategy (e.g. <code>BroadcastHashJoin</code> vs <code>SortMergeJoin</code>) and per-stage shuffle metrics.</p>
+</div>
+</div>
+</div>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>Joins combine DataFrames on key columns; choose the join type (<code>inner</code>, <code>left</code>, <code>right</code>, <code>full_outer</code>, <code>semi</code>, <code>anti</code>, <code>cross</code>) based on which unmatched rows you need</li>
+<li>Set operations (<code>union()</code>, <code>unionByName()</code>, <code>intersect()</code>, <code>subtract()</code>) compare whole rows and require matching schemas</li>
+<li>Broadcast small DataFrames to avoid shuffling large ones; project columns before joining; watch for data skew</li>
+<li>The Spark UI shows which join strategy the optimizer picked and where the time went</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>
