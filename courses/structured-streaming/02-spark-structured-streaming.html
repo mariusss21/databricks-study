@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>2.1 Lecture - Spark Structured Streaming</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<div>
+
+<div>
+<span>Stream Processing and Analysis with Apache Spark</span>
+<span>|</span>
+<span>2. Spark Structured Streaming</span>
+</div>
+</div>
+
+<h1 id="2.1-Lecture---Spark-Structured-Streaming">2.1 Lecture - Spark Structured Streaming</h1><blockquote>
+<p><em>A declarative API for distributed stream processing</em></p>
+</blockquote>
+<p>This lecture covers the Spark Structured Streaming API: the infinite table model, streaming sources and sinks, the <code>DataStreamReader</code> and <code>DataStreamWriter</code> interfaces, streaming transformations and queries, and the controls that shape query behavior - triggers, output modes, checkpointing, and monitoring.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Explain how streaming data is processed through micro-batching in Spark</li>
+<li>Work with streaming sources and sinks to read and write data</li>
+<li>Describe how transformations and streaming queries work with streaming DataFrames</li>
+<li>Manage streaming applications using triggers, output modes, checkpointing, and monitoring</li>
+</ul>
+
+<h2 id="A.-The-Infinite-Table-Model">A. The Infinite Table Model</h2><p>Structured Streaming treats streaming data as an <strong>infinite table</strong>:</p>
+<ul>
+<li>Each new record is a row appended to the input table</li>
+<li>Queries are continuously and incrementally updated as new data arrives</li>
+<li>The same DataFrame APIs as batch processing apply - write the query as if the data were static</li>
+<li>Query plans are automatically optimized by the same Catalyst optimizer as batch</li>
+<li>Key features:<ul>
+<li>Event-time processing</li>
+<li>Watermark support for late data (section 3)</li>
+<li>End-to-end exactly-once guarantees with replayable sources and idempotent sinks</li>
+</ul>
+</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>New records become rows appended to an unbounded input table</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg aria-label="New records become rows appended to an unbounded input table, driving an incremental query into a result table and sink" role="img" style="max-width: 960px; height: auto; font-family: 'Helvetica Neue', Arial, sans-serif" viewBox="0 0 960 296" width="100%">
+<defs>
+<marker id="it-arrow" markerHeight="12" markerUnits="userSpaceOnUse" markerWidth="12" orient="auto" refX="9" refY="4">
+<path d="M0,0 L9,4 L0,8 Z" fill="#5A6B75"></path>
+</marker>
+</defs>
+<rect fill="#FFFFFF" height="66" rx="8" stroke="#999999" stroke-width="1.5" width="150" x="20" y="118"></rect>
+<text fill="#333" font-size="14" font-weight="700" text-anchor="middle" x="95" y="146">Streaming source</text>
+<text fill="#555" font-size="12" text-anchor="middle" x="95" y="166">(Kafka, files, ...)</text>
+<rect fill="#F9F7F4" height="222" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="190" x="210" y="40"></rect>
+<text fill="#4A5A63" font-size="14" font-weight="700" text-anchor="middle" x="305" y="60">Input table (unbounded)</text>
+<rect fill="#FFFFFF" height="40" rx="6" stroke="#C7CDD1" stroke-width="1.2" width="162" x="224" y="72"></rect>
+<text fill="#333" font-size="15" text-anchor="middle" x="305" y="97">row 1</text>
+<rect fill="#FFFFFF" height="40" rx="6" stroke="#C7CDD1" stroke-width="1.2" width="162" x="224" y="120"></rect>
+<text fill="#333" font-size="15" text-anchor="middle" x="305" y="145">row 2</text>
+<rect fill="#FFFFFF" height="40" rx="6" stroke="#C7CDD1" stroke-width="1.2" width="162" x="224" y="168"></rect>
+<text fill="#333" font-size="15" text-anchor="middle" x="305" y="193">row 3</text>
+<rect fill="#FFFFFF" height="40" rx="6" stroke="#C7CDD1" stroke-dasharray="4 3" stroke-width="1.2" width="162" x="224" y="216"></rect>
+<text fill="#777" font-size="13" text-anchor="middle" x="305" y="241">new rows appended...</text>
+<rect fill="#E3F2FD" height="66" rx="8" stroke="#2272B4" stroke-width="1.5" width="170" x="440" y="118"></rect>
+<text fill="#1B4F72" font-size="14" font-weight="700" text-anchor="middle" x="525" y="146">Incremental query</text>
+<text fill="#1B4F72" font-size="12" text-anchor="middle" x="525" y="166">(your DataFrame logic)</text>
+<rect fill="#E8F5E9" height="60" rx="8" stroke="#4CAF50" stroke-width="1.5" width="140" x="650" y="121"></rect>
+<text fill="#2E7D32" font-size="14" font-weight="700" text-anchor="middle" x="720" y="156">Result table</text>
+<rect fill="#FFFFFF" height="60" rx="8" stroke="#999999" stroke-width="1.5" width="110" x="830" y="121"></rect>
+<text fill="#333" font-size="14" font-weight="700" text-anchor="middle" x="885" y="156">Sink</text>
+<line marker-end="url(#it-arrow)" stroke="#5A6B75" stroke-width="1.6" x1="170" x2="206" y1="151" y2="151"></line>
+<line marker-end="url(#it-arrow)" stroke="#5A6B75" stroke-width="1.6" x1="400" x2="436" y1="151" y2="151"></line>
+<line marker-end="url(#it-arrow)" stroke="#5A6B75" stroke-width="1.6" x1="610" x2="646" y1="151" y2="151"></line>
+<line marker-end="url(#it-arrow)" stroke="#5A6B75" stroke-width="1.6" x1="790" x2="826" y1="151" y2="151"></line>
+</svg>
+</div>
+</details>
+
+<h2 id="B.-Streaming-Sources-and-Sinks">B. Streaming Sources and Sinks</h2><p>Where your streaming data comes from - the built-in sources:</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>File</td>
+<td>Reads files from a directory as they appear</td>
+</tr>
+<tr>
+<td>Kafka</td>
+<td>Reads data from Apache Kafka topics</td>
+</tr>
+<tr>
+<td>Delta</td>
+<td>Reads a UC table as a stream of changes</td>
+</tr>
+<tr>
+<td>Socket</td>
+<td>Reads data from a socket connection (for testing)</td>
+</tr>
+<tr>
+<td>Rate</td>
+<td>Testing source that generates data at a fixed rate</td>
+</tr>
+</tbody>
+</table>
+<p>And where it goes - the built-in sinks:</p>
+<table>
+<thead>
+<tr>
+<th>Sink</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>File</td>
+<td>Stores the output to a directory</td>
+</tr>
+<tr>
+<td>Kafka</td>
+<td>Writes output to Kafka topics</td>
+</tr>
+<tr>
+<td>Delta</td>
+<td>Writes output to UC tables (the standard sink on Databricks)</td>
+</tr>
+<tr>
+<td>Foreach / ForeachBatch</td>
+<td>Runs arbitrary computation on the output records</td>
+</tr>
+<tr>
+<td>Console / Memory</td>
+<td>Used for testing and debugging</td>
+</tr>
+</tbody>
+</table>
+
+<div>
+<div>
+<span>ℹ️</span>
+<div>
+<strong>Auto Loader</strong>
+<p>On Databricks, Auto Loader (<code>cloudFiles</code>) is an enhanced file source for high-performance cloud storage ingestion with automatic schema inference and evolution. This course uses the standard file source to keep the focus on the core API; Auto Loader is a drop-in upgrade for production ingestion.</p>
+</div>
+</div>
+</div>
+
+<h2 id="C.-DataStreamReader-and-DataStreamWriter">C. DataStreamReader and DataStreamWriter</h2><p>Two interfaces bracket every streaming pipeline:</p>
+<ul>
+<li><strong><code>DataStreamReader</code></strong>: creates streaming DataFrames - accessed through <code>spark.readStream</code></li>
+<li><strong><code>DataStreamWriter</code></strong>: writes streaming results - accessed through <code>DataFrame.writeStream</code></li>
+</ul>
+<div><pre><code><span># Create a streaming DataFrame from JSON files in a directory</span>
+stream_df <span>=</span> <span>(</span>
+    spark<span>.</span>readStream
+    <span>.</span><span>format</span><span>(</span><span>"json"</span><span>)</span>
+    <span>.</span>schema<span>(</span>order_schema<span>)</span>              <span># file sources require an explicit schema</span>
+    <span>.</span>option<span>(</span><span>"maxFilesPerTrigger"</span><span>,</span> <span>1</span><span>)</span>   <span># throttle: one file per micro-batch</span>
+    <span>.</span>load<span>(</span><span>"/Volumes/catalog/schema/volume/orders"</span><span>)</span>
+<span>)</span>
+
+
+<span># Write streaming results to a UC table</span>
+query <span>=</span> <span>(</span>
+    stream_df<span>.</span>writeStream
+    <span>.</span><span>format</span><span>(</span><span>"delta"</span><span>)</span>
+    <span>.</span>outputMode<span>(</span><span>"append"</span><span>)</span>
+    <span>.</span>option<span>(</span><span>"checkpointLocation"</span><span>,</span> checkpoint_path<span>)</span>
+    <span>.</span>toTable<span>(</span><span>"orders_bronze"</span><span>)</span>
+<span>)</span></code></pre></div>
+
+
+
+
+
+<div>
+<div>
+<span>⚠️</span>
+<div>
+<strong>Schemas Are Not Inferred on File Streams</strong>
+<p>Unlike batch reads, streaming file sources require the schema up front - inferring it would mean scanning an unbounded source. Define a <code>StructType</code> (or use Auto Loader's schema inference, which manages this for you).</p>
+</div>
+</div>
+</div>
+
+<h2 id="D.-Streaming-Transformations-and-Queries">D. Streaming Transformations and Queries</h2><p>Between the reader and the writer sits ordinary DataFrame code:</p>
+<div><pre><code><span># Transformations: identical to batch DataFrame code, still lazy</span>
+<span>from</span> pyspark<span>.</span>sql<span>.</span>functions <span>import</span> col
+
+
+large_orders_df <span>=</span> <span>(</span>
+    stream_df
+    <span>.</span><span>filter</span><span>(</span>col<span>(</span><span>"quantity"</span><span>)</span> <span>&gt;=</span> <span>24</span><span>)</span>
+    <span>.</span>withColumn<span>(</span><span>"is_bulk"</span><span>,</span> col<span>(</span><span>"quantity"</span><span>)</span> <span>&gt;=</span> <span>48</span><span>)</span>
+<span>)</span>
+
+
+<span># The streaming query: starts execution and runs until stopped</span>
+query <span>=</span> <span>(</span>
+    large_orders_df<span>.</span>writeStream
+    <span>.</span>outputMode<span>(</span><span>"append"</span><span>)</span>
+    <span>.</span><span>format</span><span>(</span><span>"delta"</span><span>)</span>
+    <span>.</span>queryName<span>(</span><span>"large_orders"</span><span>)</span>
+    <span>.</span>trigger<span>(</span>processingTime<span>=</span><span>"1 second"</span><span>)</span>
+    <span>.</span>option<span>(</span><span>"checkpointLocation"</span><span>,</span> checkpoint_path<span>)</span>
+    <span>.</span>toTable<span>(</span><span>"large_orders"</span><span>)</span>
+<span>)</span>
+
+
+<span># Manage the query lifecycle</span>
+query<span>.</span>stop<span>(</span><span>)</span>               <span># stop on request</span>
+query<span>.</span>awaitTermination<span>(</span><span>)</span>   <span># block until the query terminates</span></code></pre></div>
+
+
+
+
+
+<ul>
+<li>Transformations on a streaming DataFrame produce new streaming DataFrames - nothing executes until a query starts</li>
+<li><code>start()</code> (or <code>toTable()</code>) launches a <strong>StreamingQuery</strong> that runs indefinitely until stopped or failed</li>
+<li><code>queryName()</code> labels the query in the Spark UI and names the temp view for memory sinks</li>
+</ul>
+
+<h2 id="E.-Triggers">E. Triggers</h2><p>Triggers control when Structured Streaming processes data:</p>
+<ul>
+<li><strong>Default trigger</strong> (as soon as possible)<ul>
+<li>Processes data as soon as the previous micro-batch completes</li>
+</ul>
+</li>
+<li><strong>Fixed interval trigger</strong> (<code>processingTime</code>)<ul>
+<li>Processes data at specified time intervals</li>
+<li>Useful for controlling resource usage</li>
+</ul>
+</li>
+<li><strong>Available now trigger</strong> (<code>availableNow</code>)<ul>
+<li>Processes all available data (in multiple batches if throttled), then stops</li>
+<li>Will not wait for new data to arrive afterwards - ideal for incremental batch jobs and for classroom demos</li>
+</ul>
+</li>
+</ul>
+<div><pre><code><span># Default when no trigger is specified</span>
+df<span>.</span>writeStream<span>.</span>start<span>(</span><span>)</span>
+
+
+<span># Process batches at fixed intervals</span>
+df<span>.</span>writeStream<span>.</span>trigger<span>(</span>processingTime<span>=</span><span>"2 minutes"</span><span>)</span><span>.</span>start<span>(</span><span>)</span>
+
+
+<span># One-time processing of available data, then stop</span>
+df<span>.</span>writeStream<span>.</span>trigger<span>(</span>availableNow<span>=</span><span>True</span><span>)</span><span>.</span>start<span>(</span><span>)</span></code></pre></div>
+
+
+
+
+
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>A Fourth Trigger in Spark 4</strong>
+<p>On Databricks with Spark 4, the <code>realTime</code> trigger enables Real-Time Mode - continuous execution targeting sub-second latency. It has its own compute requirements and constraints, covered in section 4.</p>
+</div>
+</div>
+</div>
+
+<h2 id="F.-Output-Modes">F. Output Modes</h2><p>Output modes define how Structured Streaming writes results to sinks:</p>
+<ul>
+<li><strong><code>append</code></strong> (default)<ul>
+<li>Only adds new records to the sink</li>
+<li>Best for simple (or stateless) queries without aggregations</li>
+</ul>
+</li>
+<li><strong><code>update</code></strong> (ideal for dashboards and real-time metrics)<ul>
+<li>Modifies existing records and adds new ones</li>
+<li>Only outputs records that changed since the last trigger</li>
+</ul>
+</li>
+<li><strong><code>complete</code></strong> (ideal for running totals or leaderboards)<ul>
+<li>Writes the entire result table to the sink each time</li>
+<li>Required for some aggregations</li>
+</ul>
+</li>
+</ul>
+<div>
+<div>
+<span>ℹ️</span>
+<div>
+<strong>Mode and Query Shape Must Agree</strong>
+<p>Not every mode works with every query. A stateless projection cannot run in <code>complete</code> mode (there is no result table to re-emit), and an aggregation without a watermark cannot run in <code>append</code> mode (rows are never final). Spark validates the combination when the query starts.</p>
+</div>
+</div>
+</div>
+
+<h2 id="G.-Checkpointing-and-Fault-Tolerance">G. Checkpointing and Fault Tolerance</h2><p>The checkpoint location is the durable memory of a streaming query:</p>
+<ul>
+<li>Records which input has been processed (source offsets) and any operator state</li>
+<li>Enables <strong>recovery</strong>: restart the query with the same checkpoint and it resumes exactly where it left off</li>
+<li>Enables <strong>exactly-once</strong> end-to-end guarantees when combined with replayable sources (files, Kafka, Delta) and idempotent sinks (Delta)</li>
+<li>One checkpoint location per query - never share one between queries</li>
+</ul>
+<div><pre><code>query <span>=</span> <span>(</span>
+    df<span>.</span>writeStream
+    <span>.</span>option<span>(</span><span>"checkpointLocation"</span><span>,</span> <span>"/Volumes/catalog/schema/checkpoints/orders_bronze"</span><span>)</span>
+    <span>.</span>toTable<span>(</span><span>"orders_bronze"</span><span>)</span>
+<span>)</span></code></pre></div>
+
+<h2 id="H.-Monitoring-Streaming-Queries">H. Monitoring Streaming Queries</h2><p>Understanding your streaming application's health:</p>
+<ul>
+<li><strong>Spark UI</strong>: the Structured Streaming tab shows active queries with per-batch progress details</li>
+<li><strong>External monitoring tools</strong>: Datadog, Grafana, Prometheus, and similar can track processing rates, latency, memory usage, and garbage collection</li>
+<li><strong>Inspection from code:</strong></li>
+</ul>
+<div><pre><code><span># Check if a DataFrame is streaming</span>
+df<span>.</span>isStreaming            <span># returns True or False</span>
+
+
+<span># Get the unique identifier for a query</span>
+query<span>.</span><span>id</span>
+
+
+<span># Get the current state of a query</span>
+query<span>.</span>status
+
+
+<span># Inspect the most recent progress report (rates, durations, offsets)</span>
+query<span>.</span>lastProgress
+
+
+<span># List all active queries on the session</span>
+spark<span>.</span>streams<span>.</span>active</code></pre></div>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>Structured Streaming models a stream as an infinite table: new records are appended rows, and your DataFrame query is incrementally recomputed against them</li>
+<li><code>spark.readStream</code> builds streaming DataFrames from sources (file, Kafka, Delta, rate); <code>DataFrame.writeStream</code> writes to sinks (Delta, file, Kafka, memory, console, foreach)</li>
+<li>Transformations are the same lazy DataFrame operations as batch; <code>start()</code> or <code>toTable()</code> launches a streaming query that runs until stopped</li>
+<li>Triggers control when processing happens (<code>processingTime</code>, <code>availableNow</code>, default as-fast-as-possible); output modes control what is written (<code>append</code>, <code>update</code>, <code>complete</code>)</li>
+<li>Checkpoint locations record offsets and state, enabling restart recovery and exactly-once guarantees with replayable sources and idempotent sinks</li>
+<li>Monitor queries via the Spark UI, external tools, and <code>query.status</code> / <code>query.lastProgress</code></li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

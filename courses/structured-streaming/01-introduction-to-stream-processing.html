@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>1.1 Lecture - Introduction to Stream Processing</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<div>
+
+<div>
+<span>Stream Processing and Analysis with Apache Spark</span>
+<span>|</span>
+<span>1. Introduction to Stream Processing</span>
+</div>
+</div>
+
+<h1 id="1.1-Lecture---Introduction-to-Stream-Processing">1.1 Lecture - Introduction to Stream Processing</h1><blockquote>
+<p><em>Processing data that never stops arriving</em></p>
+</blockquote>
+<p>This lecture introduces the fundamentals of stream processing: what makes a data stream different from a batch, how Spark's streaming support evolved into Structured Streaming, how micro-batch execution works, and where stream processing is applied in the real world.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Describe basic stream processing concepts, including unbounded data sets</li>
+<li>Explain the evolution from Spark Streaming (DStreams) to Structured Streaming</li>
+<li>Describe how micro-batch execution processes a stream as a series of small batches</li>
+<li>Identify common use cases for stream processing and the typical sources and destinations</li>
+</ul>
+
+<h2 id="A.-What-Is-a-Data-Stream">A. What Is a Data Stream</h2><p>A stream is an <strong>unbounded data set</strong>:</p>
+<ul>
+<li>It has no theoretical beginning nor end - new records keep arriving for as long as the producing systems run</li>
+<li>In contrast, a <strong>batch</strong> is of known, finite size at the time of processing</li>
+<li>Streams can be messages from a messaging system such as Kafka; or</li>
+<li>Streams can be anything event driven, such as files being processed as they arrive in cloud storage</li>
+</ul>
+<div>
+<div>
+<strong>Batch processing</strong>
+<ul>
+<li>Input is complete before processing starts</li>
+<li>Results are computed once over the whole data set</li>
+<li>Latency measured in minutes to hours</li>
+<li>Examples: nightly ETL, monthly reporting</li>
+</ul>
+</div>
+<div>
+<strong>Stream processing</strong>
+<ul>
+<li>Input is unbounded - it never finishes arriving</li>
+<li>Results are updated continuously or incrementally</li>
+<li>Latency measured in milliseconds to minutes</li>
+<li>Examples: fraud detection, live dashboards</li>
+</ul>
+</div>
+</div>
+<div>
+<div>
+<span>ℹ️</span>
+<div>
+<strong>Not All Streaming Is Real-Time</strong>
+<p>Stream processing is about <em>how</em> data is processed (incrementally, as it arrives), not necessarily <em>how fast</em>. Many production streaming pipelines run on minute-level or even hourly cadences - the incremental processing model is what saves recomputing everything. Real-time (sub-second) processing is a specific subset, covered in section 4.</p>
+</div>
+</div>
+</div>
+
+<h2 id="B.-From-DStreams-to-Structured-Streaming">B. From DStreams to Structured Streaming</h2><p>Spark's streaming support has evolved through three generations:</p>
+<ul>
+<li><strong>Spark Streaming (2013)</strong> was introduced as an extension to core Spark<ul>
+<li>Built on the RDD API</li>
+<li>Used the DStream (Discretized Streams) model: the stream as a sequence of time-windowed RDDs</li>
+<li>Processed data in small time-based batches</li>
+</ul>
+</li>
+<li><strong>Structured Streaming (2016)</strong> replaced DStreams<ul>
+<li>Built on the DataFrame and Dataset APIs</li>
+<li>Introduced event-time processing</li>
+<li>Simplified API with SQL-like operations</li>
+<li>Better handling of late and out-of-order data</li>
+</ul>
+</li>
+<li><strong>Spark 4 (current)</strong> continues to build on Structured Streaming<ul>
+<li><code>transformWithState</code>: a new arbitrary stateful processing API</li>
+<li>The state store data source, for querying streaming state directly when debugging</li>
+<li>On Databricks, <strong>Real-Time Mode</strong>: a continuous execution mode targeting sub-second latency (section 4)</li>
+</ul>
+</li>
+</ul>
+<div>
+<div>
+<span>⚠️</span>
+<div>
+<strong>DStreams Are Legacy</strong>
+<p>The DStream API is legacy and receives no new features. All new streaming development should use Structured Streaming, which is the only streaming API covered in this course.</p>
+</div>
+</div>
+</div>
+
+<h2 id="C.-Micro-Batch-Execution">C. Micro-Batch Execution</h2><p>Micro-batching is the basis for stream processing in a distributed environment:</p>
+<ul>
+<li>Micro-batching processes a stream as a series of small batches</li>
+<li>Data is collected into time-based chunks</li>
+<li>Each chunk is processed as a mini batch job using the same engine that runs batch workloads</li>
+<li>Typical batch intervals range from around 100 milliseconds to a few seconds</li>
+<li>The same fault tolerance, optimization, and scaling machinery as batch Spark applies to every micro-batch</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>How a stream becomes a series of micro-batch jobs</strong>
+</div>
+</div>
+</summary>
+<div>
+<svg aria-label="A stream becomes a series of micro-batch jobs feeding a sink" role="img" style="max-width: 860px; height: auto; font-family: 'Helvetica Neue', Arial, sans-serif" viewBox="0 0 860 300" width="100%">
+<defs>
+<marker id="mb-arrow" markerHeight="12" markerUnits="userSpaceOnUse" markerWidth="12" orient="auto" refX="9" refY="4">
+<path d="M0,0 L9,4 L0,8 Z" fill="#5A6B75"></path>
+</marker>
+</defs>
+<rect fill="#F9F7F4" height="222" rx="8" stroke="#DCE0E2" stroke-width="1.5" width="190" x="20" y="44"></rect>
+<text fill="#4A5A63" font-size="14" font-weight="700" text-anchor="middle" x="115" y="66">Unbounded input stream</text>
+<rect fill="#FFFFFF" height="46" rx="6" stroke="#C7CDD1" stroke-width="1.2" width="162" x="34" y="80"></rect>
+<text fill="#333" font-size="15" text-anchor="middle" x="115" y="108">events 0-5s</text>
+<rect fill="#FFFFFF" height="46" rx="6" stroke="#C7CDD1" stroke-width="1.2" width="162" x="34" y="140"></rect>
+<text fill="#333" font-size="15" text-anchor="middle" x="115" y="168">events 5-10s</text>
+<rect fill="#FFFFFF" height="46" rx="6" stroke="#C7CDD1" stroke-width="1.2" width="162" x="34" y="200"></rect>
+<text fill="#333" font-size="15" text-anchor="middle" x="115" y="228">events 10-15s</text>
+<rect fill="#E3F2FD" height="222" rx="8" stroke="#2272B4" stroke-width="1.5" width="190" x="330" y="44"></rect>
+<text fill="#1B4F72" font-size="14" font-weight="700" text-anchor="middle" x="425" y="66">Spark engine</text>
+<rect fill="#FFFFFF" height="46" rx="6" stroke="#7FB2DC" stroke-width="1.2" width="162" x="344" y="80"></rect>
+<text fill="#333" font-size="15" text-anchor="middle" x="425" y="108">micro-batch job 1</text>
+<rect fill="#FFFFFF" height="46" rx="6" stroke="#7FB2DC" stroke-width="1.2" width="162" x="344" y="140"></rect>
+<text fill="#333" font-size="15" text-anchor="middle" x="425" y="168">micro-batch job 2</text>
+<rect fill="#FFFFFF" height="46" rx="6" stroke="#7FB2DC" stroke-width="1.2" width="162" x="344" y="200"></rect>
+<text fill="#333" font-size="15" text-anchor="middle" x="425" y="228">micro-batch job 3</text>
+<rect fill="#E8F5E9" height="64" rx="8" stroke="#4CAF50" stroke-width="1.5" width="180" x="650" y="123"></rect>
+<text fill="#2E7D32" font-size="15" font-weight="700" text-anchor="middle" x="740" y="148">Sink</text>
+<text fill="#333" font-size="13" text-anchor="middle" x="740" y="170">(table, topic, files)</text>
+<line marker-end="url(#mb-arrow)" stroke="#5A6B75" stroke-width="1.6" x1="210" x2="326" y1="103" y2="103"></line>
+<line marker-end="url(#mb-arrow)" stroke="#5A6B75" stroke-width="1.6" x1="210" x2="326" y1="163" y2="163"></line>
+<line marker-end="url(#mb-arrow)" stroke="#5A6B75" stroke-width="1.6" x1="210" x2="326" y1="223" y2="223"></line>
+<path d="M520,103 C590,103 585,148 646,150" fill="none" marker-end="url(#mb-arrow)" stroke="#5A6B75" stroke-width="1.6"></path>
+<path d="M520,163 L646,157" fill="none" marker-end="url(#mb-arrow)" stroke="#5A6B75" stroke-width="1.6"></path>
+<path d="M520,223 C590,223 585,166 646,164" fill="none" marker-end="url(#mb-arrow)" stroke="#5A6B75" stroke-width="1.6"></path>
+</svg>
+</div>
+</details>
+
+<h2 id="D.-Streaming-in-the-Real-World">D. Streaming in the Real World</h2><p>Where stream processing earns its keep:</p>
+<div>
+<div>
+<strong>💡 Streaming use cases</strong>
+<ul>
+<li>Fraud detection</li>
+<li>Live dashboards</li>
+<li>Anomaly detection</li>
+<li>Clickstream analysis</li>
+<li>Sensor and IoT monitoring</li>
+<li>Continuous data ingestion and transformation</li>
+</ul>
+</div>
+<div>
+<strong>🔌 Common sources and destinations</strong>
+<ul>
+<li>Apache Kafka</li>
+<li>Amazon Kinesis</li>
+<li>Azure Event Hubs</li>
+<li>Cloud storage file arrivals</li>
+<li>Alerts and notifications (destination)</li>
+<li>Lakehouse tables - Delta Lake, Apache Iceberg (destination)</li>
+</ul>
+</div>
+</div>
+<p>A single pipeline often combines several of these: for example, clickstream events land in Kafka, Spark aggregates them incrementally, and the results feed both a UC table for analytics and an alerting destination for operations.</p>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>A stream is an unbounded data set: it has no defined end, in contrast to a batch of known size</li>
+<li>Spark Streaming (DStreams, RDD-based) gave way to Structured Streaming (DataFrame-based, event-time aware) in 2016; Spark 4 adds <code>transformWithState</code>, the state store data source, and (on Databricks) Real-Time Mode</li>
+<li>Micro-batch execution processes the stream as a series of small batch jobs, reusing Spark's batch engine, fault tolerance, and optimizations</li>
+<li>Streaming powers fraud detection, dashboards, anomaly detection, clickstream analysis, and IoT monitoring, typically reading from message buses or file arrivals and writing to lakehouse tables or alerting systems</li>
+<li>Stream processing is about incremental processing, not necessarily sub-second latency</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

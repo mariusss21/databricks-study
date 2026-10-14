@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>4.1 Lecture - Real-Time Mode in Structured Streaming</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<div>
+
+<div>
+<span>Stream Processing and Analysis with Apache Spark</span>
+<span>|</span>
+<span>4. Real-Time Mode</span>
+</div>
+</div>
+
+<h1 id="4.1-Lecture---Real-Time-Mode-in-Structured-Streaming">4.1 Lecture - Real-Time Mode in Structured Streaming</h1><blockquote>
+<p><em>The <code>realTime</code> trigger, supported sources, compute setup, and when to use it</em></p>
+</blockquote>
+<p>Real-Time Mode is a Spark Structured Streaming feature, introduced with Spark 4 on Databricks, that swaps the default micro-batch execution for a continuous, always-on dataflow. It targets sub-second end-to-end latency for operational workloads reading from message buses. This lecture covers what it is, what it requires, what it supports, and when to choose it over the micro-batch patterns from sections 2 and 3.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Explain what the Real-Time trigger does and how it differs from <code>processingTime</code> and <code>availableNow</code></li>
+<li>Describe the message-bus sources and sinks that Real-Time Mode supports</li>
+<li>Configure a classic compute cluster correctly for Real-Time Mode</li>
+<li>Describe Real-Time Mode's update output mode and the operators that work with it</li>
+<li>Interpret the RTM-specific latency metrics from <code>StreamingQueryProgress</code></li>
+<li>Match a workload to the right streaming pattern based on latency budget and source type</li>
+</ul>
+
+<h2 id="A.-What-Real-Time-Mode-Is">A. What Real-Time Mode Is</h2><p>Spark Structured Streaming's default execution model is <strong>micro-batch</strong>: the engine slices the input into small batches on a fixed cadence (typically every few seconds) and runs each batch as an ordinary Spark job. End-to-end latency is bounded below by the trigger interval plus the batch's own runtime - usually 5-30 seconds.</p>
+<p><strong>Real-Time Mode</strong> replaces that with a long-running continuous query. Records flow through the operator graph as soon as they arrive - no batch boundary, no inter-batch latency. Target end-to-end latency is sub-second. The only code change is the trigger:</p>
+<div>
+<div>
+<div>Micro-Batch Mode (default)</div>
+<div>
+<div>Records arrive</div>
+<div>▼</div>
+<div>Wait for trigger<br><span>(every 5-30s)</span></div>
+<div>▼</div>
+<div>Run as Spark job</div>
+<div>▼</div>
+<div>Write batch</div>
+</div>
+</div>
+<div>
+<div>Real-Time Mode (realTime trigger)</div>
+<div>
+<div>Records arrive</div>
+<div>▼</div>
+<div>Continuous query<br><span>(always running)</span></div>
+<div>▼</div>
+<div>Write per-record</div>
+</div>
+</div>
+<div><span># wakes up every 10s, processes whatever arrived</span><br>.trigger(<span>processingTime</span>=<span>"10 seconds"</span>)</div>
+<div><span># continuous dataflow, sub-second latency</span><br>.trigger(<span>realTime</span>=<span>"5 minutes"</span>) &nbsp;<span># checkpoint cadence</span></div>
+</div>
+<div>
+<strong>The realTime interval is misleading</strong>
+<p>In <code>.trigger(realTime="5 minutes")</code>, the "5 minutes" is the <strong>checkpoint interval</strong> - how often Spark commits offset progress. It is not the processing latency, which targets sub-second. PySpark requires the interval to be specified; Scala can call <code>RealTimeTrigger.apply()</code> with no argument.</p>
+</div>
+
+<h2 id="B.-Supported-Sources-and-Sinks">B. Supported Sources and Sinks</h2><p>Real-Time Mode is built around message-bus connectors. The table below summarises the currently supported pairings.</p>
+<table>
+<thead>
+<tr>
+<th>Connector</th>
+<th>As source</th>
+<th>As sink</th>
+</tr>
+</thead>
+<tbody>
+<tr><td>Apache Kafka</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Event Hubs (Kafka connector)</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Kinesis (EFO mode)</td><td>Yes</td><td>-</td></tr>
+<tr><td>AWS MSK</td><td>Yes</td><td>-</td></tr>
+<tr><td>Arbitrary sinks (forEachWriter)</td><td>n/a</td><td>Yes</td></tr>
+</tbody>
+</table>
+<div>
+<strong>Kafka in, Kafka or custom sink out</strong>
+<p>For the demo in 4.2 we read from a Confluent Cloud Kafka topic and write to an in-memory sink for live notebook visualization. In production the typical RTM pattern is Kafka -&gt; RTM transform -&gt; Kafka (or Event Hubs) for downstream consumers, or Kafka -&gt; RTM -&gt; <code>forEachWriter</code> for arbitrary sinks like alerting webhooks or cache updates. Note that file sources and UC tables are <strong>not</strong> RTM sources - those workloads stay on micro-batch.</p>
+</div>
+
+<h2 id="C.-Compute-Prerequisites">C. Compute Prerequisites</h2><p>Real-Time Mode is fussy about compute - more than any other Spark feature. The settings below are <em>required</em>; missing any one of them produces a query that runs but silently falls back to micro-batch behavior, or fails at start-up.</p>
+<div>
+<div>
+<strong>Cluster type: Classic compute</strong>
+<p>Dedicated (single-user) or Standard (shared) access mode. <strong>Serverless is not supported.</strong> Apache Spark™ Declarative Pipelines (classic or serverless) is also not supported.</p>
+</div>
+<div>
+<strong>DBR 16.4 LTS or above</strong>
+<p>Earlier runtimes do not have the Real-Time trigger. 18.2+ is recommended for low-throughput workloads using <code>transformWithState</code>.</p>
+</div>
+<div>
+<strong>Autoscaling: OFF</strong>
+<p>A continuous query holds task slots indefinitely. Autoscaling can't safely add or remove nodes under it.</p>
+</div>
+<div>
+<strong>Photon: OFF</strong>
+<p>Photon's vectorised execution batches rows internally - incompatible with the per-record continuous model.</p>
+</div>
+<div>
+<strong>Spot instances: OFF</strong>
+<p>Spot reclaims kill the long-running query. Use on-demand for any RTM cluster.</p>
+</div>
+<div>
+<strong>Spark conf flag</strong>
+<p>Set <code>spark.databricks.streaming.realTimeMode.enabled = true</code> on the cluster, in the Advanced -&gt; Spark Config section.</p>
+</div>
+</div>
+<div>
+<strong>Slot calculation</strong>
+<p>A continuous query holds <em>all</em> its task slots simultaneously. For a single-stage stateless Kafka pipeline you need at least one slot per Kafka partition (or per <code>maxPartitions</code>). Add stateful stages (shuffles) and the slot count grows fast - a Kafka source + one shuffle stage of 20 partitions needs 28 slots, not 20. Plan cluster size around the worst stage, not just the source.</p>
+</div>
+
+<h2 id="D.-Output-Mode-and-Operator-Support">D. Output Mode and Operator Support</h2><p>Real-Time Mode supports <strong>update mode only</strong>. Append and complete output modes are not available. Most Structured Streaming operators are supported, with a few important exceptions.</p>
+<div>
+<div>
+<strong>Supported</strong>
+<ul>
+<li>Selection, projection, UDFs (Python and Scala)</li>
+<li>Aggregations: sum, count, max, min, avg, others</li>
+<li>Tumbling and sliding windows</li>
+<li><code>dropDuplicates</code> (state is unbounded - watch memory)</li>
+<li>Broadcast (stream-to-table) joins on small tables</li>
+<li><code>transformWithState</code> (Row interface)</li>
+<li><code>union</code>, <code>forEach</code></li>
+</ul>
+</div>
+<div>
+<strong>Not supported</strong>
+<ul>
+<li>Append and complete output modes</li>
+<li>Session windows</li>
+<li><code>dropDuplicatesWithinWatermark</code></li>
+<li>Stream-to-stream joins</li>
+<li><code>(flat)MapGroupsWithState</code>, <code>mapPartitions</code></li>
+<li><code>forEachBatch</code></li>
+<li><code>transformWithStateInPandas</code> (use Row variant)</li>
+<li>Python UDTFs and UC UDFs</li>
+</ul>
+</div>
+</div>
+<div>
+<strong>Python UDF tuning</strong>
+<p>For minimum latency, set <code>spark.sql.execution.arrow.maxRecordsPerBatch=1</code>. This optimises for latency at the cost of throughput - the right default for most RTM workloads. Pandas UDFs perform poorly at batch size 1; prefer Arrow UDFs in RTM if you can. For latency-critical UDFs, prefer Dedicated access mode over Standard - shared-mode security isolation adds overhead.</p>
+</div>
+
+<h2 id="E.-Observability---RTM-Latency-Metrics">E. Observability - RTM Latency Metrics</h2><p>Real-Time Mode adds latency-specific fields to the streaming query progress events. They tell you whether a query is meeting its sub-second budget and where any bottleneck sits.</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>What it measures</th>
+<th>Healthy value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>processingLatencyMs</code></td>
+<td>Time spent inside Spark operators per record</td>
+<td>Single-digit ms for stateless</td>
+</tr>
+<tr>
+<td><code>sourceQueuingLatencyMs</code></td>
+<td>Time records waited in the source connector before pickup</td>
+<td>Sub-second for a healthy Kafka source</td>
+</tr>
+<tr>
+<td><code>e2eLatencyMs</code></td>
+<td>Source ingestion timestamp to sink commit</td>
+<td>Sub-second target</td>
+</tr>
+</tbody>
+</table>
+
+<p>Inspect the metrics from a running query with <code>lastProgress</code>:</p>
+<div><pre><code><span>import</span> json
+
+
+<span># Inspect the metrics from a running query</span>
+<span>print</span><span>(</span>json<span>.</span>dumps<span>(</span>query<span>.</span>lastProgress<span>,</span> indent<span>=</span><span>2</span><span>)</span><span>)</span></code></pre></div>
+
+
+
+
+
+<p>Diagnosis pattern - high <code>e2eLatencyMs</code> with low <code>processingLatencyMs</code> usually means upstream queuing (Kafka lag, partition imbalance) or sink slowness, not a Spark problem. Conversely, high <code>processingLatencyMs</code> points at an expensive operator or shuffle.</p>
+
+<h2 id="F.-Decision-Framework---When-to-Use-Each">F. Decision Framework - When to Use Each</h2><p>Micro-batch and Real-Time Mode address different shapes of workload. Pick by latency budget, source type, and operational tolerance. Click each workload shape on the left to see the recommended pattern.</p>
+
+<div>
+
+<div>
+<div>
+<span>
+<span>Files or Delta source, minutes OK</span>
+<span>Ingestion, ETL, bronze layers</span>
+</span><span>
+<span>Kafka, sub-second processing</span>
+<span>Alerting, fraud, control loops</span>
+</span><span>
+<span>Kafka, analytics + history</span>
+<span>Dashboards, BI, ML features</span>
+</span><span>
+<span>Stateful: sessions, joins</span>
+<span>Sessionization, CEP</span>
+</span>
+</div>
+<div id="wl-detail-wrap">
+<div id="wl-detail-card"></div>
+</div>
+</div>
+</div>
+
+<div>
+<strong>The summary</strong>
+<p>Micro-batch Structured Streaming is the right answer for most analytics workloads - file and Delta sources, stateful patterns, and anything where seconds-level freshness is acceptable. Real-Time Mode on Kafka is the right answer for sub-second operational use cases on a message-bus source. Pick the pattern that matches the workload's source type and latency budget.</p>
+</div>
+
+<h2 id="G.-Primer---The-Demo-Scenario">G. Primer - The Demo Scenario</h2><p>The demo in 4.2 reads a stream of synthetic stock-trade events from a Confluent Cloud Kafka topic and renders a live per-symbol price chart. The events come from Confluent Cloud's managed <strong>Sample Data</strong> Datagen Source connector - the <em>Stock trades</em> template - so there is no producer code to run. Stock trading is a good fit for a real-time demo because sub-second latency is genuinely meaningful: tick-by-tick prices, volume spikes and order flow all need continuous processing rather than micro-batched snapshots.</p>
+<div>
+<div>
+<strong>Trade event shape</strong>
+<p>Each Kafka message carries one trade: <code>side</code> (BUY/SELL), <code>quantity</code>, <code>symbol</code>, <code>price</code>, <code>account</code>, <code>userid</code>. Price is in 1/100 of a cent - divide by 10000 to get USD.</p>
+</div>
+<div>
+<strong>Streaming aggregate</strong>
+<p>The demo's RTM query computes per-symbol 30-second tumbling windows: trade count, average price, high/low, and total traded volume. Live chart auto-refreshes as new windows complete.</p>
+</div>
+</div>
+<p>The Sample Data connector publishes a small set of fictional symbols (<code>ZJZZT</code>, <code>ZVZZT</code>, etc.) so there's no risk of confusing the demo data with real market data. Throughput is steady - enough to see the chart move within seconds of starting the streaming query.</p>
+
+<h2 id="Key-Takeaways">Key Takeaways</h2><ul>
+<li>Real-Time Mode swaps Spark's micro-batch execution for a continuous, always-on dataflow targeting sub-second end-to-end latency</li>
+<li>Built around message-bus connectors - Kafka, Event Hubs, Kinesis (EFO), MSK - with Kafka, Event Hubs and <code>forEachWriter</code> available as sinks; file and Delta sources stay on micro-batch</li>
+<li>Needs classic compute (DBR 16.4+) with autoscaling, Photon and spot all OFF, and <code>spark.databricks.streaming.realTimeMode.enabled=true</code></li>
+<li>Update mode only; most common operators supported - selection, projection, UDFs, aggregations, tumbling and sliding windows, <code>dropDuplicates</code>, broadcast joins, <code>transformWithState</code> (Row interface)</li>
+<li><code>lastProgress</code> exposes <code>processingLatencyMs</code>, <code>sourceQueuingLatencyMs</code>, and <code>e2eLatencyMs</code> for validating the sub-second budget</li>
+<li>Use micro-batch triggers (<code>processingTime</code>, <code>availableNow</code>) for analytics and stateful patterns; use the <code>realTime</code> trigger for Kafka with sub-second processing</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

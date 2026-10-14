@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>3.1 Lecture - Stream Aggregations, Windows and Watermarks</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<div>
+
+<div>
+<span>Stream Processing and Analysis with Apache Spark</span>
+<span>|</span>
+<span>3. Stream Aggregations, Windows and Watermarks</span>
+</div>
+</div>
+
+<h1 id="3.1-Lecture---Stream-Aggregations,-Windows-and-Watermarks">3.1 Lecture - Stream Aggregations, Windows and Watermarks</h1><blockquote>
+<p><em>Stateful stream processing: aggregating data that never stops</em></p>
+</blockquote>
+<p>This lecture covers advanced stream processing and analysis: the difference between stateless and stateful operations, how state is maintained in a distributed streaming application, streaming aggregations, the window types used for time-based computations, watermarks for late data, and streaming joins.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Describe the key differences between stateful and stateless streaming operations</li>
+<li>Explain how and why state is maintained and managed in distributed streaming applications</li>
+<li>Describe streaming joins, their supported types, and their limitations</li>
+<li>Apply the different window types (tumbling, sliding, and session) for time-based computations and handle out-of-order events using watermarks</li>
+</ul>
+
+<h2 id="A.-Stateful-vs-Stateless-Operations">A. Stateful vs Stateless Operations</h2><p>Understanding how streaming operations handle data over time:</p>
+<ul>
+<li><strong>Stateless operations</strong><ul>
+<li>Process each record independently</li>
+<li>No memory of previous records</li>
+<li>Examples: <code>select</code>, <code>filter</code>, <code>withColumn</code></li>
+</ul>
+</li>
+<li><strong>Stateful operations</strong><ul>
+<li>Maintain information across micro-batches</li>
+<li>Require a checkpoint location</li>
+<li>Examples: <code>groupBy</code>, <code>join</code>, <code>dropDuplicates</code>, and window operations (covered below)</li>
+</ul>
+</li>
+</ul>
+<div>
+<div>
+<span>ℹ️</span>
+<div>
+<strong>Why the Checkpoint Location Matters for State</strong>
+<p>The checkpoint location is needed to: (1) maintain state across batches, (2) recover state in case of failures, and (3) handle replay of data without duplicating results.</p>
+</div>
+</div>
+</div>
+
+<h2 id="B.-Maintaining-State">B. Maintaining State</h2><p>Managing state in distributed streaming applications:</p>
+<ul>
+<li><strong>Challenges in distributed state</strong><ul>
+<li>Data is distributed across worker nodes</li>
+<li>State must be fault tolerant to survive node failures</li>
+<li>Memory is limited relative to potentially large state</li>
+<li>Consistency must hold across failures and restarts</li>
+</ul>
+</li>
+<li><strong>RocksDB as the state store</strong><ul>
+<li>Built-in state store backend for Spark Structured Streaming</li>
+<li>Persists state off-heap with high performance</li>
+<li>Features: efficient storage and retrieval, automatic compaction, support for large state sizes</li>
+</ul>
+</li>
+</ul>
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>Spark 4: Inspecting State Directly</strong>
+<p>Spark 4 adds the <strong>state store data source</strong>, which lets you read a query's state as a DataFrame (<code>spark.read.format("statestore").load(checkpoint_path)</code>) - invaluable when debugging why a stateful query holds more state than expected.</p>
+</div>
+</div>
+</div>
+
+<h2 id="C.-Streaming-Aggregations">C. Streaming Aggregations</h2><p>Understanding aggregations in streaming applications:</p>
+<ul>
+<li>Types of streaming aggregations (typically operating on grouped data):<ul>
+<li><code>count</code></li>
+<li><code>sum</code> / <code>avg</code></li>
+<li><code>min</code> / <code>max</code></li>
+</ul>
+</li>
+<li>Approximate functions are available which typically perform better, e.g. <code>approx_count_distinct()</code></li>
+</ul>
+<div>
+<div>
+<span>❓</span>
+<div>
+<strong>How Can We Aggregate an Incomplete Data Set?</strong>
+<p>Recall that streaming DataFrames are unbounded. A plain <code>groupBy().count()</code> over an unbounded stream is a running total whose state grows forever - every group ever seen stays in the state store. The answer for time-series analysis is to aggregate based upon <strong>windows</strong>: bounded slices of event time whose state can eventually be finalized and dropped.</p>
+</div>
+</div>
+</div>
+
+<h2 id="D.-Window-Operations">D. Window Operations</h2><p>Windowing scopes a streaming computation to slices of time:</p>
+<ul>
+<li><strong>Tumbling windows</strong>: fixed, non-overlapping intervals (e.g. count events every 5 minutes)</li>
+<li><strong>Sliding windows</strong>: overlapping windows where an event can belong to multiple windows</li>
+<li><strong>Session windows</strong>: dynamically sized windows based on activity, closing after a gap or session timeout</li>
+</ul>
+<div>
+<div>Tumbling windows (5 min) - fixed, non-overlapping; every event belongs to exactly one window</div>
+<div>
+<div>00:00 - 00:05</div>
+<div>00:05 - 00:10</div>
+<div>00:10 - 00:15</div>
+<div>00:15 - 00:20</div>
+</div>
+<div>Sliding windows (10 min window, 5 min slide) - overlapping; an event can belong to multiple windows</div>
+<div>
+<div>00:00 - 00:10</div>
+<div>00:05 - 00:15</div>
+<div>00:10 - 00:20</div>
+</div>
+<div>Session windows - dynamically sized by activity; a window closes after a gap with no events</div>
+<div>
+<div>session 1 (events close together)</div>
+<div>gap &gt; timeout</div>
+<div>session 2</div>
+<div>gap &gt; timeout</div>
+<div>session 3</div>
+</div>
+</div>
+<p>Windows are expressed with the <code>window()</code> function inside <code>groupBy()</code>, operating on an <strong>event-time</strong> column - the time the event occurred, not the time Spark processed it.</p>
+
+<h3 id="Sliding-Window-Example">Sliding Window Example</h3><p>Get the number of credit card authorizations for the last 60 seconds, every 30 seconds:</p>
+<div><pre><code><span>from</span> pyspark<span>.</span>sql<span>.</span>functions <span>import</span> window<span>,</span> count
+
+
+authorizations <span>=</span> <span>.</span><span>.</span><span>.</span>  <span># Schema: { timestamp: Timestamp, card_id: String, amount: Double }</span>
+
+
+windowed_auths <span>=</span> <span>(</span>
+    authorizations
+    <span>.</span>groupBy<span>(</span>
+        window<span>(</span>
+            timeColumn<span>=</span>authorizations<span>.</span>timestamp<span>,</span>   <span># the event-time column</span>
+            windowDuration<span>=</span><span>"60 seconds"</span><span>,</span>           <span># each window covers 60 seconds</span>
+            slideDuration<span>=</span><span>"30 seconds"</span>             <span># a new window starts every 30 seconds</span>
+        <span>)</span><span>,</span>
+        authorizations<span>.</span>card_id                     <span># additional grouping key</span>
+    <span>)</span>
+    <span>.</span>agg<span>(</span>count<span>(</span><span>"*"</span><span>)</span><span>.</span>alias<span>(</span><span>"transaction_count"</span><span>)</span><span>)</span>
+<span>)</span>
+
+
+<span># Start a streaming query to send the output to a sink</span></code></pre></div>
+
+
+
+
+
+<p>Omit <code>slideDuration</code> and the same call produces tumbling windows. The result includes a <code>window</code> struct column with <code>start</code> and <code>end</code> fields.</p>
+
+<h2 id="E.-Handling-Late-Arriving-Data">E. Handling Late Arriving Data</h2><p>Events can be delayed in arriving for many reasons - network partitions, device buffering, upstream retries. A delayed event may carry a timestamp for a window that has already been processed.</p>
+<p><strong>Watermarks</strong> define how long Spark waits for out-of-order events:</p>
+<div><pre><code>windowed_auths <span>=</span> <span>(</span>
+    authorizations
+    <span>.</span>withWatermark<span>(</span><span>"timestamp"</span><span>,</span> <span>"2 minutes"</span><span>)</span>   <span># accept events up to 2 minutes late</span>
+    <span>.</span>groupBy<span>(</span>
+        window<span>(</span>authorizations<span>.</span>timestamp<span>,</span> <span>"60 seconds"</span><span>,</span> <span>"30 seconds"</span><span>)</span><span>,</span>
+        authorizations<span>.</span>card_id
+    <span>)</span>
+    <span>.</span>agg<span>(</span>count<span>(</span><span>"*"</span><span>)</span><span>.</span>alias<span>(</span><span>"transaction_count"</span><span>)</span><span>)</span>
+<span>)</span></code></pre></div>
+
+
+
+
+
+<ul>
+<li>Events arriving within the watermark threshold are incorporated into their (late) windows</li>
+<li>Events arriving beyond the threshold may be dropped</li>
+<li>Crucially, the watermark lets Spark <strong>finalize and drop old window state</strong>, preventing unbounded state growth</li>
+<li>A watermark is required to use <code>append</code> output mode with aggregations, since it defines when a window's result is final</li>
+</ul>
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>Choosing a Threshold</strong>
+<p>The watermark threshold is a trade-off: longer thresholds tolerate later data but hold more state and delay finalized results; shorter thresholds finalize quickly but drop more late events. Base it on the actual lateness distribution of your source.</p>
+</div>
+</div>
+</div>
+
+<h2 id="F.-Streaming-Joins">F. Streaming Joins</h2><p>Understanding join types and limitations in streaming applications:</p>
+<ul>
+<li>A streaming DataFrame can be joined with:<ul>
+<li>Another streaming DataFrame (<strong>stream-stream</strong> join)</li>
+<li>A static DataFrame (<strong>stream-static</strong> join), including a normal DataFrame or the results of a <code>complete</code> output mode streaming operation</li>
+</ul>
+</li>
+<li>All join types are supported except full outer and cross joins (support varies by combination)</li>
+<li>Challenges and limitations:<ul>
+<li>Stream-stream joins require maintaining state, increasing memory usage</li>
+<li>Events from both streams must arrive within a defined interval to match</li>
+<li>Late arriving data can present challenges - watermarks on both sides bound the join state</li>
+</ul>
+</li>
+</ul>
+<div><pre><code><span># Stream-static join: enrich a stream with reference data (no special handling)</span>
+enriched <span>=</span> orders_stream<span>.</span>join<span>(</span>customers_static_df<span>,</span> <span>"customer_id"</span><span>)</span>
+
+
+<span># Stream-stream join: watermark both sides and bound the match interval</span>
+joined <span>=</span> <span>(</span>
+    orders_stream<span>.</span>withWatermark<span>(</span><span>"order_time"</span><span>,</span> <span>"10 minutes"</span><span>)</span>
+    <span>.</span>join<span>(</span>
+        payments_stream<span>.</span>withWatermark<span>(</span><span>"payment_time"</span><span>,</span> <span>"10 minutes"</span><span>)</span><span>,</span>
+        expr<span>(</span><span>"""
+            orders.order_id = payments.order_id AND
+            payment_time BETWEEN order_time AND order_time + INTERVAL 10 MINUTES
+        """</span><span>)</span>
+    <span>)</span>
+<span>)</span></code></pre></div>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>Stateless operations (<code>select</code>, <code>filter</code>) process each record independently; stateful operations (<code>groupBy</code>, <code>join</code>, <code>dropDuplicates</code>, windows) maintain state across micro-batches and require a checkpoint location</li>
+<li>RocksDB is the built-in state store backend, providing persistent, high-performance state at scale; Spark 4's state store data source lets you query that state directly</li>
+<li>Plain aggregations over an unbounded stream accumulate state forever - window operations bound aggregations to slices of event time</li>
+<li>Tumbling windows partition time into fixed non-overlapping intervals; sliding windows overlap; session windows size themselves around activity gaps</li>
+<li>Watermarks define how long to wait for late events, allowing Spark to finalize windows and drop old state</li>
+<li>Stream-static joins are straightforward enrichment; stream-stream joins need watermarks on both sides and a bounded match interval to keep state in check</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

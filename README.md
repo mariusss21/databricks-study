@@ -6,6 +6,7 @@ Mario Carvalho's study notes toward the **Databricks Certified Data Engineer Ass
 
 - [Introduction to Apache Spark](courses/introduction-to-apache-spark/README.md) (Databricks Academy)
 - [Developing Applications with Apache Spark](courses/developing-applications-with-apache-spark/README.md) (Databricks Academy)
+- [Structured Streaming](courses/structured-streaming/README.md) (Databricks Academy)
 
 ## Explanations
 
