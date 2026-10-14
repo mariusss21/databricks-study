@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>1.1 Lecture - Apache Spark and Databricks</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<div>
+
+<div>
+<span>Monitoring and Optimizing Apache Spark Workloads on Databricks</span>
+<span>|</span>
+<span>1.1 Lecture - Apache Spark and Databricks</span>
+</div>
+</div>
+
+<h1 id="1.1-Lecture---Apache-Spark-and-Databricks">1.1 Lecture - Apache Spark and Databricks</h1><blockquote>
+<p><em>The platform context that shapes every Spark workload you will monitor and optimize</em></p>
+</blockquote>
+<p>This lecture covers the Databricks platform built by the creators of Apache Spark: the Lakehouse and Medallion architectures, Workspaces and Unity Catalog, and the runtime and compute options your workloads run on, including what Apache Spark 4 brings to Databricks Runtime 17.3 LTS.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Describe the background and core components of the Databricks platform</li>
+<li>Explain the Lakehouse paradigm and the Medallion reference architecture</li>
+<li>Describe the organizational concepts of Workspaces and Unity Catalog</li>
+<li>Compare Databricks runtime and compute options for different workloads, and identify the major Spark 4 changes that affect them</li>
+</ul>
+
+<h2 id="A.-Databricks-Background">A. Databricks Background</h2><p>A unified data and AI platform built by the creators of Apache Spark.</p>
+<ul>
+<li>Founded in 2013 by the original creators of Apache Spark</li>
+<li>Built on open source foundations: Apache Spark, Delta Lake, and MLflow</li>
+<li>Available on all major cloud platforms with a consistent experience</li>
+<li>Pioneered the Lakehouse and Medallion architectures</li>
+</ul>
+<div>
+<div>
+<div>Open Foundations</div>
+<div>Apache Spark, Delta Lake, and MLflow keep your data and code portable across clouds and engines.</div>
+</div>
+<div>
+<div>Unified Platform</div>
+<div>Collaborative notebooks, jobs, governance, and ML on one platform with enterprise-grade security.</div>
+</div>
+<div>
+<div>Optimized Performance</div>
+<div>Proprietary enhancements such as Photon and predictive optimization accelerate open source Spark.</div>
+</div>
+</div>
+
+<h2 id="B.-The-Lakehouse">B. The Lakehouse</h2><p>A unified architecture combining the data warehouse and the data lake.</p>
+<ul>
+<li>The structure of the data warehouse with the extensibility of the data lake</li>
+<li>Scalability via separation of storage and compute</li>
+<li>Support for all data types: structured, semi-structured, and unstructured</li>
+<li>Unified batch and stream processing support</li>
+<li>Built-in security and governance</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>How the Lakehouse combines both worlds</strong>
+</div>
+</div>
+</summary>
+<div><svg aria-label="How the Lakehouse combines both worlds" font-family="DM Sans,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" role="img" style="width:100%;height:auto;display:block" viewBox="0 0 1300 430" xmlns="http://www.w3.org/2000/svg"><title>How the Lakehouse combines both worlds</title><defs><marker id="ah_asp4_lake" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="8.5" refY="5" viewBox="0 0 10 10"><path d="M0,1 L10,5 L0,9 z" fill="#3C4B52"></path></marker></defs><rect fill="#DCE0E2" height="110" rx="10" stroke="#618794" stroke-width="2" width="300" x="40" y="60"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="190.0" y="110.7">Data Warehouse</text><text fill="#4A5A62" font-size="16" font-style="italic" text-anchor="middle" x="190.0" y="134.4">Structure, BI performance</text><rect fill="#DCE0E2" height="110" rx="10" stroke="#618794" stroke-width="2" width="300" x="40" y="260"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="190.0" y="310.7">Data Lake</text><text fill="#4A5A62" font-size="16" font-style="italic" text-anchor="middle" x="190.0" y="334.4">Scale, all data types</text><rect fill="#FFE8E5" height="110" rx="10" stroke="#FF3621" stroke-width="2" width="300" x="470" y="160"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="620.0" y="210.7">Lakehouse</text><text fill="#4A5A62" font-size="16" font-style="italic" text-anchor="middle" x="620.0" y="234.4">One platform for both</text><rect fill="#E8F5E9" height="100" rx="10" stroke="#4CAF50" stroke-width="2" width="360" x="900" y="40"></rect><text fill="#0B2026" font-size="18" font-weight="700" text-anchor="middle" x="1080.0" y="95.1">Unified batch and streaming</text><rect fill="#E8F5E9" height="100" rx="10" stroke="#4CAF50" stroke-width="2" width="360" x="900" y="165"></rect><text fill="#0B2026" font-size="18" font-weight="700" text-anchor="middle" x="1080.0" y="220.1">ACID transactions on open formats</text><rect fill="#E8F5E9" height="100" rx="10" stroke="#4CAF50" stroke-width="2" width="360" x="900" y="290"></rect><text fill="#0B2026" font-size="18" font-weight="700" text-anchor="middle" x="1080.0" y="345.1">Built-in security and governance</text><path d="M340,115 L470,200" fill="none" marker-end="url(#ah_asp4_lake)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M340,315 L470,240" fill="none" marker-end="url(#ah_asp4_lake)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M770,215 L900,90" fill="none" marker-end="url(#ah_asp4_lake)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M770,215 L900,215" fill="none" marker-end="url(#ah_asp4_lake)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M770,215 L900,340" fill="none" marker-end="url(#ah_asp4_lake)" stroke="#3C4B52" stroke-width="2.2"></path></svg></div>
+</details>
+
+<h2 id="C.-Medallion-Architecture">C. Medallion Architecture</h2><p>A structured approach to data transformation and quality in the Lakehouse.</p>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Role</th>
+<th>Characteristics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bronze</td>
+<td>Like-for-like source copy with history</td>
+<td>Raw, append-heavy, schema preserved (the data lake)</td>
+</tr>
+<tr>
+<td>Silver</td>
+<td>Cleaned and conformed data</td>
+<td>Validated, deduplicated, not yet aggregated</td>
+</tr>
+<tr>
+<td>Gold</td>
+<td>Business-level features and aggregates</td>
+<td>Consumption-ready for BI, ML, and data products</td>
+</tr>
+</tbody>
+</table>
+
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Medallion flow diagram</strong>
+</div>
+</div>
+</summary>
+<div><svg aria-label="Medallion architecture flow" font-family="DM Sans,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" role="img" style="width:100%;height:auto;display:block" viewBox="0 0 1480 430" xmlns="http://www.w3.org/2000/svg"><title>Medallion architecture flow</title><defs><marker id="ah_asp4_med" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="8.5" refY="5" viewBox="0 0 10 10"><path d="M0,1 L10,5 L0,9 z" fill="#3C4B52"></path></marker></defs><path d="M840,210 L910,210" fill="none" marker-end="url(#ah_asp4_med)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M520,210 L590,210" fill="none" marker-end="url(#ah_asp4_med)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M190,210 L270,210" fill="none" marker-end="url(#ah_asp4_med)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M40,166 a75.0,16 0 0 1 150,0 v88 a75.0,16 0 0 1 -150,0 z" fill="#DCE0E2" stroke="#618794" stroke-width="2"></path><path d="M40,166 a75.0,16 0 0 0 150,0" fill="none" stroke="#618794" stroke-width="2"></path><text fill="#0B2026" font-size="18" font-weight="700" text-anchor="middle" x="115.0" y="212.0">Source</text><text fill="#0B2026" font-size="18" font-weight="700" text-anchor="middle" x="115.0" y="234.0">Systems</text><rect fill="#FABFBA" height="120" rx="10" stroke="#CD7F32" stroke-width="2" width="250" x="270" y="150"></rect><text fill="#0B2026" font-size="22" font-weight="700" text-anchor="middle" x="395.0" y="206.6">Bronze</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="395.0" y="230.3">Raw ingest with history</text><rect fill="#DCE0E2" height="120" rx="10" stroke="#618794" stroke-width="2" width="250" x="590" y="150"></rect><text fill="#0B2026" font-size="22" font-weight="700" text-anchor="middle" x="715.0" y="206.6">Silver</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="715.0" y="230.3">Cleaned and conformed</text><rect fill="#FFCC66" height="120" rx="10" stroke="#CD7F32" stroke-width="2" width="250" x="910" y="150"></rect><text fill="#0B2026" font-size="22" font-weight="700" text-anchor="middle" x="1035.0" y="206.6">Gold</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="1035.0" y="230.3">Business-level aggregates</text><rect fill="#FFFFFF" height="100" rx="10" stroke="#94A0A8" stroke-width="2" width="210" x="1230" y="40"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="1335.0" y="95.9">BI</text><rect fill="#FFFFFF" height="100" rx="10" stroke="#94A0A8" stroke-width="2" width="210" x="1230" y="165"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="1335.0" y="220.9">ML</text><rect fill="#FFFFFF" height="100" rx="10" stroke="#94A0A8" stroke-width="2" width="210" x="1230" y="290"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="1335.0" y="345.9">Data Products</text><path d="M1160,210 L1230,90" fill="none" marker-end="url(#ah_asp4_med)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M1160,210 L1230,215" fill="none" marker-end="url(#ah_asp4_med)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M1160,210 L1230,340" fill="none" marker-end="url(#ah_asp4_med)" stroke="#3C4B52" stroke-width="2.2"></path></svg></div>
+</details>
+
+<h2 id="D.-Databricks-Workspaces">D. Databricks Workspaces</h2><p>Isolated, collaborative environments for organizations, departments, teams, or projects.</p>
+<p>A workspace bundles everything a team needs:</p>
+<ul>
+<li>Compute resources: Spark clusters and serverless SQL warehouses</li>
+<li>Directories and notebooks</li>
+<li>Jobs: Lakeflow jobs and pipelines</li>
+<li>Access to objects in Unity Catalog: tables, views, functions, models, and more</li>
+<li>Simplified governance, security, and access control</li>
+</ul>
+
+<h2 id="E.-Unity-Catalog">E. Unity Catalog</h2><p>Unified data governance and security across your Databricks Lakehouse.</p>
+<div>
+<div>
+<strong>CORE FUNCTIONS</strong>
+<ul>
+<li>Single control plane for all data assets</li>
+<li>Fine-grained access control (tables, columns, rows)</li>
+<li>Automated data lineage tracking</li>
+<li>Centralized auditing and compliance</li>
+</ul>
+</div>
+<div>
+<strong>WHY UNITY CATALOG</strong>
+<ul>
+<li>Manages data and AI assets across workspaces</li>
+<li>Simplifies security and governance</li>
+<li>Provides data discovery and sharing</li>
+<li>Three-level namespace: <code>catalog.schema.table</code></li>
+</ul>
+</div>
+</div>
+<p>In this course you work in your own catalog with a course schema (<code>spark_perf</code>), reading source data from the shared <code>samples</code> catalog.</p>
+
+<h2 id="F.-Databricks-Runtimes-and-Compute">F. Databricks Runtimes and Compute</h2><p>Purpose-built environments optimized for different workloads.</p>
+<p>The Databricks Runtime (DBR) is a pre-packaged and tested combination of Spark core and peripheral components that simplifies operations and boosts performance:</p>
+<table>
+<thead>
+<tr>
+<th>Runtime</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Standard Runtime</td>
+<td>Base Apache Spark with Databricks optimizations</td>
+</tr>
+<tr>
+<td>Machine Learning Runtime</td>
+<td>Pre-configured with popular ML libraries</td>
+</tr>
+<tr>
+<td>Photon-enabled Runtime</td>
+<td>Native vectorized engine for SQL performance</td>
+</tr>
+</tbody>
+</table>
+<p>Each runtime release pins a Spark version: Databricks Runtime 17.3 LTS, used in this course, ships <strong>Apache Spark 4.0</strong>. Your compute options for running it:</p>
+<table>
+<thead>
+<tr>
+<th>Compute</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>All-purpose clusters</td>
+<td>Interactive development and analysis</td>
+</tr>
+<tr>
+<td>Job clusters</td>
+<td>Automated production workloads</td>
+</tr>
+<tr>
+<td>SQL warehouses and serverless</td>
+<td>No cluster management, instant start</td>
+</tr>
+</tbody>
+</table>
+
+<div>
+<div>
+<span>ℹ️</span>
+<div>
+<strong>Why this course uses Classic Compute</strong>
+<p>Serverless compute hides the cluster, and with it the Spark UI. Because this course is about monitoring and optimizing Spark, the demos and labs use a Classic Compute cluster so you can inspect jobs, stages, tasks, and execution plans directly.</p>
+</div>
+</div>
+</div>
+
+<h2 id="G.-What's-New-in-Apache-Spark-4">G. What's New in Apache Spark 4</h2><p>Spark 4 is the largest Spark release in years. The changes most relevant to this course:</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>What it means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ANSI SQL mode on by default</td>
+<td>Invalid casts and arithmetic overflows now fail loudly instead of silently returning <code>NULL</code></td>
+</tr>
+<tr>
+<td><code>VARIANT</code> data type</td>
+<td>Fast, flexible storage for semi-structured JSON-like data</td>
+</tr>
+<tr>
+<td>SQL scripting and session variables</td>
+<td>Procedural SQL blocks, <code>DECLARE</code>, and <code>EXECUTE IMMEDIATE</code></td>
+</tr>
+<tr>
+<td>Spark Connect</td>
+<td>A thin client-server protocol decoupling applications from the Spark driver</td>
+</tr>
+<tr>
+<td>Structured logging</td>
+<td>Spark logs are emitted as JSON, making driver and executor logs queryable with Spark itself</td>
+</tr>
+<tr>
+<td>Adaptive Query Execution refinements</td>
+<td>AQE remains on by default and continues to re-optimize plans at runtime</td>
+</tr>
+</tbody>
+</table>
+
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>Monitoring angle</strong>
+<p>Structured logging is a monitoring feature: because Spark 4 log files are JSON, you can load them into a DataFrame and analyze failures and warnings with the same engine that produced them.</p>
+</div>
+</div>
+</div>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>Databricks is a unified data and AI platform built by the creators of Apache Spark on open source foundations</li>
+<li>The Lakehouse combines warehouse structure with data lake scale; the Medallion architecture organizes data into Bronze, Silver, and Gold tiers</li>
+<li>Workspaces organize people and resources; Unity Catalog governs data with fine-grained access control and lineage</li>
+<li>Databricks Runtime 17.3 LTS ships Apache Spark 4.0, with ANSI mode on by default, structured logging, and AQE on by default</li>
+<li>This course uses Classic Compute so the Spark UI and execution plans are visible</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

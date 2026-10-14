@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>2.1 Lecture - Using Apache Spark with Delta Lake</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<div>
+
+<div>
+<span>Monitoring and Optimizing Apache Spark Workloads on Databricks</span>
+<span>|</span>
+<span>2.1 Lecture - Using Apache Spark with Delta Lake</span>
+</div>
+</div>
+
+<h1 id="2.1-Lecture---Using-Apache-Spark-with-Delta-Lake">2.1 Lecture - Using Apache Spark with Delta Lake</h1><blockquote>
+<p><em>ACID transactions, versioning, and maintenance for the tables your Spark workloads live on</em></p>
+</blockquote>
+<p>This lecture covers Delta Lake: how its transaction log brings ACID guarantees to cloud storage, the operations it unlocks, and the maintenance and layout features - <code>OPTIMIZE</code>, <code>VACUUM</code>, and liquid clustering - that keep your tables fast.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Describe Delta Lake's architecture, including its transaction log, versioning system, and ACID properties on cloud storage</li>
+<li>Apply key Delta Lake operations including <code>MERGE</code>, schema evolution, and time travel</li>
+<li>Maintain and optimize UC tables with <code>OPTIMIZE</code>, <code>VACUUM</code>, and liquid clustering</li>
+<li>Read from and write to UC tables using both Spark SQL and the DataFrame API</li>
+<li>Position Apache Iceberg and UniForm in the open table format landscape</li>
+</ul>
+
+<h2 id="A.-Introduction-to-Tabular-Storage">A. Introduction to Tabular Storage</h2><p>Why open table formats exist: traditional data lakes have well-known problems.</p>
+<ul>
+<li>No transactional guarantees: failed jobs leave partial data behind</li>
+<li>No schema enforcement: bad records corrupt downstream pipelines</li>
+<li>Performance issues with many small files</li>
+<li>No built-in data quality controls</li>
+<li>Difficult metadata management at scale</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Evolution of storage formats for cloud data lakes</strong>
+</div>
+</div>
+</summary>
+<div><svg aria-label="Evolution of storage formats for cloud data lakes" font-family="DM Sans,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" role="img" style="width:100%;height:auto;display:block" viewBox="0 0 1420 430" xmlns="http://www.w3.org/2000/svg"><title>Evolution of storage formats for cloud data lakes</title><defs><marker id="ah_asp4_stor" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="8.5" refY="5" viewBox="0 0 10 10"><path d="M0,1 L10,5 L0,9 z" fill="#3C4B52"></path></marker></defs><rect fill="#DCE0E2" height="110" rx="10" stroke="#618794" stroke-width="2" width="380" x="40" y="50"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="230.0" y="101.3">File formats</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="230.0" y="124.4">JSON, CSV</text><rect fill="#FFF3E0" height="110" rx="10" stroke="#FF9800" stroke-width="2" width="380" x="480" y="50"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="670.0" y="101.3">Columnar formats</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="670.0" y="124.4">Parquet, ORC</text><rect fill="#E8F5E9" height="110" rx="10" stroke="#4CAF50" stroke-width="2" width="380" x="920" y="50"></rect><text fill="#0B2026" font-size="21" font-weight="700" text-anchor="middle" x="1110.0" y="101.3">Open table formats</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="1110.0" y="124.4">Delta Lake, Apache Iceberg</text><path d="M420,105 L480,105" fill="none" marker-end="url(#ah_asp4_stor)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M860,105 L920,105" fill="none" marker-end="url(#ah_asp4_stor)" stroke="#3C4B52" stroke-width="2.2"></path><line stroke="#9AA6AC" stroke-dasharray="6 5" stroke-width="2" x1="230.0" x2="230.0" y1="160" y2="250"></line><rect fill="#FBFCFD" height="120" rx="10" stroke="#C7D0D6" stroke-width="1.5" width="360" x="50" y="250"></rect><text fill="#4A5A62" font-size="16" font-weight="500" text-anchor="middle" x="230.0" y="304.3">Row-oriented, no schema</text><text fill="#4A5A62" font-size="16" font-weight="500" text-anchor="middle" x="230.0" y="324.7">enforcement</text><line stroke="#9AA6AC" stroke-dasharray="6 5" stroke-width="2" x1="670.0" x2="670.0" y1="160" y2="250"></line><rect fill="#FBFCFD" height="120" rx="10" stroke="#C7D0D6" stroke-width="1.5" width="360" x="490" y="250"></rect><text fill="#4A5A62" font-size="16" font-weight="500" text-anchor="middle" x="670.0" y="304.3">Compressed and columnar, but</text><text fill="#4A5A62" font-size="16" font-weight="500" text-anchor="middle" x="670.0" y="324.7">no transactions</text><line stroke="#9AA6AC" stroke-dasharray="6 5" stroke-width="2" x1="1110.0" x2="1110.0" y1="160" y2="250"></line><rect fill="#FBFCFD" height="120" rx="10" stroke="#C7D0D6" stroke-width="1.5" width="360" x="930" y="250"></rect><text fill="#4A5A62" font-size="16" font-weight="500" text-anchor="middle" x="1110.0" y="304.3">ACID transactions, versioning,</text><text fill="#4A5A62" font-size="16" font-weight="500" text-anchor="middle" x="1110.0" y="324.7">schema evolution</text></svg></div>
+</details>
+
+<h2 id="B.-Introduction-to-Delta-Lake">B. Introduction to Delta Lake</h2><p>An open format bringing ACID transactions to the data lake.</p>
+<div>
+<div>
+<strong>WHAT IS DELTA LAKE</strong>
+<ul>
+<li>Open source storage framework</li>
+<li>Created by Databricks</li>
+<li>Built on top of Parquet</li>
+<li>Native Apache Spark integration</li>
+<li>The default format on Databricks</li>
+</ul>
+</div>
+<div>
+<strong>KEY FEATURES</strong>
+<ul>
+<li>ACID transactions at scale</li>
+<li>Schema enforcement and evolution</li>
+<li>Time travel (data versioning)</li>
+<li>Unified batch and streaming</li>
+<li>Scalable metadata handling</li>
+</ul>
+</div>
+<div>
+<strong>WHY IT MATTERS</strong>
+<ul>
+<li>Eliminates data inconsistency</li>
+<li>Concurrent reads and writes</li>
+<li>Enforces data quality</li>
+<li>Simplifies pipeline design</li>
+<li>Reduces lake management complexity</li>
+</ul>
+</div>
+</div>
+
+<h2 id="C.-How-Delta-Lake-Works">C. How Delta Lake Works</h2><p>Everything flows through the transaction log (<code>_delta_log</code>), an ordered record of every change ever made to the table.</p>
+<p>Each <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>, or <code>MERGE</code> operation:</p>
+<ul>
+<li>Computes a delta from the current version, adding or removing data files</li>
+<li>Creates new Parquet data files if necessary</li>
+<li>Commits a new version to the <code>_delta_log</code>, which becomes the current version</li>
+</ul>
+<p>Each <code>SELECT</code> operation:</p>
+<ul>
+<li>Gets the manifest of data files for the requested version from the <code>_delta_log</code> (latest by default)</li>
+<li>Returns the data from the set of files in that version</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>The transaction log in action</strong>
+</div>
+</div>
+</summary>
+<div><svg aria-label="The transaction log in action" font-family="DM Sans,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" role="img" style="width:100%;height:auto;display:block" viewBox="0 0 1120 660" xmlns="http://www.w3.org/2000/svg"><title>The transaction log in action</title><defs><marker id="ah_asp4_dlog" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="8.5" refY="5" viewBox="0 0 10 10"><path d="M0,1 L10,5 L0,9 z" fill="#3C4B52"></path></marker></defs><rect fill="#FFE8E5" height="92" rx="10" stroke="#FF3621" stroke-width="2" width="300" x="60" y="60"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="210.0" y="102.0">Write operation</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="210.0" y="124.4">INSERT, UPDATE, DELETE, MERGE</text><rect fill="#DCE0E2" height="92" rx="10" stroke="#618794" stroke-width="2" width="300" x="760" y="60"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="910.0" y="102.0">Read operation</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="910.0" y="124.4">SELECT</text><rect fill="#FFCC66" height="100" rx="10" stroke="#CD7F32" stroke-width="2" width="300" x="410" y="250"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="560.0" y="296.0">_delta_log</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="560.0" y="318.4">JSON commits: 000.json, 001.json, ...</text><rect fill="#FFFFFF" height="92" rx="10" stroke="#94A0A8" stroke-width="2" width="300" x="760" y="250"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="910.0" y="292.0">Manifest of files</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="910.0" y="314.4">for the requested version</text><rect fill="#E8F5E9" height="92" rx="10" stroke="#4CAF50" stroke-width="2" width="300" x="410" y="470"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="560.0" y="512.0">New table version</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="560.0" y="534.4">becomes the current version</text><rect fill="#FFFFFF" height="92" rx="10" stroke="#94A0A8" stroke-width="2" width="300" x="60" y="470"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="210.0" y="512.0">Parquet data files</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="210.0" y="534.4">added and removed</text><path d="M210.0,152 L210.0,470" fill="none" marker-end="url(#ah_asp4_dlog)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M330.0,152 Q430,210 470,275" fill="none" marker-end="url(#ah_asp4_dlog)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M560.0,350 L560.0,470" fill="none" marker-end="url(#ah_asp4_dlog)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M790.0,152 Q690,210 710,275" fill="none" marker-end="url(#ah_asp4_dlog)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M710,300.0 L760,296.0" fill="none" marker-end="url(#ah_asp4_dlog)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M910.0,342 Q600,640 360.0,516" fill="none" marker-end="url(#ah_asp4_dlog)" stroke="#3C4B52" stroke-width="2.2"></path></svg></div>
+</details>
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>Deletion vectors</strong>
+<p>On modern Databricks runtimes, <code>UPDATE</code> and <code>DELETE</code> do not always rewrite whole files. Deletion vectors mark individual rows as removed, making fine-grained DML much cheaper. <code>OPTIMIZE</code> later compacts the changes into clean files.</p>
+</div>
+</div>
+</div>
+
+<h2 id="D.-Delta-Lake-Operations">D. Delta Lake Operations</h2><p>The transaction log enables operations a plain Parquet data lake cannot support:</p>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>UPDATE</code>, <code>DELETE</code></td>
+<td>Fine-grained, condition-based row-level modifications</td>
+</tr>
+<tr>
+<td><code>MERGE</code></td>
+<td>True upserts: update, insert, and delete in one atomic statement</td>
+</tr>
+<tr>
+<td>Schema evolution</td>
+<td>Add or change columns, including <code>CREATE OR REPLACE TABLE</code></td>
+</tr>
+<tr>
+<td>Time travel</td>
+<td>Query previous versions with <code>VERSION AS OF</code> or <code>TIMESTAMP AS OF</code></td>
+</tr>
+<tr>
+<td><code>RESTORE</code></td>
+<td>Roll the table back to an earlier version</td>
+</tr>
+</tbody>
+</table>
+
+<p><code>MERGE</code> is the workhorse for incremental pipelines - change data capture feeds, slowly changing dimensions, and deduplication all reduce to a <code>MERGE</code>:</p>
+<div><div><pre><code id="code-3mt43zq1e"><span>MERGE</span> <span>INTO</span> target <span>AS</span> t
+<span>USING</span> updates <span>AS</span> s
+<span>ON</span> t<span>.</span>id <span>=</span> s<span>.</span>id
+<span>WHEN</span> <span>MATCHED</span> <span>THEN</span> <span>UPDATE</span> <span>SET</span> <span>*</span>
+<span>WHEN</span> <span>NOT</span> <span>MATCHED</span> <span>THEN</span> <span>INSERT</span> <span>*</span><span>;</span></code></pre></div></div>
+
+<h2 id="E.-Reading-and-Writing-with-Spark">E. Reading and Writing with Spark</h2><p>Delta Lake is the default table format on Databricks - no <code>format()</code> configuration is needed in either API:</p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Spark SQL</th>
+<th>DataFrame API</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Read</td>
+<td><code>SELECT * FROM my_table</code></td>
+<td><code>spark.read.table("my_table")</code></td>
+</tr>
+<tr>
+<td>Create</td>
+<td><code>CREATE TABLE ... AS SELECT</code></td>
+<td><code>df.write.saveAsTable("my_table")</code></td>
+</tr>
+<tr>
+<td>Append</td>
+<td><code>INSERT INTO my_table</code></td>
+<td><code>df.write.mode("append").saveAsTable("my_table")</code></td>
+</tr>
+<tr>
+<td>Overwrite</td>
+<td><code>INSERT OVERWRITE my_table</code></td>
+<td><code>df.write.mode("overwrite").saveAsTable("my_table")</code></td>
+</tr>
+</tbody>
+</table>
+<p>Delta-specific SQL commands for inspection:</p>
+<ul>
+<li><code>DESCRIBE HISTORY</code> - the table's version history from the transaction log</li>
+<li><code>DESCRIBE DETAIL</code> - file count, size, location, and table properties</li>
+</ul>
+<p>For more information see the <a href="https://docs.databricks.com/sql/language-manual/index.html#delta-lake-statements" rel="noreferrer noopener" target="_blank">Delta Lake statements reference</a>.</p>
+
+<h2 id="F.-Table-Maintenance">F. Table Maintenance</h2><p>Frequent small writes fragment a table into many small files, and metadata overhead slows every query that follows.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>OPTIMIZE my_table</code></td>
+<td>Compacts small files into fewer, larger ones</td>
+</tr>
+<tr>
+<td><code>VACUUM my_table</code></td>
+<td>Permanently removes data files no longer referenced by the log</td>
+</tr>
+</tbody>
+</table>
+
+<div>
+<div>
+<span>ℹ️</span>
+<div>
+<strong>Use Predictive Optimization for Managed Tables</strong>
+<p>
+On Databricks much of this is automatic for managed tables with <b>Predictive Optimization</b>:<br>
+</p><ul>
+<li>Optimized writes and auto compaction are enabled by default on new tables</li>
+<li>Predictive optimization runs <code>OPTIMIZE</code> and <code>VACUUM</code> for Unity Catalog managed tables automatically, based on observed query patterns</li>
+</ul>
+</div>
+</div>
+</div>
+<div>
+<div>
+<span>⚠️</span>
+<div>
+<strong>VACUUM breaks time travel</strong>
+<p><code>VACUUM</code> deletes the files that old versions point to. After a <code>VACUUM</code> with the default 7-day retention, you can no longer time travel to versions older than the retention window. Always think before lowering the retention period.</p>
+</div>
+</div>
+</div>
+
+<h2 id="G.-Data-Layout:-From-Partitioning-to-Liquid-Clustering">G. Data Layout: From Partitioning to Liquid Clustering</h2><p>How data files are organized determines how much a query can skip. The guidance here has changed significantly - older Spark material recommends techniques that are now legacy.</p>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Hive-style partitioning (<code>PARTITIONED BY</code>)</td>
+<td>Legacy</td>
+<td>Rigid directory layout; prone to over-partitioning and small files</td>
+</tr>
+<tr>
+<td><code>ZORDER BY</code> (with <code>OPTIMIZE</code>)</td>
+<td>Legacy</td>
+<td>Multi-column clustering, but requires manual runs and full rewrites</td>
+</tr>
+<tr>
+<td>Liquid clustering (<code>CLUSTER BY</code>)</td>
+<td>Recommended</td>
+<td>Incremental, flexible clustering; keys can change without rewriting the table</td>
+</tr>
+<tr>
+<td><code>CLUSTER BY AUTO</code></td>
+<td>Recommended</td>
+<td>Databricks chooses and evolves clustering keys from your query patterns</td>
+</tr>
+</tbody>
+</table>
+
+<p>Defining a liquid clustered table:</p>
+<div><div><pre><code id="code-le2191leq"><span>CREATE</span> <span>TABLE</span> <span>transactions</span> <span>(</span>
+  <span>.</span><span>.</span><span>.</span>
+<span>)</span>
+CLUSTER <span>BY</span> <span>(</span><span>dateTime</span><span>,</span> franchiseID<span>)</span><span>;</span></code></pre></div></div>
+
+
+
+
+
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>Spark 4 era guidance</strong>
+<p>For new UC tables on Databricks, start with liquid clustering (or <code>CLUSTER BY AUTO</code> with predictive optimization) instead of Hive-style partitioning or <code>ZORDER</code>. Reserve physical partitioning for genuinely huge tables with a natural, low-cardinality boundary.</p>
+</div>
+</div>
+</div>
+
+<h2 id="H.-Apache-Iceberg-and-UniForm">H. Apache Iceberg and UniForm</h2><p>Apache Iceberg is the other major open table format, created at Netflix with goals similar to Delta Lake:</p>
+<ul>
+<li>ACID transactions and schema evolution</li>
+<li>Hidden partitioning and partition evolution</li>
+<li>Branch and tag support</li>
+</ul>
+<p>On Databricks the formats interoperate rather than compete:</p>
+<ul>
+<li>Unity Catalog supports managed Iceberg tables, readable and writable from external Iceberg engines</li>
+<li>UniForm lets a UC table expose Iceberg metadata, so Iceberg clients can read it in place</li>
+<li>Spark 4 reads and writes Iceberg through the same DataFrame and SQL APIs used for Delta</li>
+</ul>
+
+<h2 id="Summary">Summary</h2><ul>
+<li>Delta Lake brings ACID transactions to cloud storage through the <code>_delta_log</code> transaction log</li>
+<li>Every write commits a new version; reads resolve a manifest of files from the log, enabling time travel and <code>RESTORE</code></li>
+<li><code>MERGE</code> performs atomic upserts and powers incremental pipelines</li>
+<li><code>OPTIMIZE</code> compacts small files and <code>VACUUM</code> reclaims storage at the cost of old versions</li>
+<li>Liquid clustering replaces Hive-style partitioning and <code>ZORDER</code> as the recommended layout strategy</li>
+<li>Apache Iceberg is an alternative open table format; Unity Catalog and UniForm make the two interoperable</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>

@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="generator" content="databricks-class-cleaner">
+  <title>3.1 Lecture - Optimizing Apache Spark</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.55; }
+    body { margin: 0; background: #f7f8f9; color: #202124; }
+    main { max-width: 1000px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    article { background: #fff; padding: 2rem clamp(1rem, 4vw, 3rem); box-shadow: 0 1px 5px rgba(0,0,0,.08); }
+    h1, h2, h3, h4 { color: #1b3139; line-height: 1.2; margin-top: 1.6em; }
+    h1 { margin-top: 0; font-size: clamp(1.7rem, 4vw, 2.3rem); }
+    h2 { border-bottom: 1px solid #dce0e2; padding-bottom: .35rem; }
+    pre { overflow-x: auto; padding: 1rem; background: #f1f3f4; border-radius: .35rem; }
+    code { background: #f1f3f4; padding: .08em .25em; border-radius: .2rem; }
+    pre code { padding: 0; background: transparent; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { border: 1px solid #dce0e2; padding: .5rem .65rem; text-align: left; vertical-align: top; }
+    th { background: #eef3f5; }
+    blockquote { border-left: 4px solid #618794; margin: 1rem 0; padding: .25rem 1rem; color: #455a60; }
+    details { margin: 1rem 0; } summary { cursor: pointer; font-weight: 600; }
+    img, svg { max-width: 100%; height: auto; } a { color: #1b5162; }
+  </style>
+</head>
+<body>
+  <main>
+    <article>
+<div>
+
+<div>
+<span>Monitoring and Optimizing Apache Spark Workloads on Databricks</span>
+<span>|</span>
+<span>3.1 Lecture - Optimizing Apache Spark</span>
+</div>
+</div>
+
+<h1 id="3.1-Lecture---Optimizing-Apache-Spark">3.1 Lecture - Optimizing Apache Spark</h1><blockquote>
+<p><em>Knowing where and why your Spark applications spend their time</em></p>
+</blockquote>
+<p>This lecture covers the optimization toolkit for Spark 4 on Databricks: partitioning and shuffles, Adaptive Query Execution, join strategies, caching, the Catalyst optimizer, and the monitoring tools that tell you which technique a workload actually needs.</p>
+
+<h2 id="Learning-Objectives">Learning Objectives</h2><p><strong>By the end of this lecture, you will be able to:</strong></p>
+<ul>
+<li>Explain how Spark applications spend their time, including resource utilization, data flow patterns, and key performance factors</li>
+<li>Apply core optimization techniques including partitioning strategies, shuffle tuning, and effective caching</li>
+<li>Describe the Catalyst optimizer, predicate pushdown, and Adaptive Query Execution</li>
+<li>Use the Spark UI and execution plans to monitor applications and identify bottlenecks</li>
+</ul>
+
+<h2 id="A.-Understanding-Spark-Performance">A. Understanding Spark Performance</h2><p>Time in a Spark application goes to four places: compute, data movement, I/O, and coordination. Optimization starts with knowing which one dominates your workload.</p>
+<p>Key factors affecting performance:</p>
+<ul>
+<li>Resource utilization: CPU, memory, network, disk I/O</li>
+<li>Data characteristics: size, format, distribution</li>
+<li>Configuration settings and cluster setup</li>
+</ul>
+<p>Common bottlenecks:</p>
+<ul>
+<li>Data skew and uneven or inadequate partitioning</li>
+<li>Excessive shuffling and data movement</li>
+<li>Memory pressure and garbage collection</li>
+</ul>
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>Anatomy of a Spark job: actions, stages, and tasks</strong>
+</div>
+</div>
+</summary>
+<div><svg aria-label="Anatomy of a Spark job: actions, stages, and tasks" font-family="DM Sans,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" role="img" style="width:100%;height:auto;display:block" viewBox="0 0 1080 620" xmlns="http://www.w3.org/2000/svg"><title>Anatomy of a Spark job: actions, stages, and tasks</title><defs><marker id="ah_asp4_job" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="8.5" refY="5" viewBox="0 0 10 10"><path d="M0,1 L10,5 L0,9 z" fill="#3C4B52"></path></marker></defs><rect fill="#FFE8E5" height="92" rx="10" stroke="#FF3621" stroke-width="2" width="300" x="350" y="40"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="500.0" y="82.0">Action</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="500.0" y="104.4">display(), count(), write</text><rect fill="#DCE0E2" height="92" rx="10" stroke="#618794" stroke-width="2" width="300" x="350" y="190"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="500.0" y="241.6">Job</text><rect fill="#FFF3E0" height="100" rx="10" stroke="#FF9800" stroke-width="2" width="320" x="150" y="350"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="310.0" y="396.0">Stage 1</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="310.0" y="418.4">read + narrow transformations</text><rect fill="#FFF3E0" height="100" rx="10" stroke="#FF9800" stroke-width="2" width="320" x="610" y="350"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="770.0" y="396.0">Stage 2</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="770.0" y="418.4">after the shuffle boundary</text><rect fill="#E8F5E9" height="92" rx="10" stroke="#4CAF50" stroke-width="2" width="320" x="150" y="510"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="310.0" y="552.0">Tasks</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="310.0" y="574.4">one per partition</text><rect fill="#E8F5E9" height="92" rx="10" stroke="#4CAF50" stroke-width="2" width="320" x="610" y="510"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="770.0" y="552.0">Tasks</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="770.0" y="574.4">one per shuffle partition</text><path d="M500,132 L500,190" fill="none" marker-end="url(#ah_asp4_job)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M500,282 Q430,320 330,350" fill="none" marker-end="url(#ah_asp4_job)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M470,400 L610,400" fill="none" marker-end="url(#ah_asp4_job)" stroke="#3C4B52" stroke-width="2.2"></path><rect fill="#FFFFFF" height="25.5" rx="5" stroke="#D8DEE2" stroke-width="1" width="77.0" x="501.5" y="358.5"></rect><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="540" y="377.2">shuffle</text><path d="M310,450 L310,510" fill="none" marker-end="url(#ah_asp4_job)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M770,450 L770,510" fill="none" marker-end="url(#ah_asp4_job)" stroke="#3C4B52" stroke-width="2.2"></path></svg></div>
+</details>
+
+<h2 id="B.-Spark-Partitioning">B. Spark Partitioning</h2><p>Partitions are the unit of parallelism: every stage runs one task per partition. How data is partitioned determines memory use per executor, join and aggregation efficiency, and network traffic.</p>
+<p>Where partition counts come from:</p>
+<ul>
+<li><strong>Initial partitions</strong> - set by the files or blocks read from a table or directory</li>
+<li><strong>Shuffle partitions</strong> - created by wide transformations (<code>groupBy</code>, <code>join</code>) or explicit <code>repartition</code> / <code>coalesce</code></li>
+<li>The default partitioner is the hash partitioner: <code>hash(key) % numPartitions</code></li>
+</ul>
+<p>What you can do:</p>
+<table>
+<thead>
+<tr>
+<th>Technique</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>df.repartition(n)</code></td>
+<td>Full shuffle to exactly <code>n</code> evenly sized partitions</td>
+</tr>
+<tr>
+<td><code>df.repartition(n, col)</code></td>
+<td>Shuffle, co-locating rows by a key column</td>
+</tr>
+<tr>
+<td><code>df.coalesce(n)</code></td>
+<td>Reduce partition count without a full shuffle (accepts imbalance)</td>
+</tr>
+</tbody>
+</table>
+<p>Sizing guidance:</p>
+<ul>
+<li>Target roughly 100-200MB per shuffle partition</li>
+<li>Keep the partition count at or above the number of cores, or cores sit idle</li>
+<li>Watch task durations in the Spark UI: very short tasks (under ~50ms) suggest too many partitions</li>
+</ul>
+
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>AQE changed this game</strong>
+<p>On Spark 4 with Adaptive Query Execution enabled (the default), Spark coalesces shuffle partitions at runtime based on actual data sizes. Manual <code>spark.sql.shuffle.partitions</code> tuning is now mostly a legacy technique - reach for explicit <code>repartition</code> only when you have a specific layout requirement.</p>
+</div>
+</div>
+</div>
+
+<h2 id="C.-Shuffle-Operations">C. Shuffle Operations</h2><p>The shuffle is Spark's most expensive operation: data is serialized, written to disk, sent across the network, and read back by the next stage.</p>
+<ul>
+<li>Shuffles are triggered by wide transformations (<code>groupBy</code>, <code>join</code>, <code>distinct</code>, <code>orderBy</code>) and by <code>repartition</code></li>
+<li>Every shuffle is a stage boundary - the whole stage must finish before the next begins</li>
+<li>Shuffle <strong>spill</strong> (memory to disk) is a key warning sign to monitor in the Spark UI</li>
+</ul>
+<p>How to minimize shuffle impact:</p>
+<ul>
+<li>Filter early, filter often - move less data through every downstream stage</li>
+<li>Select only the columns you need before wide operations</li>
+<li>Use broadcast joins for small tables so the large side never shuffles</li>
+<li>Maintain consistent partitioning across operations where possible</li>
+</ul>
+<div>
+<strong>What to Observe</strong>
+<p>In the Spark UI <strong>Stages</strong> tab, the <em>Shuffle Read</em> and <em>Shuffle Write</em> columns quantify data movement, and <em>Spill (Memory)</em> / <em>Spill (Disk)</em> reveal memory pressure. These four numbers diagnose most slow stages.</p>
+</div>
+
+<h2 id="D.-Adaptive-Query-Execution">D. Adaptive Query Execution</h2><p>Adaptive Query Execution (AQE) re-optimizes query plans at runtime using real statistics from completed shuffle stages. It is enabled by default in Spark 4.</p>
+<p>AQE makes three major optimizations automatically:</p>
+<table>
+<thead>
+<tr>
+<th>Optimization</th>
+<th>What it fixes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Coalescing shuffle partitions</td>
+<td>Too many small post-shuffle partitions wasting task overhead</td>
+</tr>
+<tr>
+<td>Skew join handling</td>
+<td>One giant partition stalling an entire stage</td>
+</tr>
+<tr>
+<td>Dynamic join strategy switching</td>
+<td>A sort-merge join that should have been a broadcast join, once actual sizes are known</td>
+</tr>
+</tbody>
+</table>
+
+<details>
+<summary>
+<div>
+<div>
+<span>▶</span>
+<strong>How AQE re-optimizes at runtime</strong>
+</div>
+</div>
+</summary>
+<div><svg aria-label="How AQE re-optimizes at runtime" font-family="DM Sans,system-ui,-apple-system,Segoe UI,Roboto,sans-serif" role="img" style="width:100%;height:auto;display:block" viewBox="0 0 1320 430" xmlns="http://www.w3.org/2000/svg"><title>How AQE re-optimizes at runtime</title><defs><marker id="ah_asp4_aqe" markerHeight="7" markerWidth="7" orient="auto-start-reverse" refX="8.5" refY="5" viewBox="0 0 10 10"><path d="M0,1 L10,5 L0,9 z" fill="#3C4B52"></path></marker></defs><rect fill="#DCE0E2" height="100" rx="10" stroke="#618794" stroke-width="2" width="320" x="40" y="60"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="200.0" y="106.0">Static plan</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="200.0" y="128.4">from Catalyst</text><rect fill="#FFF3E0" height="100" rx="10" stroke="#FF9800" stroke-width="2" width="320" x="40" y="260"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="200.0" y="306.0">Runtime statistics</text><text fill="#4A5A62" font-size="15" font-style="italic" text-anchor="middle" x="200.0" y="328.4">actual shuffle sizes</text><rect fill="#FFE8E5" height="100" rx="10" stroke="#FF3621" stroke-width="2" width="320" x="470" y="160"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="630.0" y="215.6">AQE re-optimization</text><rect fill="#E8F5E9" height="100" rx="10" stroke="#4CAF50" stroke-width="2" width="370" x="910" y="40"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="1095.0" y="82.8">Coalesce small</text><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="1095.0" y="108.4">shuffle partitions</text><rect fill="#E8F5E9" height="100" rx="10" stroke="#4CAF50" stroke-width="2" width="370" x="910" y="165"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="1095.0" y="207.8">Split skewed</text><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="1095.0" y="233.4">partitions</text><rect fill="#E8F5E9" height="100" rx="10" stroke="#4CAF50" stroke-width="2" width="370" x="910" y="290"></rect><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="1095.0" y="332.8">Switch to</text><text fill="#0B2026" font-size="20" font-weight="700" text-anchor="middle" x="1095.0" y="358.4">broadcast join</text><path d="M360,110 L470,195" fill="none" marker-end="url(#ah_asp4_aqe)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M360,310 L470,225" fill="none" marker-end="url(#ah_asp4_aqe)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M790,210 L910,90" fill="none" marker-end="url(#ah_asp4_aqe)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M790,210 L910,215" fill="none" marker-end="url(#ah_asp4_aqe)" stroke="#3C4B52" stroke-width="2.2"></path><path d="M790,210 L910,340" fill="none" marker-end="url(#ah_asp4_aqe)" stroke="#3C4B52" stroke-width="2.2"></path></svg></div>
+</details>
+<div>
+<div>
+<span>📝</span>
+<div>
+<strong>What this means for you</strong>
+<p>Much of the manual tuning in older Spark material - fixing <code>spark.sql.shuffle.partitions</code>, hand-splitting skewed keys, forcing join order - is now handled by AQE. Your job is to verify it in the Spark UI (look for <code>AQEShuffleRead</code> in the plan) and step in only where AQE cannot help, such as the initial read layout and caching decisions.</p>
+</div>
+</div>
+</div>
+
+<h2 id="E.-Join-Strategies">E. Join Strategies</h2><p>Joins are where shuffle costs concentrate. Spark chooses a strategy automatically, and the choice matters more than almost any other plan decision.</p>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>When Spark uses it</th>
+<th>Cost profile</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Broadcast hash join</td>
+<td>One side fits under the broadcast threshold</td>
+<td>Small side copied to every executor; no shuffle of the large side</td>
+</tr>
+<tr>
+<td>Sort-merge join</td>
+<td>Both sides large</td>
+<td>Both sides shuffled and sorted - the expensive default</td>
+</tr>
+<tr>
+<td>Shuffle hash join</td>
+<td>One side moderately smaller</td>
+<td>Both sides shuffled, smaller side hashed</td>
+</tr>
+</tbody>
+</table>
+
+<p>Influencing the choice:</p>
+<div><div><pre><code id="code-tx06i8x64"><span>from</span> pyspark<span>.</span>sql<span>.</span>functions <span>import</span> broadcast
+result_df <span>=</span> large_df<span>.</span>join<span>(</span>broadcast<span>(</span>small_df<span>)</span><span>,</span> <span>"key"</span><span>)</span></code></pre></div></div>
+
+
+
+
+
+<ul>
+<li>The automatic broadcast threshold is controlled by <code>spark.sql.autoBroadcastJoinThreshold</code></li>
+<li>AQE can convert a planned sort-merge join to a broadcast join at runtime once it sees the true size</li>
+<li>Project only needed columns before joining, and watch for join key skew in the Stages tab</li>
+</ul>
+
+<h2 id="F.-DataFrame-Caching">F. DataFrame Caching</h2><p>Caching persists a computed DataFrame in executor memory (and disk) so repeated use skips recomputation.</p>
+<p>When to cache:</p>
+<ul>
+<li>Multiple actions over the same transformed DataFrame</li>
+<li>Expensive upstream transformations (joins, aggregations) feeding several outputs</li>
+<li>Interactive analysis and iterative ML workloads</li>
+</ul>
+<p>Cache management:</p>
+<ul>
+<li><code>df.cache()</code> marks the DataFrame; the first action actually populates the cache</li>
+<li>Monitor the <strong>Storage</strong> tab in the Spark UI for size and memory fraction cached</li>
+<li>Call <code>df.unpersist()</code> when finished - executor memory is a shared resource</li>
+</ul>
+<div>
+<div>
+<span>⚠️</span>
+<div>
+<strong>Caching is not free</strong>
+<p>Cached data competes with shuffle and execution memory. Caching a DataFrame used only once makes the workload slower, not faster. Cache deliberately, verify in the Storage tab, and unpersist when done.</p>
+</div>
+</div>
+</div>
+
+<h2 id="G.-Query-Optimization-with-Catalyst">G. Query Optimization with Catalyst</h2><p>The Catalyst optimizer rewrites every query - SQL or DataFrame - into an optimized physical plan before execution.</p>
+<p>What Catalyst does for you automatically:</p>
+<ul>
+<li><strong>Predicate pushdown</strong> - filters move down to the scan, so less data is read at the source</li>
+<li><strong>Column pruning</strong> - only the referenced columns are read from columnar formats</li>
+<li><strong>Filter combination</strong> - multiple filters collapse into one operation</li>
+<li><strong>Dynamic file pruning</strong> - join-driven file skipping on Delta tables at runtime</li>
+</ul>
+<p>Inspect what it decided with <code>explain()</code>:</p>
+<div><div><pre><code id="code-l1p8j2oi3">df<span>.</span>explain<span>(</span><span>)</span>                   <span># physical plan</span>
+df<span>.</span>explain<span>(</span><span>"formatted"</span><span>)</span>        <span># readable plan with operator details</span>
+df<span>.</span>explain<span>(</span><span>"extended"</span><span>)</span>         <span># logical and physical plans</span></code></pre></div></div>
+
+
+
+
+
+<div>
+<div>
+<span>💡</span>
+<div>
+<strong>Photon</strong>
+<p>On Photon-enabled runtimes, plan operators appear as <code>PhotonScan</code>, <code>PhotonGroupingAgg</code>, and so on - the vectorized native engine executing the same Catalyst plan faster. The optimization techniques in this lecture apply unchanged.</p>
+</div>
+</div>
+</div>
+
+<h2 id="H.-The-Monitoring-Toolkit">H. The Monitoring Toolkit</h2><p>Every optimization claim should be verified with a measurement. Your toolkit on Databricks:</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it tells you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Spark UI - Jobs / Stages</td>
+<td>Where time goes; shuffle read/write; spill; task skew</td>
+</tr>
+<tr>
+<td>Spark UI - SQL / DataFrame</td>
+<td>Executed plans with per-operator rows and timing</td>
+</tr>
+<tr>
+<td>Spark UI - Storage</td>
+<td>What is cached and how much memory it holds</td>
+</tr>
+<tr>
+<td>Spark UI - Executors</td>
+<td>Resource usage, GC time, failed tasks per executor</td>
+</tr>
+<tr>
+<td><code>explain()</code></td>
+<td>The plan before execution: join strategies, pushed filters</td>
+</tr>
+<tr>
+<td><code>DESCRIBE DETAIL</code> / <code>DESCRIBE HISTORY</code></td>
+<td>Table file layout and operation metrics</td>
+</tr>
+<tr>
+<td>Structured logging (Spark 4)</td>
+<td>JSON driver and executor logs, queryable with Spark itself</td>
+</tr>
+</tbody>
+</table>
+
+<div>
+<div>
+<span>ℹ️</span>
+<div>
+<strong>A monitoring workflow</strong>
+<p>Start at the <strong>SQL / DataFrame</strong> tab to find the slow query and the slow operator within it. Drill into the matching <strong>stage</strong> for shuffle and spill metrics. Only then change code or configuration - and re-measure after.</p>
+</div>
+</div>
+</div>
+
+<h2 id="I.-Best-Practices">I. Best Practices</h2><ul>
+<li>Use the Spark UI: track job progress, stage metrics, shuffle, storage, and executor detail</li>
+<li>Filter early, filter often, and project only the columns you need</li>
+<li>Prefer built-in functions; if custom logic is unavoidable, use pandas UDFs rather than row-by-row Python UDFs</li>
+<li>Let AQE manage shuffle partition counts; reach for <code>repartition</code> only with a specific layout goal</li>
+<li>Broadcast small join inputs and verify the strategy in the plan</li>
+<li>Cache deliberately, verify in the Storage tab, and unpersist when done</li>
+<li>Keep tables healthy with <code>OPTIMIZE</code> and liquid clustering - engine tuning cannot fix a fragmented table</li>
+</ul>
+    </article>
+  </main>
+</body>
+</html>
