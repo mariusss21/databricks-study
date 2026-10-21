@@ -45,7 +45,7 @@ A key that's missing comes back as NULL, not an error. That's why VARIANT holds 
 **Tradeoffs and gotchas**
 
 - Struct reads are the fastest, and the schema documents itself. The cost is that drift has to be handled through evolution or `_rescued_data`.
-- With VARIANT you have to cast on read. A wrong path or wrong type gives you NULLs quietly instead of failing. Cast before you group, sort, or cluster on a value.
+- With VARIANT you have to cast on read. A wrong path quietly returns NULL instead of failing, and a bad `::` cast raises an error (use `try_cast` if you want NULL instead). Cast before you group, sort, or cluster on a value.
 - VARIANT needs a recent runtime (DBR 15.3+ or serverless), and older readers can't open the table.
 - Keeping the whole payload as a raw string works too, but every query then re-parses it. Prefer VARIANT.
 - Don't flatten in Bronze. Keep the payload whole and flatten in Silver.
