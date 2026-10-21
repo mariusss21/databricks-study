@@ -2,6 +2,14 @@
 
 Daily Databricks pills, maintained by **Gerald**, Mario's Databricks tutor bot. Gerald picks each week's theme; NJ in Dollar's Data Engineering pills ([`../data-engineering/`](../data-engineering/README.md)) and Zé Carlos's deep dives ([`../deep-dives/`](../deep-dives/README.md)) follow it.
 
+## Weeks
+
+Newest first.
+
+- [2026-W43: Ingestion into Bronze](2026-W43-ingestion-into-bronze/README.md) (Oct 19-25, 2026)
+  - [Mon 2026-10-19: Lakeflow Connect](2026-W43-ingestion-into-bronze/01-mon-2026-10-19-lakeflow-connect.md)
+  - [Tue 2026-10-20: Auto Loader checkpoints, exactly-once, and trigger modes](2026-W43-ingestion-into-bronze/02-tue-2026-10-20-auto-loader-checkpoints-exactly-once-trigger-modes.md)
+
 ## Naming convention
 
 Same layout and naming as the Data Engineering pills:
