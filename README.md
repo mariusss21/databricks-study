@@ -26,6 +26,4 @@ Mario Carvalho's study notes toward the **Databricks Certified Data Engineer Ass
 
 Each week shares one theme: Gerald leads it with the Databricks pills, and NJ in Dollar's Data Engineering pills and Zé Carlos's deep dives follow it.
 
-- [Databricks pills](databricks-pills/README.md) (Gerald, daily)
-- [Data Engineering pills](data-engineering/README.md) (NJ in Dollar, daily)
-- [Deep dives](deep-dives/README.md) (Zé Carlos, weekly interactive HTML)
+- [Weekly study](weekly-study/README.md): one folder per week with Gerald's Databricks pills, NJ in Dollar's Data Engineering pills, and Zé Carlos's deep dives
