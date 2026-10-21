@@ -21,3 +21,11 @@ Mario Carvalho's study notes toward the **Databricks Certified Data Engineer Ass
 - [Schema enforcement vs. schema evolution](explanations/schema-enforcement-and-evolution.md)
 - [Spark parallelism on single-node and serverless compute](explanations/spark-parallelism-single-node-and-serverless.md)
 - [Unity Catalog volumes, storage credentials, and external locations](explanations/unity-catalog-volumes-and-external-locations.md)
+
+## Weekly study pills and deep dives
+
+Each week shares one theme: Gerald leads it with the Databricks pills, and NJ in Dollar's Data Engineering pills and Zé Carlos's deep dives follow it.
+
+- [Databricks pills](databricks-pills/README.md) (Gerald, daily)
+- [Data Engineering pills](data-engineering/README.md) (NJ in Dollar, daily)
+- [Deep dives](deep-dives/README.md) (Zé Carlos, weekly interactive HTML)
