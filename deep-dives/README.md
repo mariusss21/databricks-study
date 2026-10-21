@@ -2,6 +2,12 @@
 
 Weekly interactive deep dives by **Zé Carlos**. Each one is a single self-contained HTML file and follows the week's shared theme (set by Gerald's Databricks pills).
 
+## Deep dives (newest first)
+
+| Date | Track | Title |
+|------|-------|-------|
+| 2026-10-19 | `databricks` | [Connection Deep Dive: Governed Ingestion to a Trustworthy Bronze Table](2026-W43-ingestion-into-bronze/2026-10-19-databricks-governed-ingestion-to-bronze.html) |
+
 ## Layout
 
 ```
