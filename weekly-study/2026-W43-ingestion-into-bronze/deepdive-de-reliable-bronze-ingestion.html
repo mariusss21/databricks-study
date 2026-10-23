@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connection Deep Dive: Reliable Bronze Ingestion (detect change, deliver, survive drift, replay)</title>
+<meta name="description" content="Data Engineering connection deep dive for Mario Carvalho, Fri 2026-10-23: CDC, incremental extraction, delivery semantics and schema drift connected through one e-commerce pipeline into Bronze, with break-the-pipeline scenarios and a Databricks Free Edition lab.">
+<style>
+:root{
+  --bg:#f6f7fb;--panel:#fff;--panel2:#f0f2f8;--text:#1b1f2a;--muted:#5b6476;--border:#dde1ea;
+  --accent:#ff3621;--accent-soft:#fff0ed;--ok:#11845b;--ok-soft:#e5f6ee;--bad:#c62f3a;--bad-soft:#fdecee;
+  --warn:#9a6700;--warn-soft:#fff6dd;--info:#1f5fbf;--info-soft:#e9f1ff;
+  --code-bg:#0f1420;--code-text:#e6e9f0;
+  --uc:#2f6fd6;--ld:#ff6a3d;--sc:#8a4fd8;--dl:#0f9d74;--cp:#b7791f;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+  --radius:12px;--sidebar:290px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:#0d1117;--panel:#151b24;--panel2:#1b2330;--text:#e6e9ef;--muted:#9aa4b6;--border:#2a3342;
+  --accent:#ff6a55;--accent-soft:#2a1814;--ok:#3ccf91;--ok-soft:#10261d;--bad:#ff6b77;--bad-soft:#2b1418;
+  --warn:#f0c04a;--warn-soft:#2a230f;--info:#7fb2ff;--info-soft:#121f36;--code-bg:#0a0e16;
+  --uc:#6fa3ff;--ld:#ff8a63;--sc:#b48cff;--dl:#3ccf91;--cp:#f0c04a;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d1117;--panel:#151b24;--panel2:#1b2330;--text:#e6e9ef;--muted:#9aa4b6;--border:#2a3342;
+    --accent:#ff6a55;--accent-soft:#2a1814;--ok:#3ccf91;--ok-soft:#10261d;--bad:#ff6b77;--bad-soft:#2b1418;
+    --warn:#f0c04a;--warn-soft:#2a230f;--info:#7fb2ff;--info-soft:#121f36;--code-bg:#0a0e16;
+    --uc:#6fa3ff;--ld:#ff8a63;--sc:#b48cff;--dl:#3ccf91;--cp:#f0c04a;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;font-size:16px}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel2);border:1px solid var(--border);padding:.05em .35em;border-radius:5px;overflow-wrap:anywhere}
+.layout{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--panel);border-right:1px solid var(--border);padding:18px 14px 24px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;gap:10px;align-items:center}
+.logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#ff9a3c);display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px;flex:none}
+.brand h1{font-size:15px;line-height:1.25;margin:0}
+.brand small{color:var(--muted);font-size:12px}
+.progress-card{background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius);padding:12px}
+.progress-top{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:6px}
+.bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden}
+.bar>span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),#ff9a3c);transition:width .35s}
+.progress-meta{font-size:12px;color:var(--muted);margin-top:6px}
+nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+nav a{display:flex;gap:10px;align-items:center;padding:7px 9px;border-radius:8px;text-decoration:none;color:var(--text);font-size:14px}
+nav a:hover{background:var(--panel2)}
+nav a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+nav .dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--border);flex:none;display:grid;place-items:center;font-size:11px;color:#fff}
+nav a.done .dot{background:var(--ok);border-color:var(--ok)}
+nav a.done .dot::after{content:"✓"}
+.side-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+button{font:inherit;cursor:pointer}
+.btn{border:1px solid var(--border);background:var(--panel);color:var(--text);padding:8px 14px;border-radius:9px;font-size:14px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.small{padding:5px 10px;font-size:13px}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn:disabled{opacity:.5;cursor:default}
+main{padding:28px clamp(12px,4vw,48px) 80px;max-width:1000px;width:100%;min-width:0}
+.mobilebar{display:none}
+.section{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px clamp(16px,3vw,30px);margin-bottom:22px;scroll-margin-top:16px}
+.section h2{margin:0 0 4px;font-size:1.45rem;line-height:1.3}
+.section h3{font-size:1.1rem;margin:22px 0 6px}
+.kicker{color:var(--accent);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.time{color:var(--muted);font-size:13px;margin-bottom:12px}
+.callout{border-left:4px solid var(--info);background:var(--info-soft);padding:10px 14px;border-radius:0 10px 10px 0;margin:14px 0}
+.callout.warn{border-color:var(--warn);background:var(--warn-soft)}
+.callout.ok{border-color:var(--ok);background:var(--ok-soft)}
+.callout.exam{border-color:var(--accent);background:var(--accent-soft)}
+.callout b:first-child{display:block;margin-bottom:2px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.card{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--panel2)}
+.card h4{margin:0 0 6px;font-size:1rem}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top}
+th{background:var(--panel2)}
+.tablewrap{overflow-x:auto}
+pre{background:var(--code-bg);color:var(--code-text);padding:14px 16px;border-radius:10px;overflow-x:auto;font-size:13.2px;line-height:1.5;margin:0}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit;overflow-wrap:normal}
+.codebox{position:relative;margin:12px 0}
+.codebox .label{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.copy{position:absolute;top:26px;right:8px;font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid #3a4456;background:#1d2533;color:#cfd6e4}
+.copy:hover{background:#2a3446}
+.c-com{color:#8b96ad}
+.complete-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:20px;padding-top:14px;border-top:1px dashed var(--border);flex-wrap:wrap}
+.complete-row .status{font-size:13px;color:var(--muted)}
+.quiz{border:1px solid var(--border);border-radius:10px;padding:14px;margin:16px 0;background:var(--panel2)}
+.quiz .q{font-weight:600;margin-bottom:8px}
+.quiz .opts{display:flex;flex-direction:column;gap:6px}
+.quiz .opt{text-align:left;border:1px solid var(--border);background:var(--panel);color:var(--text);padding:8px 12px;border-radius:8px;font-size:14.5px}
+.quiz .opt:hover{border-color:var(--info)}
+.quiz .opt.right{border-color:var(--ok);background:var(--ok-soft)}
+.quiz .opt.wrong{border-color:var(--bad);background:var(--bad-soft)}
+.quiz .fb{margin-top:8px;font-size:14px;display:none}
+.quiz .fb.show{display:block}
+.mapwrap{border:1px solid var(--border);border-radius:12px;background:var(--panel2);padding:8px;overflow-x:auto}
+.mapwrap svg{width:100%;min-width:640px;height:auto;display:block}
+svg text{font-family:var(--sans);fill:var(--text)}
+svg .node{cursor:pointer}
+svg .node rect{stroke-width:2;fill:var(--panel)}
+svg .node:hover rect,svg .node.sel rect{stroke-width:3.5}
+svg .uc rect{stroke:var(--uc)} svg .ld rect{stroke:var(--ld)} svg .sc rect{stroke:var(--sc)} svg .dl rect{stroke:var(--dl)} svg .cp rect{stroke:var(--cp)}
+svg .edge{stroke:var(--muted);stroke-width:1.6;fill:none}
+svg .elabel{font-size:11px;fill:var(--muted)}
+svg .zone{fill:none;stroke-dasharray:6 5;stroke-width:1.5}
+#mapInfo{min-height:84px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:8px 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.stepper{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.stepper button{border:1px solid var(--border);background:var(--panel);color:var(--text);border-radius:99px;padding:5px 12px;font-size:13px}
+.stepper button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.stepper button.seen:not(.on){border-color:var(--ok)}
+.step{display:none}
+.step.on{display:block}
+.stepnav{display:flex;justify-content:space-between;margin-top:10px}
+.scen{border:1px solid var(--border);border-radius:10px;padding:14px;margin:12px 0;background:var(--panel2)}
+.scen .facts{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px}
+.chip{font-size:12px;border:1px solid var(--border);border-radius:99px;padding:2px 9px;background:var(--panel);color:var(--muted)}
+.scen .choices{display:flex;gap:8px;flex-wrap:wrap}
+.scen .fb{display:none;margin-top:10px;font-size:14.5px}
+.scen .fb.show{display:block}
+.score{font-weight:700}
+details{border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin:10px 0;background:var(--panel2)}
+details summary{cursor:pointer;font-weight:600}
+details[open] summary{margin-bottom:8px}
+.lab-step{counter-increment:lab;border-left:3px solid var(--accent);padding-left:14px;margin:18px 0}
+.lab-step>h4{margin:0 0 6px}
+.lab-step>h4::before{content:"Step " counter(lab) " · ";color:var(--accent)}
+.labsteps{counter-reset:lab}
+.check{display:flex;gap:8px;align-items:flex-start;margin:4px 0;font-size:14.5px}
+.check input{margin-top:5px}
+ul.links li{margin:4px 0}
+.tag{font-size:11px;padding:1px 7px;border-radius:99px;background:var(--panel2);border:1px solid var(--border);color:var(--muted);margin-left:6px}
+@media (max-width:900px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  .sidebar{position:fixed;inset:0 auto 0 0;width:86%;max-width:320px;z-index:20;transform:translateX(-105%);transition:transform .25s;box-shadow:var(--shadow)}
+  .sidebar.open{transform:none}
+  .mobilebar{display:flex;position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--border);padding:8px 12px;gap:10px;align-items:center}
+  .mobilebar .bar{flex:1}
+  .grid2{grid-template-columns:1fr}
+  main{padding-top:16px}
+}
+@media print{.sidebar,.mobilebar,.copy,.complete-row button{display:none}.layout{display:block}}
+.sim{border:1px solid var(--border);border-radius:12px;padding:14px;margin:14px 0;background:var(--panel2)}
+.sim h3{margin-top:0}
+.state{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0}
+.cell{border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--panel);transition:background .3s,border-color .3s}
+.cell small{display:block;color:var(--muted);font-size:11px;letter-spacing:.05em;text-transform:uppercase}
+.cell b{font-family:var(--mono);font-size:14px}
+.cell.hl{border-color:var(--accent);background:var(--accent-soft)}
+.cell.bad{border-color:var(--bad);background:var(--bad-soft)}
+.cell.good{border-color:var(--ok);background:var(--ok-soft)}
+.evlog{margin:8px 0 4px;padding-left:22px;font-size:14.5px}
+.evlog li{margin:4px 0}
+.evlog li.cur{font-weight:600}
+.simbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.teaser{border:2px dashed var(--accent);border-radius:12px;padding:14px 16px;background:var(--accent-soft)}
+.teaser ul{margin:6px 0 0}
+.phr{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.phr .card p{margin:4px 0;font-size:14.5px}
+svg .node.ghost rect{stroke-dasharray:5 4}
+svg .edge.back{stroke-dasharray:5 4}
+@media (max-width:900px){.phr{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="mobilebar">
+  <button class="btn small" id="menuBtn" aria-label="Open navigation">☰ Sections</button>
+  <div class="bar" aria-hidden="true"><span id="barMobile"></span></div>
+  <span id="pctMobile" style="font-size:13px;color:var(--muted)">0%</span>
+</div>
+<div class="layout">
+<aside class="sidebar" id="sidebar">
+  <div class="brand">
+    <div class="logo">DE</div>
+    <div><h1>Reliable Bronze Ingestion</h1><small>Connection deep dive · Fri 2026-10-23 · Data Engineering</small></div>
+  </div>
+  <div class="progress-card">
+    <div class="progress-top"><span>Progress</span><span id="pct">0%</span></div>
+    <div class="bar"><span id="bar"></span></div>
+    <div class="progress-meta" id="progMeta">0 of 0 sections complete</div>
+  </div>
+  <nav aria-label="Sections"><ol id="navList"></ol></nav>
+  <div class="side-actions">
+    <button class="btn small" id="themeBtn" title="Toggle light/dark">◐ Theme</button>
+    <button class="btn small" id="resetBtn" title="Clear saved progress for this lesson">↺ Reset progress</button>
+  </div>
+</aside>
+
+<main id="main">
+
+<section class="section" id="s-start" data-title="Start here">
+  <div class="kicker">Start here · ~3 min</div>
+  <h2>Four questions every Bronze source has to answer</h2>
+  <p>This week brought four DE pills (Mon–Thu). Each one looks like a separate topic. They aren't. They are the four questions you answer, out loud, for <b>every</b> source you bring into Bronze:</p>
+  <ol>
+    <li><b>How do I detect change?</b> → CDC (log, query, or trigger based) or a high-water mark when you only have an API. <span class="tag">DE1 · DE4</span></li>
+    <li><b>How do I avoid losing or duplicating it?</b> → delivery semantics: at-least-once transport + an idempotent sink + checkpoints. <span class="tag">DE2</span></li>
+    <li><b>How do I survive the source changing shape?</b> → tolerant Bronze, strict Silver, Auto Loader evolution and <code>_rescued_data</code>. <span class="tag">DE3</span></li>
+    <li><b>How do I recover and replay?</b> → append-only raw data, retained landing files, chunked idempotent backfills. <span class="tag">DE4</span></li>
+  </ol>
+  <p>You'll follow <b>one</b> realistic pipeline the whole time: an e-commerce company with a Postgres <code>orders</code> table (log-based CDC) and a payments SaaS REST API (watermark pull). Then you'll break it four ways and watch what happens.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Block</th><th>What you do</th><th>Time</th></tr>
+    <tr><td>Recap</td><td>The four topics on one screen, two checks</td><td>~8 min</td></tr>
+    <tr><td>Connection map</td><td>Interactive diagram of the pipeline, colour-coded by question</td><td>~6 min</td></tr>
+    <tr><td>Walkthrough</td><td>Source A (CDC) and Source B (API) end to end, 5 steps</td><td>~10 min</td></tr>
+    <tr><td>Break the pipeline</td><td>4 failure scenarios, step through the events, a check after each</td><td>~15 min</td></tr>
+    <tr><td>Tool gaps</td><td>Snowflake / dbt / Fivetran–Airbyte mapped to the four questions</td><td>~5 min</td></tr>
+    <tr><td>Hands-on lab</td><td>Free Edition: fake API → volume → Auto Loader → watermark table, then crash it, drift it, backfill it</td><td>~30–40 min</td></tr>
+    <tr><td>Interview questions</td><td>4 senior questions with answers on click + English phrasing</td><td>~10 min</td></tr>
+    <tr><td>What's next + go deeper</td><td>Teaser for Bronze → Silver, verified docs</td><td>~3 min</td></tr>
+  </table></div>
+  <p class="time">Total: about 80–90 minutes with the lab, ~50 minutes without it. Progress is saved in this browser (localStorage), so you can split it across study blocks.</p>
+  <div class="callout"><b>How this differs from Monday's deep dive</b>Monday (10-19) was the Databricks angle: Unity Catalog landing zones, COPY INTO vs Auto Loader, evolution modes. Today is the DE angle on the same W43 theme: <i>design principles</i> that hold on any platform (change detection, delivery guarantees, drift policy, replay), with Databricks as the implementation. Lab names are new too (<code>workspace.dd_de</code>), so nothing collides with Monday's <code>dd_ingest</code> schema.</div>
+  <div class="callout warn"><b>Scope guard</b>Everything here stops at Bronze: raw, append-only, honest about duplicates. Applying changes into current-state tables (MERGE INTO, SCD Type 2, Delta Change Data Feed, AUTO CDC / APPLY CHANGES) is next week's Bronze → Silver theme and only appears in the final "what's next" card.</div>
+  <div class="complete-row"><span class="status"></span><button class="btn primary mark">Mark section complete</button></div>
+</section>
+
+<section class="section" id="s-recap" data-title="Recap: the four topics">
+  <div class="kicker">Recap · 4 topics · ~8 min</div>
+  <h2>The four pills on one screen</h2>
+  <div class="grid2">
+    <div class="card"><h4>1 · CDC fundamentals <span class="tag">DE1 Mon</span></h4>
+      <p><b>Log-based</b> (Postgres WAL via logical replication, MySQL binlog): catches deletes and every intermediate change, light on the source, the gold standard (Debezium, Lakeflow Connect, Fivetran). <b>Query-based</b> (<code>updated_at &gt; mark</code>): simple, misses hard deletes, squashes updates between polls. <b>Trigger-based</b>: accurate, but adds write overhead DBAs dislike.</p>
+      <p>A Debezium event carries <code>op</code> (<code>c/u/d/r</code>), <code>before</code>, <code>after</code>, <code>source.lsn</code>, <code>ts_ms</code>. The LSN is your ordering key. Bronze keeps every event as it arrived, deletes included.</p></div>
+    <div class="card"><h4>2 · Incremental extraction <span class="tag">DE4 Thu</span></h4>
+      <p><b>High-water mark</b>: store the largest <code>updated_at</code> you've loaded; next run asks for newer rows. Traps: ties and late commits (fix: <b>overlap window</b> + dedup), <b>invisible deletes</b>, an <code>updated_at</code> not set by every writer.</p>
+      <p>APIs: <b>cursor/keyset</b> pagination beats offset (offsets shift mid-read). On <b>429</b> honour <code>Retry-After</code>, back off with jitter. Backfills: <b>chunked, idempotent</b>, same code as the daily run with different parameters.</p></div>
+    <div class="card"><h4>3 · Delivery semantics <span class="tag">DE2 Tue</span></h4>
+      <p>At-most-once (may lose), at-least-once (may duplicate, the normal case for Kafka, Debezium, APIs), exactly-once (an <b>end-to-end property</b>: replayable source + tracked progress + transactional or idempotent sink).</p>
+      <p>Databricks: checkpoints + Delta sink = exactly-once into Delta; Auto Loader tracks files; <code>foreachBatch</code> needs <code>txnAppId</code>/<code>txnVersion</code>; <code>Trigger.AvailableNow</code> = streaming semantics at batch cost.</p></div>
+    <div class="card"><h4>4 · Schema drift + contracts <span class="tag">DE3 Wed</span></h4>
+      <p><b>Tolerant Bronze, strict Silver.</b> Bronze must never lose a field or stop for good because of a surprise; Silver enforces the contract (explicit schema, expectations) and fails loudly.</p>
+      <p>Auto Loader: <code>schemaLocation</code>, <code>schemaEvolutionMode</code> (<code>addNewColumns</code> stops once then continues; <code>rescue</code> never stops), <code>_rescued_data</code> for type/case mismatches and unknown fields. Delta: <code>mergeSchema</code>, type widening. <b>VARIANT</b> for semi-structured payloads.</p></div>
+  </div>
+  <div class="callout ok"><b>The one sentence that ties them together</b>"Bronze is an append-only, replayable record of what the source told us, at-least-once, with nothing silently lost; correctness (dedup, current state, contracts) is earned in Silver."</div>
+  <div class="quiz" data-id="q-recap1" data-correct="1">
+    <div class="q">Check: the orders team deletes cancelled orders from Postgres with a hard <code>DELETE</code>. Which capture method sees those deletes without extra work?</div>
+    <div class="opts">
+      <button class="opt">Query-based CDC with <code>updated_at &gt;= mark - 10 min</code></button>
+      <button class="opt">Log-based CDC reading the WAL (Debezium or a managed connector)</button>
+      <button class="opt">A nightly API pull with cursor pagination</button>
+      <button class="opt">Auto Loader with <code>addNewColumns</code></button>
+    </div>
+    <div class="fb" data-right="Right. A deleted row is gone, so no query can return it; only the transaction log still records it (op = d with the before image). Polling needs soft deletes or a periodic full-key comparison." data-wrong="Not quite. A hard-deleted row no longer exists, so any query (or API page) simply can't return it. The transaction log still has it: log-based CDC emits op = d with the before image."></div>
+  </div>
+  <div class="quiz" data-id="q-recap2" data-correct="2">
+    <div class="q">Check: a payments API offers <code>?page=N</code> and <code>?cursor=…</code>. Rows get updated while you paginate. Why prefer the cursor?</div>
+    <div class="opts">
+      <button class="opt">Cursors are faster on the server</button>
+      <button class="opt">Cursors avoid 429 rate limits</button>
+      <button class="opt">Offsets shift when rows move between pages mid-read, so you skip or repeat rows; a keyset cursor anchors on the last row you saw</button>
+      <button class="opt">Page numbers can't be combined with a watermark</button>
+    </div>
+    <div class="fb" data-right="Right. With offsets, an update that re-sorts a row can push it onto a page you've already read (skipped) or pull one forward (duplicated). A keyset cursor like (updated_at, id) resumes exactly after the last row you saw." data-wrong="The real reason is correctness: offsets shift when the underlying data changes during the read, so you skip or repeat rows. A keyset cursor (updated_at, id) resumes after the last row you actually saw."></div>
+  </div>
+  <div class="complete-row"><span class="status"></span><button class="btn primary mark">Mark section complete</button></div>
+</section>
+
+<section class="section" id="s-map" data-title="Connection map">
+  <div class="kicker">Connection map · ~6 min</div>
+  <h2>One pipeline, four questions, colour-coded</h2>
+  <p>Two sources on the left, two Bronze tables plus a control table on the right. Each colour is one of the four questions. Notice that the <b>watermark loop</b> (dashed) is the only place where state flows <i>backwards</i>, and it's exactly where most incremental pipelines lose data. <b>Click any node.</b></p>
+  <div class="legend"><span><i style="background:var(--uc)"></i>1 · Detect change (CDC)</span><span><i style="background:var(--ld)"></i>1 · Detect change (watermark pull)</span><span><i style="background:var(--dl)"></i>2 · Delivery / idempotency</span><span><i style="background:var(--sc)"></i>3 · Schema drift</span><span><i style="background:var(--cp)"></i>4 · Recover / replay</span></div>
+  <div class="mapwrap">
+  <svg viewBox="0 0 980 540" role="img" aria-label="Connection map: Postgres orders through log-based CDC and Kafka, and a payments REST API through a watermark pull into a volume, both ingested by checkpointed streams into append-only Bronze tables, with a watermark control table and backfill jobs">
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8892a6"/></marker></defs>
+    <rect class="zone" x="8" y="10" width="222" height="520" rx="14" style="stroke:var(--muted)"/>
+    <text x="22" y="34" font-size="13" font-weight="700" style="fill:var(--muted)">SOURCES</text>
+    <rect class="zone" x="240" y="10" width="232" height="520" rx="14" style="stroke:var(--ld)"/>
+    <text x="254" y="34" font-size="13" font-weight="700" style="fill:var(--ld)">DETECT CHANGE</text>
+    <rect class="zone" x="482" y="10" width="240" height="520" rx="14" style="stroke:var(--dl)"/>
+    <text x="496" y="34" font-size="13" font-weight="700" style="fill:var(--dl)">LAND + MOVE (no loss)</text>
+    <rect class="zone" x="732" y="10" width="240" height="520" rx="14" style="stroke:var(--cp)"/>
+    <text x="746" y="34" font-size="13" font-weight="700" style="fill:var(--cp)">BRONZE + CONTROL</text>
+
+    <path class="edge" marker-end="url(#arr)" d="M218,117 L248,117"/>
+    <path class="edge" marker-end="url(#arr)" d="M462,117 C478,117 478,87 494,87"/>
+    <path class="edge" marker-end="url(#arr)" d="M602,114 L602,166"/>
+    <path class="edge" marker-end="url(#arr)" d="M218,327 C234,327 232,287 248,287"/>
+    <path class="edge" marker-end="url(#arr)" d="M355,314 L355,348"/>
+    <path class="edge" marker-end="url(#arr)" d="M462,377 C478,377 478,397 494,397"/>
+    <path class="edge" marker-end="url(#arr)" d="M602,370 L602,316"/>
+    <path class="edge" marker-end="url(#arr)" d="M602,262 L602,228"/>
+    <path class="edge" marker-end="url(#arr)" d="M710,186 C726,186 726,87 744,87"/>
+    <path class="edge" marker-end="url(#arr)" d="M710,204 L744,204"/>
+    <path class="edge" marker-end="url(#arr)" d="M852,231 L852,276"/>
+    <path class="edge back" marker-end="url(#arr)" d="M744,296 C726,296 728,245 700,245 L486,245 C472,245 468,258 466,270"/>
+    <path class="edge" marker-end="url(#arr)" d="M960,397 C978,397 978,204 962,204"/>
+    <path class="edge" marker-end="url(#arr)" d="M744,214 C720,300 720,470 744,487"/>
+    <text class="elabel" x="610" y="146">offsets</text>
+    <text class="elabel" x="610" y="350">files</text>
+        <text class="elabel" x="860" y="250">max(updated_at),</text><text class="elabel" x="860" y="264">after commit</text>
+    <text class="elabel" x="500" y="240">next run: since = mark − overlap</text>
+    <text class="elabel" x="972" y="345" transform="rotate(-90 972 345)">replaceWhere</text>
+    <text class="elabel" x="652" y="470">next week</text>
+
+    <g class="node uc" data-k="pg" tabindex="0"><rect x="22" y="90" width="196" height="54" rx="10"/><text x="34" y="113" font-weight="700" font-size="14">Postgres orders</text><text x="34" y="132" font-size="12">OLTP · WAL · hard deletes</text></g>
+    <g class="node ld" data-k="api" tabindex="0"><rect x="22" y="300" width="196" height="54" rx="10"/><text x="34" y="323" font-weight="700" font-size="14">Payments REST API</text><text x="34" y="342" font-size="12">SaaS · no log access · 429s</text></g>
+
+    <g class="node uc" data-k="logcdc" tabindex="0"><rect x="250" y="90" width="212" height="54" rx="10"/><text x="262" y="113" font-weight="700" font-size="14">Log-based CDC</text><text x="262" y="132" font-size="12">Debezium · Lakeflow Connect</text></g>
+    <g class="node ld" data-k="hwm" tabindex="0"><rect x="250" y="260" width="212" height="54" rx="10"/><text x="262" y="283" font-weight="700" font-size="14">High-water mark</text><text x="262" y="302" font-size="12">updated_at ≥ mark − overlap</text></g>
+    <g class="node ld" data-k="pager" tabindex="0"><rect x="250" y="350" width="212" height="54" rx="10"/><text x="262" y="373" font-weight="700" font-size="14">Cursor pages + backoff</text><text x="262" y="392" font-size="12">keyset cursor · Retry-After</text></g>
+
+    <g class="node dl" data-k="kafka" tabindex="0"><rect x="496" y="60" width="214" height="54" rx="10"/><text x="508" y="83" font-weight="700" font-size="14">Kafka topic</text><text x="508" y="102" font-size="12">replayable · offsets · retention</text></g>
+    <g class="node dl" data-k="loader" tabindex="0"><rect x="496" y="168" width="214" height="60" rx="10"/><text x="508" y="191" font-weight="700" font-size="14">Streaming + checkpoint</text><text x="508" y="210" font-size="12">Auto Loader / Kafka source</text><text x="508" y="223" font-size="11">Trigger.AvailableNow</text></g>
+    <g class="node sc" data-k="schema" tabindex="0"><rect x="496" y="262" width="214" height="54" rx="10"/><text x="508" y="285" font-weight="700" font-size="14">Schema policy</text><text x="508" y="304" font-size="12">addNewColumns · _rescued_data</text></g>
+    <g class="node dl" data-k="volume" tabindex="0"><rect x="496" y="370" width="214" height="54" rx="10"/><text x="508" y="393" font-weight="700" font-size="14">UC volume landing</text><text x="508" y="412" font-size="12">raw JSON pages · kept</text></g>
+
+    <g class="node dl" data-k="bcdc" tabindex="0"><rect x="746" y="60" width="214" height="54" rx="10"/><text x="758" y="83" font-weight="700" font-size="14">bronze.orders_cdc</text><text x="758" y="102" font-size="12">op · before/after · LSN</text></g>
+    <g class="node dl" data-k="bpay" tabindex="0"><rect x="746" y="177" width="214" height="54" rx="10"/><text x="758" y="200" font-weight="700" font-size="14">bronze.payments_raw</text><text x="758" y="219" font-size="12">append-only · dups allowed</text></g>
+    <g class="node ld" data-k="marks" tabindex="0"><rect x="746" y="278" width="214" height="54" rx="10"/><text x="758" y="301" font-weight="700" font-size="14">ingest_marks (Delta)</text><text x="758" y="320" font-size="12">source → last_mark</text></g>
+    <g class="node cp" data-k="backfill" tabindex="0"><rect x="746" y="370" width="214" height="54" rx="10"/><text x="758" y="393" font-weight="700" font-size="14">Backfill job</text><text x="758" y="412" font-size="12">params · For each · chunks</text></g>
+    <g class="node sc ghost" data-k="silver" tabindex="0"><rect x="746" y="462" width="214" height="54" rx="10"/><text x="758" y="485" font-weight="700" font-size="14">Silver contract</text><text x="758" y="504" font-size="12">dedup · current state · strict</text></g>
+  </svg>
+  </div>
+  <div class="callout" id="mapInfo"><b>Click a node</b>Each node explains which of the four questions it answers and the classic mistake.</div>
+  <div class="quiz" data-id="q-map" data-correct="3">
+    <div class="q">Check: both Bronze tables contain duplicates by design. Which statement is the senior framing?</div>
+    <div class="opts">
+      <button class="opt">That's a bug; Bronze should MERGE on the key so it's always clean</button>
+      <button class="opt">Duplicates are fine forever; consumers should ignore them</button>
+      <button class="opt">Use exactly-once delivery from the source so duplicates can't happen</button>
+      <button class="opt">Transport is at-least-once; Bronze records it faithfully and keeps the keys (LSN, payment_id + updated_at) so Silver can dedup deterministically</button>
+    </div>
+    <div class="fb" data-right="Right. Bronze's job is completeness and replayability, not uniqueness. Keeping the ordering/dedup keys makes the cleanup in Silver deterministic, and a replay of Bronze yields the same Silver." data-wrong="The senior framing: transport is at-least-once, Bronze is append-only and faithful, and it carries the keys (LSN for CDC, payment_id + updated_at for the API) that make Silver's dedup deterministic. MERGE on ingest is a Silver decision (next week)."></div>
+  </div>
+  <div class="complete-row"><span class="status"></span><button class="btn primary mark">Mark section complete</button></div>
+</section>
+
+<section class="section" id="s-walk" data-title="Walkthrough: one pipeline">
+  <div class="kicker">End-to-end walkthrough · ~10 min</div>
+  <h2>Ingest an e-commerce company into Bronze</h2>
+  <p>Source A is Postgres <code>orders</code> (we can read its log). Source B is a payments SaaS API (we can't). Same destination rules for both: raw, append-only, replayable. Production names use catalog <code>prod</code>; the lab later uses <code>workspace.dd_de</code>.</p>
+  <div class="stepper" id="stepper"></div>
+  <div id="steps">
+  <div class="step" data-name="1 · A: the change event">
+    <h3>Step 1: What a change looks like when you can read the log</h3>
+    <p>Debezium's Postgres connector reads the WAL through a logical replication slot and emits one event per row change. With the JSON converter and schemas enabled, the event body sits under <code>payload</code>:</p>
+    <div class="codebox"><span class="label">Debezium event (update of order 1003, trimmed)</span><button class="copy">Copy</button><pre><code>{
+  "payload": {
+    "op": "u",
+    "before": {"order_id": 1003, "status": "PENDING", "amount": 310.00},
+    "after":  {"order_id": 1003, "status": "PAID",    "amount": 310.00},
+    "source": {"connector": "postgresql", "db": "shop", "schema": "public",
+               "table": "orders", "lsn": 24023128, "txId": 9871},
+    "ts_ms": 1761210421337
+  }
+}</code></pre></div>
+    <ul>
+      <li><code>op</code>: <code>c</code> create, <code>u</code> update, <code>d</code> delete (only <code>before</code> is set), <code>r</code> snapshot read.</li>
+      <li><code>source.lsn</code>: position in the log. This is the <b>ordering and dedup key</b> next week, so Bronze must keep it.</li>
+      <li>After a delete, Debezium can also emit a <b>tombstone</b> (null value) for Kafka log compaction. It carries no data; filter it.</li>
+    </ul>
+    <div class="callout"><b>Question 1 answered for Source A</b>Change detection is the database's own log: deletes and intermediate updates included, near-zero load on the source. The price: a replication slot to monitor. If the consumer falls behind, the WAL grows on the primary, and if you ever lose the slot you need a re-snapshot.</div>
+  </div>
+  <div class="step" data-name="2 · A: land it (build vs buy)">
+    <h3>Step 2: Land the raw events append-only</h3>
+    <p><b>Build:</b> Debezium → Kafka → Structured Streaming → <code>prod.bronze.orders_cdc</code>. Kafka is the replayable source (offsets + retention), the checkpoint tracks offsets, the Delta sink is transactional: exactly-once <i>into Bronze</i>, at-least-once <i>from Postgres</i> (Debezium can redeliver after a crash).</p>
+    <div class="codebox"><span class="label">PySpark · build option (illustration)</span><button class="copy">Copy</button><pre><code>from pyspark.sql import functions as F
+
+events = (spark.readStream.format("kafka")
+    .option("kafka.bootstrap.servers", dbutils.secrets.get("cdc", "bootstrap"))
+    .option("subscribe", "shop.public.orders")      <span class="c-com"># Debezium topic: prefix.schema.table</span>
+    .option("startingOffsets", "earliest")
+    .load()
+    .where("value IS NOT NULL")                     <span class="c-com"># drop tombstones</span>
+    .select(
+        F.expr("parse_json(CAST(value AS STRING))").alias("event"),   <span class="c-com"># VARIANT: keep the whole envelope</span>
+        "topic", "partition", "offset",
+        F.col("timestamp").alias("kafka_ts"))
+    .select("*",
+        F.expr("event:payload.op::string").alias("op"),
+        F.expr("event:payload.source.lsn::bigint").alias("source_lsn"),
+        F.expr("event:payload.ts_ms::bigint").alias("source_ts_ms"),
+        F.current_timestamp().alias("_ingested_at")))
+
+(events.writeStream
+    .option("checkpointLocation", "/Volumes/prod/raw/ops/checkpoints/orders_cdc")
+    .trigger(availableNow=True)                     <span class="c-com"># schedule it; pay only while it runs</span>
+    .toTable("prod.bronze.orders_cdc"))</code></pre></div>
+    <p>Why VARIANT for the envelope: the <code>before</code>/<code>after</code> images change shape whenever someone runs <code>ALTER TABLE orders ADD COLUMN</code>. VARIANT keeps Bronze tolerant (question 3) without a schema decision on day one, and you still promote <code>op</code>, <code>source_lsn</code> and <code>ts_ms</code> to real columns because Silver will sort and filter on them.</p>
+    <p><b>Buy:</b> Lakeflow Connect's managed PostgreSQL connector does the snapshot + incremental CDC, retries and schema changes for you, and lands into streaming tables. In an interview, say both: "I'd start with the managed connector, and only build Debezium + Kafka if we need fan-out to other consumers or a source it doesn't cover."</p>
+  </div>
+  <div class="step" data-name="3 · B: pull the API">
+    <h3>Step 3: Source B has no log, so you pull with a high-water mark</h3>
+    <p>The payments API exposes <code>GET /v1/payments?updated_since=…&amp;cursor=…&amp;limit=100</code>. The extractor's loop answers question 1 the hard way:</p>
+    <div class="codebox"><span class="label">Python · the extractor's shape</span><button class="copy">Copy</button><pre><code>since  = read_mark("payments_api") - timedelta(minutes=10)   <span class="c-com"># overlap window: ties + late commits</span>
+cursor = None
+while True:
+    resp = get("/v1/payments", updated_since=since, cursor=cursor, limit=100)
+    if resp.status in (429, 503):                             <span class="c-com"># throttled: honour the server</span>
+        sleep(float(resp.headers.get("Retry-After", backoff())) + jitter())
+        continue
+    resp.raise_for_status()
+    write_page_to_volume(resp.json()["data"], run_id, page_no)  <span class="c-com"># raw JSON, unique file name</span>
+    cursor = resp.json().get("next_cursor")                  <span class="c-com"># keyset, not page numbers</span>
+    if not cursor:
+        break
+<span class="c-com"># NOTE: the mark is NOT touched here. Pages are landed, not yet committed to Bronze.</span></code></pre></div>
+    <div class="grid2">
+      <div class="card"><h4>The overlap window costs duplicates</h4><p>Every run re-reads the last 10 minutes on purpose. You trade guaranteed duplicates for not missing a row that committed late or shared a timestamp with the mark. That trade only works because Bronze is append-only and Silver dedups.</p></div>
+      <div class="card"><h4>Deletes are still invisible</h4><p>A payment deleted on the SaaS side never appears in <code>updated_since</code>. Ask for a soft-delete flag or an events endpoint, or schedule a periodic full-key reconciliation. Say this in the interview before they ask.</p></div>
+    </div>
+  </div>
+  <div class="step" data-name="4 · B: land, commit, advance">
+    <h3>Step 4: Auto Loader commits the pages; only then does the mark move</h3>
+    <div class="codebox"><span class="label">PySpark · pages → bronze.payments_raw</span><button class="copy">Copy</button><pre><code>raw = (spark.readStream.format("cloudFiles")
+    .option("cloudFiles.format", "json")
+    .option("cloudFiles.schemaLocation", "/Volumes/prod/raw/ops/schemas/payments_raw")
+    .option("cloudFiles.inferColumnTypes", "true")
+    .option("cloudFiles.schemaHints", "amount DECIMAL(10,2), updated_at TIMESTAMP")
+    .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
+    .load("/Volumes/prod/raw/landing/payments/"))
+
+(raw.withColumn("_source_file", F.col("_metadata.file_path"))
+    .withColumn("_ingested_at", F.current_timestamp())
+    .writeStream
+    .option("checkpointLocation", "/Volumes/prod/raw/ops/checkpoints/payments_raw")
+    .option("mergeSchema", "true")
+    .trigger(availableNow=True)
+    .toTable("prod.bronze.payments_raw")
+    .awaitTermination())
+
+<span class="c-com"># Only after the commit: advance the mark from what Bronze actually holds</span>
+spark.sql("""
+  UPDATE prod.ops.ingest_marks
+  SET last_mark = greatest(last_mark, (SELECT max(updated_at) FROM prod.bronze.payments_raw)),
+      updated_at = current_timestamp()
+  WHERE source = 'payments_api'""")</code></pre></div>
+    <ol>
+      <li><b>Land</b> raw pages (durable, unique names, never overwritten).</li>
+      <li><b>Commit</b> them to Bronze (checkpointed: each file exactly once).</li>
+      <li><b>Advance</b> the mark from the committed data, never from what you <i>intended</i> to write. <code>greatest()</code> stops it ever moving backwards.</li>
+    </ol>
+    <p style="font-size:14px;color:var(--muted)">The lab computes the new mark in Python and passes a literal, which works the same everywhere; the subquery form above is the compact version.</p>
+  </div>
+  <div class="step" data-name="5 · End state">
+    <h3>Step 5: Two Bronze tables that are honest</h3>
+    <div class="tablewrap"><table>
+      <tr><th></th><th><code>bronze.orders_cdc</code></th><th><code>bronze.payments_raw</code></th></tr>
+      <tr><td>Grain</td><td>One row per change event (c/u/d/r)</td><td>One row per API record per extract (overlap ⇒ repeats)</td></tr>
+      <tr><td>Change detection</td><td>WAL (log-based)</td><td><code>updated_at</code> high-water mark + overlap</td></tr>
+      <tr><td>Deletes</td><td>Captured (<code>op = 'd'</code>)</td><td>Invisible unless soft-deleted or reconciled</td></tr>
+      <tr><td>Duplicates</td><td>Possible on connector restart</td><td>Guaranteed (overlap, retries)</td></tr>
+      <tr><td>Dedup key for Silver</td><td><code>source_lsn</code> (+ key)</td><td><code>payment_id</code> + <code>updated_at</code></td></tr>
+      <tr><td>Drift policy</td><td>VARIANT envelope</td><td><code>addNewColumns</code> + <code>_rescued_data</code></td></tr>
+      <tr><td>Replay from</td><td>Kafka (within retention) or a re-snapshot</td><td>The landing volume (keep the files!)</td></tr>
+    </table></div>
+    <p>Both answer the four questions. Neither is "clean", and that's the point: they're <b>complete and replayable</b>. Next week Silver turns them into current-state tables.</p>
+  </div>
+  </div>
+  <div class="stepnav"><button class="btn small" id="prevStep">← Previous</button><button class="btn small primary" id="nextStep">Next →</button></div>
+  <div class="complete-row"><span class="status"></span><button class="btn primary mark">Mark section complete</button></div>
+</section>
+
+<section class="section" id="s-break" data-title="Break the pipeline (a)–(d)">
+  <div class="kicker">Break the pipeline · 4 scenarios · ~15 min</div>
+  <h2>Now break it on purpose</h2>
+  <p>Each card starts in a healthy state. Click <b>💥 Break it</b>, then step through the events and watch the state panel. Before each step, predict what changes. A check follows each scenario.</p>
+
+  <div class="sim" data-sim="a">
+    <h3>(a) The job dies after writing, before advancing the mark</h3>
+    <div class="state"></div><ol class="evlog"></ol><div class="simbtns"></div>
+  </div>
+  <div class="quiz" data-id="q-a" data-correct="1">
+    <div class="q">Check (a): which order of operations is safe for a watermark pull?</div>
+    <div class="opts">
+      <button class="opt">Advance the mark, then write the data (so a retry doesn't duplicate)</button>
+      <button class="opt">Write and commit the data, then advance the mark from what was committed</button>
+      <button class="opt">Do both in parallel to shorten the run</button>
+      <button class="opt">It doesn't matter as long as there's an overlap window</button>
+    </div>
+    <div class="fb" data-right="Right. A crash between the two steps then only causes a re-read (duplicates, fixed by dedup). Advancing first turns the same crash into permanent, silent data loss: the next run starts after rows that never landed." data-wrong="No. Advancing the mark first means a crash after the update loses those rows forever, silently (the overlap is only minutes). Write and commit first; then advance from the committed data. The worst case becomes duplicates, which dedup handles."></div>
+  </div>
+
+  <div class="sim" data-sim="b">
+    <h3>(b) Someone deletes the checkpoint</h3>
+    <div class="state"></div><ol class="evlog"></ol><div class="simbtns"></div>
+  </div>
+  <div class="quiz" data-id="q-b" data-correct="2">
+    <div class="q">Check (b): a <code>foreachBatch</code> stream writes with <code>txnAppId="payments_bronze"</code> and <code>txnVersion=batch_id</code>. The checkpoint is deleted and the stream restarts with a new one, same <code>txnAppId</code>. What happens?</div>
+    <div class="opts">
+      <button class="opt">Everything replays and Bronze gets duplicates</button>
+      <button class="opt">The stream fails with a checkpoint error</button>
+      <button class="opt">Batch IDs restart at 0, Delta treats them as already written, and new batches are silently skipped</button>
+      <button class="opt">Delta detects the new checkpoint and resets the txnAppId automatically</button>
+    </div>
+    <div class="fb" data-right="Right, and it's the nastiest variant: no error, no duplicates, just missing data. The Databricks docs warn that a new checkpoint needs a different txnAppId, because Delta keys idempotency on (txnAppId, txnVersion)." data-wrong="The trap: a new checkpoint restarts batch IDs at 0, and Delta skips any (txnAppId, txnVersion) it has already seen, so new data is silently dropped. The docs say: new checkpoint ⇒ new txnAppId."></div>
+  </div>
+
+  <div class="sim" data-sim="c">
+    <h3>(c) The API adds a field and changes a type</h3>
+    <div class="state"></div><ol class="evlog"></ol><div class="simbtns"></div>
+  </div>
+  <div class="quiz" data-id="q-c" data-correct="0">
+    <div class="q">Check (c): with <code>addNewColumns</code>, the first run after API v2 fails with <code>UnknownFieldException</code>. What's the right production setup?</div>
+    <div class="opts">
+      <button class="opt">Expected behaviour: run it as a Lakeflow Job with retries so the restart picks up the evolved schema, and alert so someone reviews the change before Silver relies on it</button>
+      <button class="opt">Switch to <code>failOnNewColumns</code> so it can't happen again</button>
+      <button class="opt">Delete the schema location so inference starts fresh</button>
+      <button class="opt">Provide an explicit schema; then new fields can't break anything</button>
+    </div>
+    <div class="fb" data-right="Right. The stop is by design (schema already updated, stream restarts with it). Retries make it a non-event; the alert keeps a human in the loop for the contract. An explicit schema without a rescued data column would silently drop the field: the worst option for Bronze." data-wrong="The stop is by design: Auto Loader already wrote the new schema, so a restart (Job retry) continues. failOnNewColumns blocks ingestion until a human acts, deleting the schema location throws away history, and an explicit schema with the default none mode silently drops the new field."></div>
+  </div>
+
+  <div class="sim" data-sim="d">
+    <h3>(d) A 3-month backfill</h3>
+    <div class="state"></div><ol class="evlog"></ol><div class="simbtns"></div>
+  </div>
+  <div class="quiz" data-id="q-d" data-correct="3">
+    <div class="q">Check (d): why write each backfill chunk with <code>mode("overwrite")</code> + <code>replaceWhere</code> instead of <code>append</code>?</div>
+    <div class="opts">
+      <button class="opt">It's faster than append on serverless</button>
+      <button class="opt">It deduplicates rows inside the chunk</button>
+      <button class="opt">It lets chunks run in parallel without conflicts</button>
+      <button class="opt">Re-running a chunk atomically replaces exactly that slice, so retries and accidental reruns can't double it</button>
+    </div>
+    <div class="fb" data-right="Right: the chunk becomes idempotent. One caveat to mention: with an empty extract, REPLACE WHERE can delete the slice, so guard against empty results before writing." data-wrong="The point is idempotency: overwrite + replaceWhere atomically replaces exactly the rows matching the predicate, so rerunning a chunk gives the same result. Append would duplicate. (Guard against empty extracts: REPLACE WHERE with no rows can delete the slice.)"></div>
+  </div>
+  <div class="callout exam"><b>The pattern behind all four</b>Every failure ends in either <b>duplicates</b> (recoverable, by design) or <b>silent loss</b> (unacceptable). Good Bronze design converts every failure mode into the first kind: commit before advancing, keep the landing files, never reuse a <code>txnAppId</code> with a new checkpoint, rescue instead of drop, make chunks idempotent.</div>
+  <div class="complete-row"><span class="status"></span><button class="btn primary mark">Mark section complete</button></div>
+</section>
+
+<section class="section" id="s-gaps" data-title="Tool gaps: Snowflake, dbt, Fivetran">
+  <div class="kicker">Tool gaps · ~5 min</div>
+  <h2>The same four questions in the US modern data stack</h2>
+  <p>US job descriptions often say "Snowflake + dbt + Fivetran". You don't need hands-on time with them to talk about them, as long as you map them to the questions you already answer on Databricks.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Question</th><th>Databricks</th><th>Snowflake</th><th>dbt</th><th>Fivetran / Airbyte</th></tr>
+    <tr><td><b>1 · Detect change</b></td><td>Lakeflow Connect CDC; Auto Loader file discovery; your own watermark</td><td>Snowpipe / <code>COPY INTO</code> for files; <b>Streams</b> for change tracking on tables already in Snowflake</td><td>Doesn't extract. It reads what EL tools landed (<code>sources</code>)</td><td>Managed connectors: log-based CDC for Postgres (logical replication), cursors for SaaS APIs</td></tr>
+    <tr><td><b>2 · No loss, no dupes</b></td><td>Auto Loader checkpoint (files), streaming checkpoint + Delta sink, <code>txnAppId</code></td><td><b>Load metadata</b> per table/pipe: files already loaded are skipped (like Auto Loader's file tracking)</td><td><code>unique</code> / <code>not_null</code> tests on sources; incremental models handle dedup downstream</td><td>At-least-once with dedup on primary key in the destination (Airbyte: "Incremental – Append + Deduped")</td></tr>
+    <tr><td><b>3 · Survive drift</b></td><td><code>addNewColumns</code> / <code>rescue</code>, <code>_rescued_data</code>, VARIANT, type widening</td><td>VARIANT (same <code>:path::type</code> idea), <code>MATCH_BY_COLUMN_NAME</code>, table schema evolution</td><td>Source <b>freshness</b> (<code>loaded_at_field</code>, <code>warn_after</code>/<code>error_after</code>) + tests as the declared contract for raw data</td><td>Automatic schema-change handling (new columns added; policy configurable)</td></tr>
+    <tr><td><b>4 · Replay</b></td><td>Retained landing + fresh checkpoint; <code>replaceWhere</code> chunks; time travel</td><td>Time Travel; <code>COPY INTO … FORCE = TRUE</code> to reload</td><td><code>--full-refresh</code> rebuilds models (not raw data)</td><td>Historical re-sync of a table or connector</td></tr>
+  </table></div>
+  <div class="grid2">
+    <div class="card"><h4>dbt's place, in one line</h4><p>"Fivetran or Airbyte do the EL, dbt does the T." dbt never touches the source system; its <code>sources</code> block is where you <b>declare</b> the raw tables, test them and check freshness. That's the closest thing to a data contract on Bronze in that stack.</p></div>
+    <div class="card"><h4>Buy vs build for 200+ sources</h4><p><b>Buy</b> (Lakeflow Connect, Fivetran, Airbyte) for the standard SaaS and databases: someone else maintains cursors, deletes, rate limits and API changes. <b>Build</b> (Auto Loader, custom extractors, PySpark data sources) for the long tail, unusual APIs, or when per-row pricing gets expensive at volume. Your code factory for scrapers is a "build" answer to a source no vendor covers.</p></div>
+  </div>
+  <div class="quiz" data-id="q-gaps" data-correct="2">
+    <div class="q">Check: an interviewer asks how Snowpipe avoids loading the same file twice. What's the closest Databricks analogy?</div>
+    <div class="opts">
+      <button class="opt">Delta time travel</button>
+      <button class="opt">dbt source freshness</button>
+      <button class="opt">Auto Loader's checkpoint file tracking (and COPY INTO's loaded-file skipping)</button>
+      <button class="opt">Snowflake Streams</button>
+    </div>
+    <div class="fb" data-right="Right. Snowflake keeps load metadata per table/pipe and skips files it has loaded; Auto Loader records ingested files in its checkpoint, and COPY INTO on Databricks skips already-loaded files too. Same idea: file-level idempotency." data-wrong="The match is file-level idempotency: Snowflake's load metadata ↔ Auto Loader's checkpoint (or COPY INTO's loaded-file tracking on Databricks). Streams are change tracking on tables, not file ingestion."></div>
+  </div>
+  <div class="complete-row"><span class="status"></span><button class="btn primary mark">Mark section complete</button></div>
+</section>
+
+<section class="section" id="s-lab" data-title="Hands-on lab (Free Edition)">
+  <div class="kicker">Hands-on · Databricks Free Edition · ~30–40 min</div>
+  <h2>Build Source B for real, then crash it, drift it, backfill it</h2>
+  <p>You'll build the payments path end to end on serverless: a fake API (ties, keyset cursor, 429s) → JSON pages in a UC volume → Auto Loader → <code>payments_raw</code>, plus a Delta watermark table with a 10-minute overlap. Everything lives in <code>workspace.dd_de</code>. Create a notebook <code>dd_de_payments</code>, attach it to serverless, and paste the cells in order.</p>
+  <div class="callout"><b>Free Edition notes</b>Serverless only, so streams must use <code>availableNow</code> (we do). Volumes are the file paths (no DBFS root). If <code>workspace</code> isn't your default catalog name, change <code>CAT</code> in cell 2 and the SQL cells.</div>
+  <div class="labsteps">
+    <div class="lab-step"><h4>Schema, volumes, and the watermark control table</h4>
+      <div class="codebox"><span class="label">SQL</span><button class="copy">Copy</button><pre><code>-- Notebook dd_de_payments · cell 1 (%sql) · serverless
+CREATE SCHEMA IF NOT EXISTS workspace.dd_de;
+CREATE VOLUME IF NOT EXISTS workspace.dd_de.landing;   -- raw API pages (kept: this is your replay source)
+CREATE VOLUME IF NOT EXISTS workspace.dd_de.ops;       -- checkpoints + schema location (stream state)
+
+CREATE TABLE IF NOT EXISTS workspace.dd_de.ingest_marks (
+  source     STRING,
+  last_mark  TIMESTAMP,
+  updated_at TIMESTAMP
+);
+
+INSERT INTO workspace.dd_de.ingest_marks
+SELECT 'payments_api', TIMESTAMP '2026-10-01 00:00:00', current_timestamp()
+WHERE NOT EXISTS (SELECT 1 FROM workspace.dd_de.ingest_marks WHERE source = 'payments_api');
+
+SELECT * FROM workspace.dd_de.ingest_marks;</code></pre></div>
+      <p>The mark lives in a Delta table, not in a notebook variable or a job parameter: it has to survive restarts and be updated in a transaction.</p>
+    </div>
+    <div class="lab-step"><h4>A fake payments API and the extractor</h4>
+      <div class="codebox"><span class="label">Python</span><button class="copy">Copy</button><pre><code># cell 2 (Python): config + a fake payments API with ties, keyset cursor and 429s
+import json, time, random, uuid
+from datetime import datetime, timedelta, timezone
+
+spark.conf.set("spark.sql.session.timeZone", "UTC")   # marks and API times are UTC
+
+CAT, SCH    = "workspace", "dd_de"
+LANDING     = f"/Volumes/{CAT}/{SCH}/landing/payments"
+OPS         = f"/Volumes/{CAT}/{SCH}/ops"
+BRONZE      = f"{CAT}.{SCH}.payments_raw"
+MARKS       = f"{CAT}.{SCH}.ingest_marks"
+OVERLAP_MIN = 10
+
+T0 = datetime(2026, 10, 22, 9, 0, 0)
+def iso(dt):
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+# 10 payments; pairs share an updated_at (ties!): P-002/P-003 at 09:05 ... P-010 at 09:25
+API_ROWS = [{"payment_id": f"P-{i:03d}", "order_id": 1000 + i, "amount": round(50 + 7.5 * i, 2),
+             "status": "CAPTURED", "updated_at": iso(T0 + timedelta(minutes=5 * (i // 2)))}
+            for i in range(1, 11)]
+
+CALLS = {"n": 0}
+def fake_api_get(updated_since, cursor=None, limit=4):
+    """GET /v1/payments?updated_since=...&amp;cursor=...  -&gt; (status, headers, body)"""
+    CALLS["n"] += 1
+    if CALLS["n"] % 3 == 0:                                   # every 3rd call is throttled
+        return 429, {"Retry-After": "2"}, None
+    rows = sorted((r for r in API_ROWS if r["updated_at"] &gt;= updated_since),   # inclusive
+                  key=lambda r: (r["updated_at"], r["payment_id"]))
+    if cursor:                                                 # keyset: resume after the last row seen
+        cu, cid = cursor.split("|")
+        rows = [r for r in rows if (r["updated_at"], r["payment_id"]) &gt; (cu, cid)]
+    page = rows[:limit]
+    nxt = f'{page[-1]["updated_at"]}|{page[-1]["payment_id"]}' if len(rows) &gt; limit else None
+    return 200, {}, {"data": page, "next_cursor": nxt}
+
+def get_with_backoff(since, cursor, max_tries=6):
+    for attempt in range(max_tries):
+        status, headers, body = fake_api_get(since, cursor)
+        if status == 200:
+            return body
+        wait = float(headers.get("Retry-After", 2 ** attempt)) + random.uniform(0, 0.5)   # honour + jitter
+        print(f"  HTTP {status}: sleeping {wait:.1f}s (attempt {attempt + 1})")
+        time.sleep(wait)
+    raise RuntimeError("API still throttling after retries")
+
+def extract(since):
+    """Pull every page since `since` and land each page as a new, uniquely named JSON-lines file."""
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:6]
+    cursor, page_no, n = None, 0, 0
+    while True:
+        body = get_with_backoff(since, cursor)
+        if body["data"]:
+            page_no += 1
+            dbutils.fs.put(f"{LANDING}/{run_id}_page_{page_no:03d}.json",
+                           "\n".join(json.dumps(r) for r in body["data"]), overwrite=False)
+            n += len(body["data"])
+        cursor = body["next_cursor"]
+        if not cursor:
+            break
+    print(f"extract since {since}: {n} rows in {page_no} file(s), run {run_id}")
+    return n</code></pre></div>
+      <p>Read the API before you run anything: the filter is <i>inclusive</i> (<code>&gt;=</code>), pages hold 4 rows, the cursor is <code>updated_at|payment_id</code>, and every third call gets a 429. Each page lands as a new file, never overwriting one, so the landing volume becomes your replay log.</p>
+    </div>
+    <div class="lab-step"><h4>Land → commit → advance, then run 1</h4>
+      <div class="codebox"><span class="label">Python</span><button class="copy">Copy</button><pre><code># cell 3 (Python): mark -&gt; Bronze (Auto Loader) -&gt; advance mark AFTER commit
+from pyspark.sql import functions as F
+
+def read_since():
+    return spark.sql(f"""
+        SELECT date_format(last_mark - INTERVAL {OVERLAP_MIN} MINUTES, "yyyy-MM-dd'T'HH:mm:ss'Z'") AS s
+        FROM {MARKS} WHERE source = 'payments_api'""").first()["s"]
+
+def load_bronze():
+    raw = (spark.readStream.format("cloudFiles")
+        .option("cloudFiles.format", "json")
+        .option("cloudFiles.schemaLocation", f"{OPS}/schemas/payments_raw")
+        .option("cloudFiles.inferColumnTypes", "true")
+        .option("cloudFiles.schemaHints", "amount DECIMAL(10,2), updated_at TIMESTAMP")
+        .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
+        .load(LANDING))
+    q = (raw.withColumn("_source_file", F.col("_metadata.file_path"))
+            .withColumn("_ingested_at", F.current_timestamp())
+            .withColumn("_chunk", F.lit("incremental"))
+            .writeStream
+            .option("checkpointLocation", f"{OPS}/checkpoints/payments_raw")
+            .option("mergeSchema", "true")
+            .trigger(availableNow=True)
+            .toTable(BRONZE))
+    q.awaitTermination()
+    print("bronze rows:", spark.table(BRONZE).count())
+
+def advance_mark():
+    new_mark = spark.sql(f"""
+        SELECT date_format(max(updated_at), 'yyyy-MM-dd HH:mm:ss') AS m
+        FROM {BRONZE} WHERE _chunk = 'incremental'""").first()["m"]
+    spark.sql(f"""
+        UPDATE {MARKS}
+        SET last_mark = greatest(last_mark, TIMESTAMP '{new_mark}'), updated_at = current_timestamp()
+        WHERE source = 'payments_api'""")
+    print("mark is now", spark.table(MARKS).where("source = 'payments_api'").first()["last_mark"])
+
+def run_cycle(advance=True):
+    since = read_since()
+    extract(since)          # 1. land
+    load_bronze()           # 2. commit
+    if advance:
+        advance_mark()      # 3. advance, only after the commit
+    else:
+        print("💥 simulated crash: pages committed to Bronze, mark NOT advanced")
+
+run_cycle()                 # run 1: expect 10 rows, mark 2026-10-22 09:25:00</code></pre></div>
+      <p><b>Expect:</b> one "HTTP 429: sleeping…" line, 10 rows in 3 files, <code>bronze rows: 10</code>, mark <code>2026-10-22 09:25:00</code>. Run <code>load_bronze()</code> once more by itself: still 10 rows (the checkpoint already knows those files).</p>
+    </div>
+    <div class="lab-step"><h4>The source changes, the job crashes (scenario a), the retry recovers</h4>
+      <div class="codebox"><span class="label">Python</span><button class="copy">Copy</button><pre><code># cell 4 (Python): the source moves on (safe to re-run)
+if not any(r["payment_id"] == "P-011" for r in API_ROWS):
+    for r in API_ROWS:
+        if r["payment_id"] == "P-003":                       # refund: a real update
+            r.update(status="REFUNDED", updated_at=iso(T0 + timedelta(minutes=40)))
+    API_ROWS.append({"payment_id": "P-011", "order_id": 1011, "amount": 99.90,   # late commit:
+                     "status": "CAPTURED", "updated_at": iso(T0 + timedelta(minutes=22))})  # 09:22 &lt; mark!
+print(len(API_ROWS), "rows at the source")
+
+run_cycle(advance=False)   # run 2: crash before the mark moves -&gt; expect +7 (17 total)
+run_cycle()                # run 3: the retry re-reads the same window -&gt; +7 (24), mark 09:40</code></pre></div>
+      <p><b>Expect:</b> run 2 extracts 7 rows (17 total) and leaves the mark at 09:25. Run 3 re-reads the same window, +7 (24 total), and the mark moves to 09:40.</p>
+      <div class="callout warn"><b>Why the overlap mattered</b><code>P-011</code> committed late with <code>updated_at = 09:22</code>, which is <i>before</i> the 09:25 mark. With <code>OVERLAP_MIN = 0</code>, run 2 would have asked for <code>&gt;= 09:25</code>, got only P-003 and P-010, and P-011 would be lost for good. The overlap traded 5 duplicates per run for not losing that row.</div>
+    </div>
+    <div class="lab-step"><h4>Dedup proof: duplicates are deterministic</h4>
+      <div class="codebox"><span class="label">SQL</span><button class="copy">Copy</button><pre><code>-- cell 5 (%sql): duplicates are expected in Bronze; prove they're deterministic
+SELECT count(*)                                 AS bronze_rows,      -- 24
+       count(DISTINCT payment_id, updated_at)   AS distinct_versions,-- 12
+       count(DISTINCT payment_id)               AS payments          -- 11
+FROM workspace.dd_de.payments_raw
+WHERE _chunk = 'incremental';
+
+-- one row per (payment_id, updated_at) version: the shape Silver will start from
+SELECT payment_id, status, amount, updated_at, _source_file
+FROM workspace.dd_de.payments_raw
+WHERE _chunk = 'incremental'
+QUALIFY row_number() OVER (PARTITION BY payment_id, updated_at ORDER BY _ingested_at) = 1
+ORDER BY payment_id, updated_at;</code></pre></div>
+      <p><b>Expect:</b> 24 / 12 / 11, and the second query returns 12 rows (P-003 appears twice: CAPTURED at 09:05 and REFUNDED at 09:40). Picking the <i>latest</i> version per payment is a Silver job for next week; here you only show the duplicates are harmless.</p>
+    </div>
+    <div class="lab-step"><h4>Schema drift (scenario c): a new field and a bad type</h4>
+      <div class="codebox"><span class="label">Python</span><button class="copy">Copy</button><pre><code># cell 6 (Python): API v2 adds `installments` and sends amount as a localized string
+dbutils.fs.put(f"{LANDING}/manual_v2_001.json", json.dumps({
+    "payment_id": "P-012", "order_id": 1012, "amount": "12,50",   # bad type for DECIMAL(10,2)
+    "status": "CAPTURED", "installments": 3,                       # new field
+    "updated_at": iso(T0 + timedelta(minutes=45))}), overwrite=True)
+
+try:
+    load_bronze()                       # expect: stops with UnknownFieldException (by design)
+except Exception as e:
+    print("Stopped by design -&gt;", str(e).splitlines()[0][:250])
+
+load_bronze()                           # the "retry": resumes with the evolved schema -&gt; 25 rows</code></pre></div>
+      <div class="codebox"><span class="label">SQL</span><button class="copy">Copy</button><pre><code>-- cell 7 (%sql): nothing was lost
+SELECT payment_id, amount, installments,
+       _rescued_data:amount::string AS rescued_amount,
+       _rescued_data
+FROM workspace.dd_de.payments_raw
+WHERE payment_id = 'P-012';</code></pre></div>
+      <p><b>Expect:</b> the first call prints an <code>UnknownFieldException</code> message about <code>installments</code>. The second succeeds (25 rows). P-012 has <code>installments = 3</code>, <code>amount = NULL</code>, and <code>_rescued_data</code> holds <code>"amount":"12,50"</code> plus <code>_file_path</code>. Nothing was dropped; Silver decides how to parse "12,50".</p>
+    </div>
+    <div class="lab-step"><h4>Optional (b): delete the checkpoint</h4>
+      <div class="codebox"><span class="label">Python</span><button class="copy">Copy</button><pre><code># Optional (b): delete the checkpoint and watch a full replay
+dbutils.fs.rm(f"{OPS}/checkpoints/payments_raw", True)
+load_bronze()                     # all 8 landing files again -&gt; 50 rows (every row twice)
+
+# Recover: rebuild Bronze from the retained landing files with a fresh checkpoint
+spark.sql(f"DROP TABLE {BRONZE}")
+dbutils.fs.rm(f"{OPS}/checkpoints/payments_raw", True)
+load_bronze()                     # back to 25 rows</code></pre></div>
+      <p>The first <code>load_bronze()</code> doubles Bronze to 50 rows: a new checkpoint has no memory of the 8 files. The rebuild works only because the landing files were kept. In production you'd rebuild into a new table and swap, or start the new stream with <code>cloudFiles.includeExistingFiles = false</code> (evaluated only on the first start) plus a targeted backfill for the gap. Do this step <b>before</b> the backfill, because the DROP would remove backfilled rows too.</p>
+    </div>
+    <div class="lab-step"><h4>Optional (d): a 3-month backfill, one idempotent chunk per month</h4>
+      <p>Create a second notebook <code>dd_de_backfill_chunk</code>:</p>
+      <div class="codebox"><span class="label">Python</span><button class="copy">Copy</button><pre><code># Notebook dd_de_backfill_chunk (Python) · one month per run, idempotent
+import calendar
+from pyspark.sql import functions as F
+
+dbutils.widgets.text("chunk", "2026-07")          # job parameter / For each input: 'YYYY-MM'
+chunk = dbutils.widgets.get("chunk")
+spark.conf.set("spark.sql.session.timeZone", "UTC")
+BRONZE = "workspace.dd_de.payments_raw"
+
+# Stand-in for "call the API for this month": deterministic rows, every 3rd day
+y, m = map(int, chunk.split("-"))
+rows = [(f"H-{chunk}-{d:02d}", 5000 + d, 10.0 * d, "CAPTURED", f"{chunk}-{d:02d} 12:00:00")
+        for d in range(1, calendar.monthrange(y, m)[1] + 1, 3)]
+if not rows:   # REPLACE WHERE with an empty source would delete the slice
+    raise ValueError(f"Empty extract for {chunk}: refusing to overwrite")
+
+df = (spark.createDataFrame(rows, "payment_id STRING, order_id BIGINT, amount DOUBLE, status STRING, updated_at STRING")
+        .withColumn("updated_at", F.to_timestamp("updated_at"))
+        .withColumn("_source_file", F.lit(f"backfill://payments/{chunk}"))
+        .withColumn("_ingested_at", F.current_timestamp())
+        .withColumn("_chunk", F.lit(chunk)))
+
+# Align to Bronze's (evolved) schema: same names and types, typed NULLs for the rest
+target = spark.table(BRONZE).schema
+df = df.select([(F.col(f.name) if f.name in df.columns else F.lit(None)).cast(f.dataType).alias(f.name)
+                for f in target])
+
+(df.write.mode("overwrite")
+   .option("replaceWhere", f"_chunk = '{chunk}'")   # atomically replace exactly this month
+   .saveAsTable(BRONZE))
+
+display(spark.sql(f"SELECT _chunk, count(*) AS n FROM {BRONZE} GROUP BY _chunk ORDER BY _chunk"))</code></pre></div>
+      <p>Run it by hand with <code>chunk = 2026-07</code> twice: still 11 rows for that month, never 22. Then let a job fan out the months with a <b>For each</b> task (UI: Jobs &amp; Pipelines → Create → Job → add a <i>For each</i> task, inputs <code>["2026-07","2026-08","2026-09"]</code>, nested notebook task with parameter <code>chunk = {{input}}</code>), or with the CLI:</p>
+      <div class="codebox"><span class="label">backfill_job.json</span><button class="copy">Copy</button><pre><code>{
+  "name": "dd_de_backfill_payments",
+  "tasks": [
+    {
+      "task_key": "backfill_months",
+      "for_each_task": {
+        "inputs": "[\"2026-07\", \"2026-08\", \"2026-09\"]",
+        "concurrency": 1,
+        "task": {
+          "task_key": "backfill_months_iteration",
+          "notebook_task": {
+            "notebook_path": "/Users/&lt;your-email&gt;/dd_de_backfill_chunk",
+            "base_parameters": { "chunk": "{{input}}" }
+          }
+        }
+      }
+    }
+  ]
+}</code></pre></div>
+      <div class="codebox"><span class="label">Shell · Databricks CLI</span><button class="copy">Copy</button><pre><code># no cluster spec -&gt; the tasks run on serverless (the only compute on Free Edition)
+databricks jobs create --json @backfill_job.json      # prints {"job_id": ...}
+databricks jobs run-now &lt;job_id&gt;</code></pre></div>
+      <p><b>Expect:</b> <code>_chunk</code> counts 2026-07 = 11, 2026-08 = 11, 2026-09 = 10, incremental = 25. Re-run the whole job: identical counts. Concurrency stays at 1 because parallel overwrites of the same unpartitioned table can hit write conflicts; raise it only after testing.</p>
+    </div>
+    <div class="lab-step"><h4>Clean up (optional)</h4>
+      <div class="codebox"><span class="label">SQL</span><button class="copy">Copy</button><pre><code>-- when you're done (drops the tables, volumes and their files)
+DROP SCHEMA IF EXISTS workspace.dd_de CASCADE;</code></pre></div>
+    </div>
+  </div>
+  <div id="labChecks">
+    <label class="check"><input type="checkbox" data-id="l1"> Run 1: one 429 retried, 10 rows, mark at 09:25; a rerun of <code>load_bronze()</code> added 0</label>
+    <label class="check"><input type="checkbox" data-id="l2"> Crash + retry gave 17 → 24 rows, and I can explain why P-011 needed the overlap</label>
+    <label class="check"><input type="checkbox" data-id="l3"> Dedup query: 24 rows, 12 versions, 11 payments</label>
+    <label class="check"><input type="checkbox" data-id="l4"> Drift: UnknownFieldException once, then installments column + "12,50" in <code>_rescued_data</code></label>
+    <label class="check"><input type="checkbox" data-id="l5"> (Optional) Deleted checkpoint → 50 rows; rebuilt from landing → 25</label>
+    <label class="check"><input type="checkbox" data-id="l6"> (Optional) Backfill: rerunning a month or the whole For each job didn't change the counts</label>
+  </div>
+  <div class="complete-row"><span class="status"></span><button class="btn primary mark">Mark section complete</button></div>
+</section>
+
+<section class="section" id="s-interview" data-title="Interview questions">
+  <div class="kicker">Interview practice · ~10 min</div>
+  <h2>Senior-style questions (answer out loud first)</h2>
+  <p>Give yourself ~2 minutes per question, in English, then reveal. Senior framing: <b>failure modes first</b>, then cost and ownership, then data contracts with the producer teams.</p>
+  <details><summary>1. "We have 50 tables in an OLTP Postgres and 20 SaaS APIs. Design ingestion into the lakehouse."</summary>
+    <p><b>Clarify first:</b> freshness SLA per source, volumes and change rates, whether deletes matter, who owns each source, budget, and whether other teams need the change stream too.</p>
+    <p><b>Postgres (50 tables):</b> log-based CDC, never polling 50 tables: it catches deletes and doesn't load the primary. I'd start with a managed connector (Lakeflow Connect's PostgreSQL connector, or Fivetran) and only build Debezium + Kafka if we need fan-out to other consumers or sub-minute latency. I'd ask the DBAs for a replica or replication slot, and monitor slot lag, because a stuck consumer makes the WAL grow on the primary. Bronze gets one append-only table per source table with <code>op</code>, the LSN and the commit timestamp.</p>
+    <p><b>SaaS APIs (20):</b> buy for the common ones (Salesforce, Stripe, HubSpot…); build the rest with one shared extractor framework: a high-water mark in a Delta control table, an overlap window, cursor pagination, 429 handling with <code>Retry-After</code> and jitter, raw pages landed in a volume, Auto Loader into Bronze, and the mark advanced only after commit. Plus a periodic reconciliation for sources that hide deletes.</p>
+    <p><b>Delivery and drift:</b> everything is at-least-once, so Bronze is append-only with dedup keys and Silver dedups. Bronze is tolerant (<code>addNewColumns</code>, <code>_rescued_data</code>, VARIANT); Silver enforces contracts with expectations.</p>
+    <p><b>Operations:</b> Lakeflow Jobs with retries and alerts, <code>availableNow</code> on a schedule to control cost, retained landing data for replay, parameterized chunked backfills, freshness and row-count monitoring per source, and named owners and data contracts with the producer teams: schema changes announced, not discovered.</p>
+    <p class="time">Shape to remember: clarify → split by source type → buy vs build → delivery + drift → operate.</p>
+  </details>
+  <details><summary>2. "Exactly-once: is it real?"</summary>
+    <p>"Yes, but only as an end-to-end property of a specific pipeline, not of a transport. Networks and producers retry, so delivery is at-least-once in practice. You get <i>effectively</i> exactly-once results when three things line up: a <b>replayable source</b> (Kafka offsets, files on storage), <b>tracked progress</b> (a checkpoint), and a <b>transactional or idempotent sink</b>."</p>
+    <p>"On Databricks, Structured Streaming with a checkpoint writing to Delta gives exactly-once into that table. Auto Loader tracks each file once. With <code>foreachBatch</code> you add idempotency yourself with <code>txnAppId</code>/<code>txnVersion</code>, or a MERGE keyed on the record. But the guarantee stops at the boundary: if Debezium redelivers after a crash, Bronze correctly stores the duplicate, and Silver removes it by key and LSN. And if someone deletes the checkpoint, the guarantee is gone: you replay everything, or with a reused <code>txnAppId</code> you silently skip data."</p>
+    <p>"So my design rule is: assume at-least-once everywhere and make every write idempotent."</p>
+  </details>
+  <details><summary>3. "Your watermark-based pipeline is missing rows. How do you debug it?"</summary>
+    <p>Check the usual suspects in order. (1) <b>Mark advanced before the write committed</b>, then a crash: look at the control table history (<code>DESCRIBE HISTORY</code>) against the Bronze commits. (2) <b>Ties and late commits</b>: a strict <code>&gt;</code> filter or no overlap drops rows sharing the mark's timestamp, or transactions that committed later with an older <code>updated_at</code>. (3) <b>Time zones</b>: the mark stored in local time, compared with a UTC column. (4) <b>Untrusted column</b>: some writers (bulk jobs, triggers off) don't touch <code>updated_at</code>. (5) <b>Offset pagination</b> shifting during the read. (6) <b>Deletes</b>, which a watermark never sees.</p>
+    <p>Prove it by comparing keys: a full key extract from the source vs Bronze for a window. Then fix the cause, and backfill the gap with a chunked, idempotent run.</p>
+  </details>
+  <details><summary>4. "Someone deleted a streaming checkpoint in production. What happens, and what do you do?"</summary>
+    <p>On restart the stream has no memory: Auto Loader re-reads every file still in the source path and Bronze gets a full duplicate copy. If the sink is <code>foreachBatch</code> with <code>txnAppId</code>, it's worse: batch IDs restart at 0, Delta treats them as already written, and new data is <b>silently skipped</b>. That's why the docs say a new checkpoint needs a new <code>txnAppId</code>.</p>
+    <p><b>Recovery:</b> stop the job. Either rebuild Bronze from retained landing data into a new table with a fresh checkpoint and swap it in, or restore the table to the version before the replay (time travel) and restart with <code>includeExistingFiles = false</code> plus a targeted backfill for the gap. <b>Prevention:</b> checkpoints in a dedicated volume that only the job's service principal can write, no lifecycle rules on it, and a runbook.</p>
+  </details>
+  <div class="phr">
+    <div class="card"><h4>Phrases that sound senior</h4>
+      <p>"<b>The trade-off here is</b> duplicates versus missed rows. I'll take duplicates, because dedup is cheap and a missing row is invisible."</p>
+      <p>"<b>I'd start with</b> a managed connector, <b>and only move to</b> Debezium and Kafka <b>if</b> other teams need the change stream."</p>
+      <p>"<b>The failure mode I'm designing for is</b> a crash between the write and the mark update."</p>
+      <p>"<b>Before I pick a tool, I'd want to know</b> the freshness SLA and whether deletes matter."</p>
+    </div>
+    <div class="card"><h4>English traps to avoid</h4>
+      <p>Say "<b>at-least-once</b>" and "<b>exactly-once</b>" (hyphenated), not "one time only".</p>
+      <p>"The data <b>landed</b> / was <b>ingested</b>", not "the data <i>entered</i>".</p>
+      <p>"We <b>backfill</b> three months", not "we <i>reprocess the past</i>".</p>
+      <p>Say "<b>it depends on</b> X", then commit to an answer for the stated X. Don't stop at "it depends".</p>
+    </div>
+  </div>
+  <div class="complete-row"><span class="status"></span><button class="btn primary mark">Mark section complete</button></div>
+</section>
+
+<section class="section" id="s-deeper" data-title="What's next + go deeper">
+  <div class="kicker">What's next · go deeper · ~3 min</div>
+  <h2>Next week: Bronze → Silver</h2>
+  <div class="teaser"><b>Teaser · week of Oct 26 – Nov 1</b> You now have two honest, duplicate-carrying Bronze tables. Next week turns them into current-state tables:
+    <ul>
+      <li><b>MERGE INTO</b>: apply the latest version per key (your <code>QUALIFY</code> query becomes the source).</li>
+      <li><b>SCD Type 2</b>: keep history instead of overwriting (P-003's CAPTURED → REFUNDED becomes two rows with validity ranges).</li>
+      <li><b>Delta Change Data Feed</b>: Silver can emit its own changes for downstream consumers.</li>
+      <li><b>AUTO CDC / APPLY CHANGES</b>: the declarative way to apply <code>orders_cdc</code> (ordered by LSN, deletes handled) in Lakeflow Declarative Pipelines.</li>
+    </ul></div>
+  <h3>Official docs (every link checked on 2026-10-23)</h3>
+  <ul class="links">
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/ingestion/lakeflow-connect/" target="_blank" rel="noopener">What is Lakeflow Connect?</a> <span class="tag">managed connectors</span></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/ingestion/lakeflow-connect/postgresql" target="_blank" rel="noopener">Lakeflow Connect: PostgreSQL connector</a> <span class="tag">log-based CDC, buy option</span></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/ingestion/cloud-object-storage/auto-loader/schema" target="_blank" rel="noopener">Auto Loader schema inference and evolution</a> <span class="tag">addNewColumns, _rescued_data</span></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/spark/api-options" target="_blank" rel="noopener">Spark API options reference (Auto Loader cloudFiles options)</a> <span class="tag">schemaHints, includeExistingFiles</span></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/ingestion/file-metadata-column" target="_blank" rel="noopener">File metadata column (_metadata)</a></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/structured-streaming/checkpoints" target="_blank" rel="noopener">Structured Streaming checkpoints</a></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/structured-streaming/delta-lake" target="_blank" rel="noopener">Delta table streaming reads and writes</a> <span class="tag">idempotent writes, txnAppId</span></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/structured-streaming/foreach" target="_blank" rel="noopener">foreachBatch</a></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/structured-streaming/triggers" target="_blank" rel="noopener">Trigger intervals (AvailableNow)</a></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/delta/selective-overwrite" target="_blank" rel="noopener">Selective overwrite (replaceWhere)</a> <span class="tag">chunked backfills</span></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/jobs/parameters" target="_blank" rel="noopener">Job parameters</a></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/jobs/tasks/for-each" target="_blank" rel="noopener">For each task</a></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/tables/features/type-widening" target="_blank" rel="noopener">Type widening</a></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/semi-structured/variant" target="_blank" rel="noopener">VARIANT data type</a></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/pyspark/datasources" target="_blank" rel="noopener">PySpark custom data sources</a> <span class="tag">build option for APIs</span></li>
+    <li><span class="tag">Databricks</span> <a href="https://docs.databricks.com/aws/en/getting-started/free-edition-limitations" target="_blank" rel="noopener">Free Edition limitations</a></li>
+    <li><span class="tag">CDC + HTTP</span> <a href="https://debezium.io/documentation/reference/stable/connectors/postgresql.html" target="_blank" rel="noopener">Debezium connector for PostgreSQL</a> <span class="tag">event shape, snapshots, slots</span></li>
+    <li><span class="tag">CDC + HTTP</span> <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Retry-After" target="_blank" rel="noopener">Retry-After header (MDN)</a></li>
+    <li><span class="tag">CDC + HTTP</span> <a href="https://www.rfc-editor.org/info/rfc6585/" target="_blank" rel="noopener">RFC 6585 (HTTP 429 Too Many Requests)</a></li>
+    <li><span class="tag">US stack</span> <a href="https://docs.snowflake.com/en/user-guide/data-load-snowpipe-intro" target="_blank" rel="noopener">Snowpipe introduction</a> <span class="tag">load metadata</span></li>
+    <li><span class="tag">US stack</span> <a href="https://docs.snowflake.com/en/sql-reference/sql/copy-into-table" target="_blank" rel="noopener">Snowflake COPY INTO &lt;table&gt;</a></li>
+    <li><span class="tag">US stack</span> <a href="https://docs.snowflake.com/en/user-guide/streams-intro" target="_blank" rel="noopener">Snowflake Streams (change tracking)</a></li>
+    <li><span class="tag">US stack</span> <a href="https://docs.snowflake.com/en/sql-reference/data-types-semistructured" target="_blank" rel="noopener">Snowflake semi-structured types (VARIANT)</a></li>
+    <li><span class="tag">US stack</span> <a href="https://docs.getdbt.com/docs/build/sources" target="_blank" rel="noopener">dbt sources</a></li>
+    <li><span class="tag">US stack</span> <a href="https://docs.getdbt.com/docs/deploy/source-freshness" target="_blank" rel="noopener">dbt source freshness</a></li>
+    <li><span class="tag">US stack</span> <a href="https://fivetran.com/docs/connectors/databases/postgresql" target="_blank" rel="noopener">Fivetran PostgreSQL connector</a></li>
+    <li><span class="tag">US stack</span> <a href="https://docs.airbyte.com/platform/using-airbyte/core-concepts/sync-modes/incremental-append-deduped" target="_blank" rel="noopener">Airbyte: Incremental Append + Deduped</a></li>
+  </ul>
+  <div class="callout ok"><b>One thing to take into Monday</b>For every source, be able to say the four answers in one breath: "WAL CDC; at-least-once into append-only Bronze keyed by LSN; VARIANT envelope; replay from Kafka within 7 days or re-snapshot." That sentence is most of a senior design answer.</div>
+  <div class="complete-row"><span class="status"></span><button class="btn primary mark">Mark section complete</button></div>
+</section>
+
+<p style="text-align:center;color:var(--muted);font-size:13px">Connection deep dive · Data Engineering · Fri 2026-10-23 · built from NJ in Dollar's brief for Mario Carvalho</p>
+</main>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var KEY = "mario.deepdive.2026-10-23.de.reliable-bronze-ingestion.v1";
+  function fresh(){ return {done:{}, quiz:{}, labs:{}, sim:{}, step:0}; }
+  var state = fresh();
+  try {
+    var raw = localStorage.getItem(KEY);
+    if (raw) { var p = JSON.parse(raw); if (p && typeof p === "object") { var f = fresh(); Object.keys(f).forEach(function(k){ if (p[k] !== undefined) state[k] = p[k]; }); } }
+  } catch (e) {}
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+  function $(id){ return document.getElementById(id); }
+  function each(list, fn){ Array.prototype.forEach.call(list, fn); }
+
+  /* ---------- sections, nav, progress ---------- */
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.section"));
+  var navList = $("navList");
+  sections.forEach(function(sec, i){
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = "#" + sec.id;
+    a.innerHTML = '<span class="dot"></span><span>' + (i + 1) + ". " + sec.getAttribute("data-title") + "</span>";
+    a.addEventListener("click", function(){ $("sidebar").classList.remove("open"); });
+    li.appendChild(a); navList.appendChild(li);
+    sec._nav = a;
+    var btn = sec.querySelector(".mark");
+    if (btn) btn.addEventListener("click", function(){
+      if (state.done[sec.id]) { delete state.done[sec.id]; }
+      else {
+        state.done[sec.id] = new Date().toISOString();
+        var next = sections[i + 1];
+        if (next && next.scrollIntoView) setTimeout(function(){ next.scrollIntoView({behavior:"smooth"}); }, 150);
+      }
+      save(); render();
+    });
+  });
+  function render(){
+    var n = 0;
+    sections.forEach(function(sec){
+      var d = !!state.done[sec.id];
+      if (d) n++;
+      sec._nav.classList.toggle("done", d);
+      var btn = sec.querySelector(".mark"), st = sec.querySelector(".complete-row .status");
+      if (btn) { btn.textContent = d ? "✓ Completed (click to undo)" : "Mark section complete"; btn.classList.toggle("ok", d); btn.classList.toggle("primary", !d); }
+      if (st) st.textContent = d ? "Completed " + new Date(state.done[sec.id]).toLocaleString() : "";
+    });
+    var pct = sections.length ? Math.round(100 * n / sections.length) : 0;
+    $("bar").style.width = pct + "%";
+    $("barMobile").style.width = pct + "%";
+    $("pct").textContent = pct + "%";
+    $("pctMobile").textContent = pct + "%";
+    $("progMeta").textContent = n + " of " + sections.length + " sections complete" + (n === sections.length ? " · done!" : "");
+  }
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if (en.isIntersecting) { sections.forEach(function(s){ s._nav.classList.remove("active"); }); en.target._nav.classList.add("active"); }
+      });
+    }, {rootMargin:"-40% 0px -55% 0px"});
+    sections.forEach(function(s){ io.observe(s); });
+  }
+
+  /* ---------- theme, menu, copy ---------- */
+  var THEME_KEY = KEY + ":theme";
+  var root = document.documentElement;
+  try { var t = localStorage.getItem(THEME_KEY); if (t) root.setAttribute("data-theme", t); } catch (e) {}
+  $("themeBtn").addEventListener("click", function(){
+    var cur = root.getAttribute("data-theme");
+    if (!cur) cur = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+    var nx = cur === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", nx);
+    try { localStorage.setItem(THEME_KEY, nx); } catch (e) {}
+  });
+  $("menuBtn").addEventListener("click", function(){ $("sidebar").classList.toggle("open"); });
+  each(document.querySelectorAll(".codebox .copy"), function(b){
+    b.addEventListener("click", function(){
+      var text = b.parentNode.querySelector("pre").innerText || b.parentNode.querySelector("pre").textContent;
+      function ok(){ b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy"; }, 1400); }
+      function fallback(){
+        var ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); ok(); } catch (e) { b.textContent = "Select + Ctrl+C"; }
+        document.body.removeChild(ta);
+      }
+      if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(ok, fallback); } else { fallback(); }
+    });
+  });
+
+  /* ---------- quizzes (persisted) ---------- */
+  var quizzes = Array.prototype.slice.call(document.querySelectorAll(".quiz"));
+  function answerQuiz(q, idx){
+    var correct = parseInt(q.getAttribute("data-correct"), 10);
+    var opts = q.querySelectorAll(".opt"), fb = q.querySelector(".fb");
+    each(opts, function(x){ x.classList.remove("right", "wrong"); });
+    if (!opts[idx]) return;
+    if (idx === correct) { opts[idx].classList.add("right"); fb.textContent = "✓ " + fb.getAttribute("data-right"); }
+    else { opts[idx].classList.add("wrong"); opts[correct].classList.add("right"); fb.textContent = "✗ " + fb.getAttribute("data-wrong"); }
+    fb.classList.add("show");
+  }
+  function clearQuiz(q){
+    each(q.querySelectorAll(".opt"), function(x){ x.classList.remove("right", "wrong"); });
+    var fb = q.querySelector(".fb"); fb.textContent = ""; fb.classList.remove("show");
+  }
+  quizzes.forEach(function(q){
+    var id = q.getAttribute("data-id");
+    each(q.querySelectorAll(".opt"), function(o, idx){
+      o.addEventListener("click", function(){ state.quiz[id] = idx; save(); answerQuiz(q, idx); });
+    });
+    if (state.quiz[id] !== undefined) answerQuiz(q, state.quiz[id]);
+  });
+
+  /* ---------- connection map ---------- */
+  var MAP = {
+    pg: ["Postgres orders (question 1: detect change)", "The OLTP system of record. Hard deletes, many updates per order, and a DBA who cares about load. Its WAL already records every change, so read the log rather than polling the table. Ask for a replica or a dedicated replication slot."],
+    api: ["Payments REST API (question 1, the hard way)", "A SaaS you can't read the log of. You get <code>updated_since</code>, a cursor, and rate limits. Deletes are invisible unless the vendor offers soft deletes or an events endpoint. Plan a periodic full-key reconciliation."],
+    logcdc: ["Log-based CDC", "Debezium (self-managed, into Kafka) or Lakeflow Connect's PostgreSQL connector (managed). One event per row change with op c/u/d/r, before/after and the LSN. Classic mistake: forgetting the replication slot. A stalled consumer makes the WAL grow until the primary's disk fills."],
+    hwm: ["High-water mark + overlap", "since = last_mark − overlap, with an inclusive filter. The overlap catches ties at the mark and late commits (rows that commit after the extract but carry an older updated_at). Classic mistake: a strict &gt; filter with no overlap, which loses rows quietly."],
+    pager: ["Cursor pagination + backoff", "A keyset cursor (updated_at, id) resumes exactly after the last row seen; page numbers shift when data changes mid-read. On 429/503, honour Retry-After, otherwise use exponential backoff with jitter, and cap the retries."],
+    kafka: ["Kafka topic (question 2: replayable source)", "Offsets plus retention make the source replayable, the first ingredient of effectively exactly-once. Retention is your replay window for Source A: past it, the recovery is a re-snapshot. Tombstones (null values) follow deletes for log compaction; filter them."],
+    loader: ["Streaming + checkpoint (question 2)", "The checkpoint records Kafka offsets or the files Auto Loader has ingested, so each event or file is committed to Delta once. Trigger.AvailableNow processes what's there, then stops: scheduled batch cost, streaming guarantees. Never share or delete a checkpoint, and pair any new checkpoint with a new txnAppId in foreachBatch."],
+    schema: ["Schema policy (question 3)", "Tolerant Bronze: addNewColumns (stops once with UnknownFieldException, a retry continues) or rescue (never stops). Type and case mismatches and unknown fields go to _rescued_data with _file_path. Schema hints pin the types you know. For CDC envelopes, VARIANT avoids the decision entirely."],
+    volume: ["UC volume landing (question 4)", "Raw API pages written once with unique names, never overwritten. This is Source B's replay log: with it, a lost checkpoint or a bad Bronze table is a rebuild, not an incident. Set retention deliberately (it costs storage, but replay depends on it)."],
+    bcdc: ["bronze.orders_cdc", "One row per change event, append-only: op, source_lsn, ts_ms, the VARIANT envelope and Kafka coordinates. Duplicates are possible after connector restarts. The LSN makes Silver's ordering and dedup deterministic (next week: AUTO CDC / APPLY CHANGES)."],
+    bpay: ["bronze.payments_raw", "One row per API record per extract, so the overlap guarantees repeats. Keep payment_id + updated_at for dedup, plus _source_file, _ingested_at and _chunk for lineage and backfills. Nothing is ever updated in place here."],
+    marks: ["ingest_marks control table (the backwards loop)", "The only state that flows backwards. It is advanced from max(updated_at) of committed Bronze data, after the commit, with greatest() so it never regresses. Advancing it before the write turns a crash into silent loss. Keep it in Delta: transactional and auditable with DESCRIBE HISTORY."],
+    backfill: ["Backfill job (question 4)", "The same code as the daily run, with different parameters. A job parameter (chunk = YYYY-MM) plus a For each task over the months; each chunk is written with overwrite + replaceWhere, so a rerun replaces its slice instead of doubling it. Guard against empty extracts."],
+    silver: ["Silver contract (next week)", "Strict schema, expectations, dedup, current state (MERGE, SCD2, AUTO CDC). It's dashed because it's next week's theme. Today's job is to hand Silver complete, replayable Bronze with the keys it needs."]
+  };
+  var info = $("mapInfo");
+  each(document.querySelectorAll("svg .node"), function(n){
+    function show(){
+      each(document.querySelectorAll("svg .node"), function(x){ x.classList.remove("sel"); });
+      n.classList.add("sel");
+      var d = MAP[n.getAttribute("data-k")];
+      if (d) info.innerHTML = "<b>" + d[0] + "</b>" + d[1];
+    }
+    n.addEventListener("click", show);
+    n.addEventListener("keydown", function(e){ if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(); } });
+  });
+
+  /* ---------- walkthrough stepper ---------- */
+  var steps = Array.prototype.slice.call(document.querySelectorAll("#steps .step"));
+  var stepper = $("stepper");
+  var seen = {};
+  steps.forEach(function(s, i){
+    var b = document.createElement("button");
+    b.textContent = s.getAttribute("data-name");
+    b.addEventListener("click", function(){ showStep(i); });
+    stepper.appendChild(b);
+  });
+  function showStep(i){
+    if (i < 0) i = 0;
+    if (i >= steps.length) i = steps.length - 1;
+    state.step = i; seen[i] = true; save();
+    steps.forEach(function(s, j){ s.classList.toggle("on", j === i); });
+    each(stepper.children, function(b, j){ b.classList.toggle("on", j === i); b.classList.toggle("seen", !!seen[j]); });
+    $("prevStep").disabled = i === 0;
+    $("nextStep").textContent = i === steps.length - 1 ? "Done ✓" : "Next →";
+  }
+  $("prevStep").addEventListener("click", function(){ showStep(state.step - 1); });
+  $("nextStep").addEventListener("click", function(){ showStep(state.step + 1); });
+  showStep(state.step || 0);
+
+  /* ---------- break-the-pipeline simulations ---------- */
+  // each frame: [log line, {cell: value}, {cell: "hl"|"bad"|"good"}]
+  var SIMS = {
+    a: {cells: [["since", "Extract since"], ["landed", "Landing files"], ["bronze", "Bronze rows"], ["distinct", "Distinct versions"], ["mark", "ingest_marks"]],
+      frames: [
+        ["Healthy after run 1: 10 rows in Bronze, mark = 09:25.", {since:"—", landed:"3", bronze:"10", distinct:"10", mark:"09:25"}, {}],
+        ["Next run starts: since = 09:25 − 10 min = 09:15. The API returns 7 rows: 5 overlap repeats, P-011 (a late commit at 09:22) and P-003's refund (09:40).", {since:"09:15"}, {since:"hl"}],
+        ["Step 1, land: 2 new page files are written to the volume.", {landed:"5"}, {landed:"hl"}],
+        ["Step 2, commit: Auto Loader commits the 7 rows to Bronze.", {bronze:"17", distinct:"12"}, {bronze:"hl", distinct:"hl"}],
+        ["💥 The process dies (OOM, spot loss) before UPDATE ingest_marks runs.", {mark:"09:25 (stale)"}, {mark:"bad"}],
+        ["Job retry: the mark is still 09:25, so since = 09:15 again. The same 7 rows are extracted, landed and committed.", {landed:"7", bronze:"24"}, {landed:"hl", bronze:"hl"}],
+        ["Step 3, advance: the mark moves to max(updated_at) of committed data = 09:40. Outcome: 7 duplicates, 0 lost. Silver dedups on (payment_id, updated_at).", {mark:"09:40", distinct:"12 ✓"}, {mark:"good", distinct:"good", bronze:"good"}],
+        ["Counterfactual: if the mark had moved to 09:40 first and the write crashed, the retry would read ≥ 09:30. P-011 (09:22) would be gone forever, silently, with no error anywhere.", {bronze:"11", distinct:"11 (P-011 lost)", mark:"09:40 (moved first)"}, {bronze:"bad", distinct:"bad", mark:"bad"}]
+      ]},
+    b: {cells: [["ckpt", "Checkpoint"], ["landed", "Landing files"], ["bronze", "Bronze rows"], ["distinct", "Distinct versions"], ["txn", "foreachBatch txnAppId"]],
+      frames: [
+        ["Healthy: the checkpoint has tracked all 8 landing files; Bronze has 25 rows.", {ckpt:"8 files tracked", landed:"8", bronze:"25", distinct:"13", txn:"batches 0–41 seen"}, {}],
+        ["Someone \"cleans up\" /Volumes/…/ops/checkpoints/payments_raw to fix an unrelated error.", {ckpt:"deleted"}, {ckpt:"bad"}],
+        ["The next run starts with an empty checkpoint. includeExistingFiles defaults to true, so all 8 files look new.", {ckpt:"new, empty"}, {ckpt:"hl"}],
+        ["Auto Loader appends all 25 rows again. Bronze has no memory; every row now exists twice.", {bronze:"50"}, {bronze:"bad"}],
+        ["Worse variant: a foreachBatch sink reusing txnAppId = 'payments_bronze'. Batch IDs restart at 0, Delta has seen (payments_bronze, 0…41), so it skips them. New data is silently dropped.", {txn:"batch 0 → SKIPPED", bronze:"new rows silently missing"}, {txn:"bad", bronze:"bad"}],
+        ["Recover: stop the job and rebuild Bronze from the retained landing files into a new table with a fresh checkpoint (or restore the pre-replay version and use includeExistingFiles = false + a gap backfill). A new checkpoint needs a new txnAppId.", {ckpt:"fresh", bronze:"25", distinct:"13 ✓", txn:"new txnAppId"}, {ckpt:"good", bronze:"good", distinct:"good", txn:"good"}],
+        ["Prevent: checkpoints in an ops volume only the job's service principal can write, no lifecycle rules on it, and a runbook that says \"never delete a checkpoint to fix a stream\".", {}, {}]
+      ]},
+    c: {cells: [["stream", "Stream"], ["schema", "Schema location"], ["inst", "installments"], ["amount", "P-012 amount"], ["rescued", "_rescued_data"]],
+      frames: [
+        ["Healthy: schema v1 inferred and stored in the schema location.", {stream:"ok", schema:"v1", inst:"(no column)", amount:"—", rescued:"null"}, {}],
+        ["The payments team ships API v2 without telling anyone: a new field installments, and amount now arrives as \"12,50\" (a localized string).", {}, {}],
+        ["Auto Loader finds an unknown field, writes schema v2 to the schema location, and stops the stream with UnknownFieldException.", {stream:"FAILED (by design)", schema:"v2"}, {stream:"bad", schema:"hl"}],
+        ["The Lakeflow Job retry restarts it with schema v2. mergeSchema on the write lets the Delta table add the column.", {stream:"ok", inst:"3"}, {stream:"good", inst:"good"}],
+        ["\"12,50\" doesn't parse as DECIMAL(10,2), so amount is NULL and the raw value is kept in _rescued_data with _file_path.", {amount:"NULL", rescued:"{\"amount\":\"12,50\", …}"}, {amount:"hl", rescued:"good"}],
+        ["A schema-change alert reaches the Silver owner, who adds the parsing rule and opens the contract conversation: versioned API, announced changes. Silver stays strict.", {}, {}],
+        ["Counterfactual: an explicit schema with the default mode none and no rescued data column. installments is silently ignored and nobody knows. That's the worst outcome for Bronze.", {inst:"silently dropped", rescued:"(none)"}, {inst:"bad", rescued:"bad"}]
+      ]},
+    d: {cells: [["jul", "_chunk 2026-07"], ["aug", "_chunk 2026-08"], ["sep", "_chunk 2026-09"], ["job", "Job"]],
+      frames: [
+        ["Request: reload Jul–Sep because the vendor fixed historical refunds. Daily incremental runs must keep going.", {jul:"old data", aug:"old data", sep:"old data", job:"—"}, {}],
+        ["Naive version: one 3-month append job. It dies on day 70 at an API quota, and the rerun appends July and August again.", {jul:"2× rows", aug:"2× rows", sep:"partial", job:"1 giant run"}, {jul:"bad", aug:"bad", sep:"bad", job:"bad"}],
+        ["Better: the same extractor with a job parameter chunk = YYYY-MM, fanned out by a For each task over [\"2026-07\", \"2026-08\", \"2026-09\"], concurrency 1.", {jul:"old data", aug:"old data", sep:"old data", job:"For each × 3"}, {job:"hl"}],
+        ["2026-07: mode overwrite + replaceWhere _chunk = '2026-07'. The slice is replaced in one atomic commit.", {jul:"11 ✓"}, {jul:"good"}],
+        ["2026-08 fails after its retries are exhausted (429 storm). Its Delta write never committed, so the old August data is untouched.", {aug:"failed, old data intact"}, {aug:"bad"}],
+        ["Repair the run (or run chunk = 2026-08 by hand). replaceWhere replaces exactly that slice, so it doesn't matter how many times it runs.", {aug:"11 ✓"}, {aug:"good"}],
+        ["2026-09 finishes. Rerunning the whole job tomorrow gives identical counts. Guard: an empty extract raises instead of letting REPLACE WHERE wipe the month.", {sep:"10 ✓", job:"idempotent ✓"}, {sep:"good", job:"good"}]
+      ]}
+  };
+  var simEls = {};
+  function renderSim(id){
+    var sim = SIMS[id], el = simEls[id], pos = state.sim[id] || 0;
+    var vals = {}, cls = {};
+    for (var i = 0; i <= pos; i++) {
+      var fr = sim.frames[i];
+      Object.keys(fr[1]).forEach(function(k){ vals[k] = fr[1][k]; });
+      cls = fr[2];
+    }
+    el.state.innerHTML = sim.cells.map(function(c){
+      var v = vals[c[0]] !== undefined ? vals[c[0]] : "—";
+      return '<div class="cell' + (cls[c[0]] ? " " + cls[c[0]] : "") + '"><small>' + c[1] + "</small><b></b></div>";
+    }).join("");
+    each(el.state.querySelectorAll(".cell b"), function(b, j){ var k = sim.cells[j][0]; b.textContent = vals[k] !== undefined ? vals[k] : "—"; });
+    el.log.innerHTML = "";
+    for (var j = 0; j <= pos; j++) {
+      var li = document.createElement("li");
+      li.textContent = sim.frames[j][0];
+      if (j === pos) li.className = "cur";
+      el.log.appendChild(li);
+    }
+    var last = sim.frames.length - 1;
+    el.brk.disabled = pos > 0;
+    el.next.disabled = pos === 0 || pos >= last;
+    el.next.textContent = pos >= last ? "End of scenario ✓" : "Next event →";
+  }
+  each(document.querySelectorAll(".sim"), function(box){
+    var id = box.getAttribute("data-sim");
+    if (!SIMS[id]) return;
+    var btns = box.querySelector(".simbtns");
+    var brk = document.createElement("button"); brk.className = "btn small primary"; brk.textContent = "💥 Break it";
+    var next = document.createElement("button"); next.className = "btn small"; next.textContent = "Next event →";
+    var rep = document.createElement("button"); rep.className = "btn small"; rep.textContent = "↺ Replay";
+    btns.appendChild(brk); btns.appendChild(next); btns.appendChild(rep);
+    simEls[id] = {state: box.querySelector(".state"), log: box.querySelector(".evlog"), brk: brk, next: next};
+    var last = SIMS[id].frames.length - 1;
+    if ((state.sim[id] || 0) > last) state.sim[id] = last;
+    brk.addEventListener("click", function(){ state.sim[id] = 1; save(); renderSim(id); });
+    next.addEventListener("click", function(){ state.sim[id] = Math.min(last, (state.sim[id] || 0) + 1); save(); renderSim(id); });
+    rep.addEventListener("click", function(){ state.sim[id] = 0; save(); renderSim(id); });
+    renderSim(id);
+  });
+
+  /* ---------- lab checklist ---------- */
+  var labInputs = document.querySelectorAll("#labChecks input");
+  each(labInputs, function(c){
+    var id = c.getAttribute("data-id");
+    c.checked = !!state.labs[id];
+    c.addEventListener("change", function(){ if (c.checked) state.labs[id] = true; else delete state.labs[id]; save(); });
+  });
+
+  /* ---------- reset ---------- */
+  $("resetBtn").addEventListener("click", function(){
+    if (!window.confirm("Reset all saved progress for this lesson?")) return;
+    try { localStorage.removeItem(KEY); } catch (e) {}
+    state = fresh(); seen = {};
+    each(labInputs, function(c){ c.checked = false; });
+    quizzes.forEach(clearQuiz);
+    Object.keys(simEls).forEach(renderSim);
+    showStep(0); render();
+  });
+
+  render();
+  window.__lesson = {key: KEY, state: function(){ return state; }, sections: sections.length, sims: Object.keys(simEls).length, quizzes: quizzes.length};
+})();
+</script>
+</body>
+</html>

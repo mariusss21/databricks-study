@@ -23,7 +23,7 @@ Topics without a link don't have a pill file yet.
 ## Deep dives (Zé Carlos)
 
 - **Databricks, Mon 2026-10-19:** [Connection Deep Dive: Governed Ingestion to a Trustworthy Bronze Table](deepdive-db-governed-ingestion-to-bronze.html) ([brief from Gerald](deepdive-db-governed-ingestion-to-bronze-brief.md))
-- **Data engineering, Fri 2026-10-23:** not published yet.
+- **Data engineering, Fri 2026-10-23:** [Connection Deep Dive: Reliable Bronze Ingestion (detect change, deliver, survive drift, replay)](deepdive-de-reliable-bronze-ingestion.html)
 
 The deep dives are self-contained HTML files. Download one and open it in a browser; GitHub's file view shows the source, not the rendered page.
 
