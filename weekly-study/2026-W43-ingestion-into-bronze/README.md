@@ -15,7 +15,7 @@ Everything for this week lives in this folder: Gerald's daily Databricks pills (
 | Wed 2026-10-21 | [DB3: Landing nested or semi-structured JSON in Bronze (struct and VARIANT)](DB3-nested-json-struct-variant.md) | [DE3: Schema evolution and drift: schema-on-read vs schema-on-write, data contracts, Snowflake VARIANT vs Databricks VARIANT](DE3-schema-evolution-drift-variant.md) |
 | Thu 2026-10-22 | [DB4: JDBC, ODBC, and REST reads from notebooks, scheduled as Lakeflow Jobs](DB4-jdbc-odbc-rest-reads-lakeflow-jobs.md) | [DE4: Incremental extraction: high-water marks, API pagination and rate limits, backfills](DE4-incremental-extraction.md) |
 | Fri 2026-10-23 | [DB5: Choosing an ingestion tool: Connect vs Auto Loader vs COPY INTO vs JDBC](DB5-choosing-an-ingestion-tool.md) | [DE5: US modern data stack ingestion layer (Fivetran/Airbyte, Snowpipe/COPY INTO, dbt sources) mapped to Databricks](DE5-modern-data-stack-ingestion.md) |
-| Sat 2026-10-24 | Bronze table design: append-only, _metadata file columns, ingest timestamps, rescued data | [DE6: Dedup and replay: business keys, late/duplicate data, append-only Bronze vs MERGE on ingest](DE6-dedup-and-replay.md) |
+| Sat 2026-10-24 | [DB6: Bronze table design: append-only, _metadata file columns, ingest timestamps, rescued data](DB6-bronze-table-design.md) | [DE6: Dedup and replay: business keys, late/duplicate data, append-only Bronze vs MERGE on ingest](DE6-dedup-and-replay.md) |
 | Sun 2026-10-25 | Recap: an end-to-end Bronze pipeline that's safe to re-run | System design: ingestion platform for 200+ sources |
 
 Topics without a link don't have a pill file yet.
