@@ -16,7 +16,7 @@ Everything for this week lives in this folder: Gerald's daily Databricks pills (
 | Thu 2026-10-22 | [DB4: JDBC, ODBC, and REST reads from notebooks, scheduled as Lakeflow Jobs](DB4-jdbc-odbc-rest-reads-lakeflow-jobs.md) | [DE4: Incremental extraction: high-water marks, API pagination and rate limits, backfills](DE4-incremental-extraction.md) |
 | Fri 2026-10-23 | [DB5: Choosing an ingestion tool: Connect vs Auto Loader vs COPY INTO vs JDBC](DB5-choosing-an-ingestion-tool.md) | [DE5: US modern data stack ingestion layer (Fivetran/Airbyte, Snowpipe/COPY INTO, dbt sources) mapped to Databricks](DE5-modern-data-stack-ingestion.md) |
 | Sat 2026-10-24 | [DB6: Bronze table design: append-only, _metadata file columns, ingest timestamps, rescued data](DB6-bronze-table-design.md) | [DE6: Dedup and replay: business keys, late/duplicate data, append-only Bronze vs MERGE on ingest](DE6-dedup-and-replay.md) |
-| Sun 2026-10-25 | Recap: an end-to-end Bronze pipeline that's safe to re-run | System design: ingestion platform for 200+ sources |
+| Sun 2026-10-25 | Recap: an end-to-end Bronze pipeline that's safe to re-run | [DE7: System design: ingestion platform for 200+ sources](DE7-system-design-ingestion-platform-200-sources.md) |
 
 Topics without a link don't have a pill file yet.
 
