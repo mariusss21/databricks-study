@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connection Deep Dive: Ingestion Decisions → One Re-runnable Bronze Pipeline</title>
+<meta name="description" content="Databricks connection deep dive for Mario Carvalho, Mon 2026-10-26: choosing the ingestion tool, Auto Loader re-run safety (checkpoints, availableNow), and shape/drift in an append-only Bronze table, connected into one re-runnable pipeline.">
+<style>
+:root{
+  --bg:#f6f7fb;--panel:#fff;--panel2:#f0f2f8;--text:#1b1f2a;--muted:#5b6476;--border:#dde1ea;
+  --accent:#ff3621;--accent-soft:#fff0ed;--ok:#11845b;--ok-soft:#e5f6ee;--bad:#c62f3a;--bad-soft:#fdecee;
+  --warn:#9a6700;--warn-soft:#fff6dd;--info:#1f5fbf;--info-soft:#e9f1ff;
+  --code-bg:#0f1420;--code-text:#e6e9f0;
+  --t1:#2f6fd6;--t2:#b7791f;--t3:#8a4fd8;--br:#0f9d74;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+  --radius:12px;--sidebar:290px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:#0d1117;--panel:#151b24;--panel2:#1b2330;--text:#e6e9ef;--muted:#9aa4b6;--border:#2a3342;
+  --accent:#ff6a55;--accent-soft:#2a1814;--ok:#3ccf91;--ok-soft:#10261d;--bad:#ff6b77;--bad-soft:#2b1418;
+  --warn:#f0c04a;--warn-soft:#2a230f;--info:#7fb2ff;--info-soft:#121f36;--code-bg:#0a0e16;
+  --t1:#6fa3ff;--t2:#f0c04a;--t3:#b48cff;--br:#3ccf91;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;font-size:16px}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel2);border:1px solid var(--border);padding:.05em .35em;border-radius:5px;overflow-wrap:anywhere}
+pre{background:var(--code-bg);color:var(--code-text);padding:14px 16px;border-radius:10px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.5;margin:0}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+.codewrap{position:relative;margin:12px 0}
+.copy{position:absolute;top:8px;right:8px;font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid #3a4456;background:#1d2533;color:#e6e9f0;cursor:pointer}
+.layout{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--panel);border-right:1px solid var(--border);padding:18px 14px 24px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;gap:10px;align-items:center}
+.logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#ff9a3c);display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px;flex:none}
+.brand h1{font-size:15px;line-height:1.25;margin:0}
+.brand small{color:var(--muted);font-size:12px}
+.progress-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.progress-top{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+.bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin:6px 0}
+.bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),#ff9a3c);transition:width .3s}
+.progress-meta{font-size:12px;color:var(--muted)}
+nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+nav a{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;text-decoration:none;color:var(--text);font-size:14px}
+nav a:hover{background:var(--panel2)}
+nav a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+nav .dot{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--border);margin-top:2px;display:grid;place-items:center;font-size:11px;color:#fff}
+nav a.done .dot{background:var(--ok);border-color:var(--ok)}
+.side-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+.btn{font:inherit;font-size:14px;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.small{font-size:12px;padding:5px 10px}
+main{padding:28px clamp(16px,4vw,48px) 80px;max-width:980px}
+section.lesson{display:none}
+section.lesson.active{display:block;animation:fade .25s}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;color:var(--accent)}
+h2{font-size:26px;line-height:1.25;margin:4px 0 6px}
+h3{font-size:18px;margin:22px 0 6px}
+.lead{color:var(--muted);font-size:17px;margin-top:0}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);margin:14px 0}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;margin-bottom:4px}
+.t1{color:var(--t1)}.t2{color:var(--t2)}.t3{color:var(--t3)}
+.b1{border-top:4px solid var(--t1)}.b2{border-top:4px solid var(--t2)}.b3{border-top:4px solid var(--t3)}
+.note{border-left:4px solid var(--info);background:var(--info-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.warn{border-left:4px solid var(--warn);background:var(--warn-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.okbox{border-left:4px solid var(--ok);background:var(--ok-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--panel2)}
+.tablewrap{overflow-x:auto}
+.footer-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:28px;padding-top:16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.done-label{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted)}
+.svgwrap{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:10px;overflow-x:auto}
+.svgwrap svg{width:100%;min-width:720px;height:auto;display:block}
+.svgwrap text{font-family:var(--sans);fill:var(--text)}
+.svgwrap .muted{fill:var(--muted)}
+.stepper{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.stepper button{font:inherit;font-size:13px;padding:6px 10px;border-radius:99px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.stepper button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.step-body{min-height:190px}
+.scenario{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin:14px 0;box-shadow:var(--shadow)}
+.choices{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.choices button{font:inherit;font-size:14px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);cursor:pointer}
+.choices button.right{background:var(--ok-soft);border-color:var(--ok);color:var(--ok);font-weight:700}
+.choices button.wrong{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+.choices button:disabled{cursor:default}
+.feedback{display:none;padding:10px 12px;border-radius:8px;font-size:15px}
+.feedback.show{display:block}
+.feedback.good{background:var(--ok-soft);border-left:4px solid var(--ok)}
+.feedback.bad{background:var(--bad-soft);border-left:4px solid var(--bad)}
+.score{font-weight:700}
+details.qa{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin:12px 0;box-shadow:var(--shadow)}
+details.qa summary{cursor:pointer;font-weight:650}
+details.qa[open] summary{margin-bottom:8px}
+.check{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.check input{margin-top:5px}
+.mobilebar{display:none}
+@media (max-width:860px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:fixed;inset:0 auto 0 0;width:min(86vw,320px);transform:translateX(-105%);transition:transform .25s;z-index:20;box-shadow:var(--shadow)}
+  .sidebar.open{transform:none}
+  .mobilebar{display:flex;gap:10px;align-items:center;position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--border);padding:8px 12px}
+  .mobilebar .bar{flex:1;margin:0}
+}
+</style>
+</head>
+<body>
+<div class="mobilebar">
+  <button class="btn small" id="menuBtn" aria-label="Open navigation">☰ Sections</button>
+  <div class="bar" aria-hidden="true"><span id="barMobile"></span></div>
+  <span id="pctMobile" style="font-size:13px;color:var(--muted)">0%</span>
+</div>
+<div class="layout">
+<aside class="sidebar" id="sidebar">
+  <div class="brand">
+    <div class="logo">DD</div>
+    <div><h1>Ingestion Decisions → One Re-runnable Bronze</h1><small>Connection deep dive · Mon 2026-10-26 · Databricks · ~55 min</small></div>
+  </div>
+  <div class="progress-card">
+    <div class="progress-top"><span>Progress</span><span id="pct">0%</span></div>
+    <div class="bar"><span id="bar"></span></div>
+    <div class="progress-meta" id="progMeta">0 of 0 sections complete</div>
+  </div>
+  <nav aria-label="Sections"><ol id="navList"></ol></nav>
+  <div class="side-actions">
+    <button class="btn small" id="themeBtn">◐ Theme</button>
+    <button class="btn small" id="resetBtn">↺ Reset progress</button>
+  </div>
+</aside>
+<main id="main">
+<!-- ============ 1. RECAP ============ -->
+<section class="lesson" data-title="Recap: three decisions" data-min="6">
+  <div class="eyebrow">1 · Recap · ~6 min</div>
+  <h2>Last week was three decisions, not three features</h2>
+  <p class="lead">Your Oct 19–25 pills (DB1–DB7) covered Lakeflow Connect, Auto Loader checkpoints and triggers, nested JSON, JDBC/REST jobs, tool choice and Bronze table design. The Oct 19 and Oct 23 deep dives already built Bronze end to end. Today is about the <b>decisions</b>: which tool, what makes a re-run safe, and what happens when the data's shape changes. Together they give you one pipeline you can re-run without worrying.</p>
+  <div class="grid3">
+    <div class="card b1"><span class="tag t1">Decision 1 · Tool</span>
+      <p><b>Who owns the extract, and how does the source change?</b></p>
+      <ul>
+        <li><b>Lakeflow Connect</b>: Databricks-managed connectors for supported SaaS apps and databases (CDC). The platform runs the extraction and incremental state.</li>
+        <li><b>Auto Loader</b>: files land in your storage or a UC volume, keep arriving, and may number in the millions.</li>
+        <li><b>COPY INTO</b>: idempotent SQL batch loads of files, good for thousands of files or a one-off backfill.</li>
+        <li><b>JDBC/REST notebook as a Lakeflow Job</b>: no managed connector exists, so you own the extract code, the watermark and the retries.</li>
+      </ul></div>
+    <div class="card b2"><span class="tag t2">Decision 2 · Re-run safety</span>
+      <p><b>What stops a re-run from loading the same data twice?</b></p>
+      <ul>
+        <li>The Auto Loader <b>checkpoint</b> records which files were discovered and committed. A restart continues from it, and files already processed are skipped.</li>
+        <li><code>availableNow</code> processes the backlog and then <b>stops</b>, so a scheduled Job is a cheap incremental batch. A continuously running stream keeps compute up for low latency.</li>
+        <li>COPY INTO keeps its own record of loaded files. Connect keeps its own cursor. With JDBC/REST, <b>you</b> build idempotency yourself.</li>
+      </ul></div>
+    <div class="card b3"><span class="tag t3">Decision 3 · Shape &amp; drift</span>
+      <p><b>What happens when the payload changes, and can every row be traced?</b></p>
+      <ul>
+        <li>Land nested data as <b>STRUCT</b> (inferred), as <b>STRING</b> (raw), or as <b>VARIANT</b> (flexible, queryable).</li>
+        <li><code>cloudFiles.schemaEvolutionMode</code> controls what happens to new fields: add them, rescue them, fail, or ignore them.</li>
+        <li><b>Append-only</b> Bronze with <code>_metadata</code> file columns and an ingest timestamp lets you trace any later Silver row back to its source file.</li>
+      </ul></div>
+  </div>
+  <div class="note"><b>Rule of thumb from DB5:</b> choose the tool by <i>who owns the extract</i> and <i>how often the schema changes</i>, not by which Spark read API you already know.</div>
+  <h3>The same three questions, asked of every tool</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Tool</th><th>Who keeps "what's already loaded"?</th><th>Where does drift go?</th><th>Typical trigger</th></tr>
+    <tr><td>Lakeflow Connect</td><td>The managed ingestion pipeline (platform-owned)</td><td>Handled by the connector, per its documented schema-evolution behavior</td><td>Pipeline schedule</td></tr>
+    <tr><td>Auto Loader</td><td>Checkpoint (file state) + <code>schemaLocation</code> (schema versions)</td><td><code>schemaEvolutionMode</code> + <code>_rescued_data</code></td><td><code>availableNow</code> in a scheduled Job, or always-on</td></tr>
+    <tr><td>COPY INTO</td><td>The target table's own record of loaded files (re-running skips them)</td><td><code>'mergeSchema' = 'true'</code> in <code>FORMAT_OPTIONS</code> / <code>COPY_OPTIONS</code> (otherwise schema enforcement rejects it)</td><td>Ad hoc or scheduled SQL</td></tr>
+    <tr><td>JDBC/REST notebook</td><td><b>You</b>: high-water mark / cursor table, MERGE or replaceWhere</td><td><b>You</b>: land raw as STRING/VARIANT, then parse</td><td>Lakeflow Job schedule + retries</td></tr>
+  </table></div>
+  <p>The more of that table the platform fills in, the less code you own. That trade-off is the real reason behind the exam's "pick the ingestion tool" questions.</p>
+</section>
+
+<!-- ============ 2. MAP ============ -->
+<section class="lesson" data-title="Connection map" data-min="5">
+  <div class="eyebrow">2 · Connection map · ~5 min</div>
+  <h2>How the three decisions plug into one pipeline</h2>
+  <p class="lead">Read the diagram left to right. The source decides the tool (blue), the tool decides where re-run state lives (amber), and the Bronze table's design absorbs drift and keeps lineage (purple). A Lakeflow Job wraps all of it.</p>
+  <div class="svgwrap">
+  <svg viewBox="0 0 980 470" role="img" aria-label="Connection map: sources to tools to state to Bronze table to Silver">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a93a6"/></marker>
+    </defs>
+    <!-- job wrapper -->
+    <rect x="200" y="18" width="560" height="430" rx="16" fill="none" stroke="#8a93a6" stroke-dasharray="6 5"/>
+    <text x="215" y="40" font-size="13" font-weight="700" class="muted">Lakeflow Job · serverless · schedule + retries + max_concurrent_runs = 1</text>
+    <!-- sources -->
+    <text x="20" y="40" font-size="13" font-weight="700" class="muted">SOURCE</text>
+    <g font-size="13">
+      <rect x="15" y="60" width="160" height="56" rx="10" fill="none" stroke="#8a93a6"/><text x="27" y="83">SaaS app / OLTP DB</text><text x="27" y="102" class="muted" font-size="11">Salesforce, SQL Server…</text>
+      <rect x="15" y="150" width="160" height="56" rx="10" fill="none" stroke="#8a93a6"/><text x="27" y="173">Files keep landing</text><text x="27" y="192" class="muted" font-size="11">JSON/CSV in a UC volume</text>
+      <rect x="15" y="240" width="160" height="56" rx="10" fill="none" stroke="#8a93a6"/><text x="27" y="263">Files, one-off batch</text><text x="27" y="282" class="muted" font-size="11">backfill, thousands</text>
+      <rect x="15" y="330" width="160" height="56" rx="10" fill="none" stroke="#8a93a6"/><text x="27" y="353">REST API / JDBC</text><text x="27" y="372" class="muted" font-size="11">no managed connector</text>
+    </g>
+    <!-- tools (decision 1) -->
+    <text x="225" y="70" font-size="12" font-weight="700" fill="#2f6fd6">① TOOL</text>
+    <g font-size="13" font-weight="600">
+      <rect x="225" y="80" width="170" height="40" rx="9" fill="#2f6fd6" fill-opacity=".12" stroke="#2f6fd6"/><text x="238" y="105">Lakeflow Connect</text>
+      <rect x="225" y="160" width="170" height="40" rx="9" fill="#2f6fd6" fill-opacity=".12" stroke="#2f6fd6"/><text x="238" y="185">Auto Loader</text>
+      <rect x="225" y="250" width="170" height="40" rx="9" fill="#2f6fd6" fill-opacity=".12" stroke="#2f6fd6"/><text x="238" y="275">COPY INTO</text>
+      <rect x="225" y="340" width="170" height="40" rx="9" fill="#2f6fd6" fill-opacity=".12" stroke="#2f6fd6"/><text x="238" y="365">Notebook (JDBC/REST)</text>
+    </g>
+    <g stroke="#8a93a6" stroke-width="1.6" marker-end="url(#arr)">
+      <line x1="175" y1="88" x2="223" y2="100"/><line x1="175" y1="178" x2="223" y2="180"/><line x1="175" y1="268" x2="223" y2="270"/><line x1="175" y1="358" x2="223" y2="360"/>
+    </g>
+    <!-- state (decision 2) -->
+    <text x="430" y="70" font-size="12" font-weight="700" fill="#b7791f">② RE-RUN STATE</text>
+    <g font-size="12">
+      <rect x="430" y="80" width="160" height="40" rx="9" fill="#b7791f" fill-opacity=".12" stroke="#b7791f"/><text x="442" y="105">platform-owned cursor</text>
+      <rect x="430" y="150" width="160" height="60" rx="9" fill="#b7791f" fill-opacity=".12" stroke="#b7791f"/><text x="442" y="172">checkpoint (files seen)</text><text x="442" y="190">+ schemaLocation</text><text x="442" y="205" font-size="11" class="muted">availableNow → stop</text>
+      <rect x="430" y="250" width="160" height="40" rx="9" fill="#b7791f" fill-opacity=".12" stroke="#b7791f"/><text x="442" y="275">loaded-files log (idempotent)</text>
+      <rect x="430" y="340" width="160" height="40" rx="9" fill="#b7791f" fill-opacity=".12" stroke="#b7791f"/><text x="442" y="365">YOUR watermark table</text>
+    </g>
+    <g stroke="#8a93a6" stroke-width="1.6" marker-end="url(#arr)">
+      <line x1="395" y1="100" x2="428" y2="100"/><line x1="395" y1="180" x2="428" y2="180"/><line x1="395" y1="270" x2="428" y2="270"/><line x1="395" y1="360" x2="428" y2="360"/>
+    </g>
+    <!-- bronze (decision 3) -->
+    <text x="625" y="120" font-size="12" font-weight="700" fill="#8a4fd8">③ SHAPE &amp; DRIFT</text>
+    <rect x="625" y="130" width="125" height="200" rx="12" fill="#8a4fd8" fill-opacity=".10" stroke="#8a4fd8" stroke-width="2"/>
+    <g font-size="11.5">
+      <text x="635" y="152" font-weight="700" font-size="13">Bronze (UC Delta)</text>
+      <text x="635" y="174">append-only</text>
+      <text x="635" y="194">payload: STRUCT /</text>
+      <text x="635" y="209">STRING / VARIANT</text>
+      <text x="635" y="231">_rescued_data</text>
+      <text x="635" y="253">source_file</text>
+      <text x="635" y="268" class="muted">(_metadata.file_path)</text>
+      <text x="635" y="290">ingested_at</text>
+      <text x="635" y="305" class="muted">(current_timestamp)</text>
+    </g>
+    <g stroke="#8a93a6" stroke-width="1.6" marker-end="url(#arr)">
+      <path d="M590,100 C610,100 610,160 623,170" fill="none"/>
+      <line x1="590" y1="180" x2="623" y2="200"/>
+      <path d="M590,270 C605,270 610,260 623,255" fill="none"/>
+      <path d="M590,360 C612,360 612,320 623,310" fill="none"/>
+    </g>
+    <!-- silver teaser -->
+    <rect x="800" y="185" width="160" height="90" rx="12" fill="none" stroke="#0f9d74" stroke-width="2" stroke-dasharray="6 4"/>
+    <text x="815" y="210" font-size="13" font-weight="700" fill="#0f9d74">Silver (this week)</text>
+    <text x="815" y="230" font-size="11.5">read by UC name</text>
+    <text x="815" y="246" font-size="11.5">cast · null rules</text>
+    <text x="815" y="262" font-size="11.5" class="muted">trace via source_file</text>
+    <line x1="750" y1="230" x2="798" y2="230" stroke="#0f9d74" stroke-width="1.8" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+    <text x="215" y="432" font-size="12" class="muted">Same Job re-run → state says "nothing new" → Bronze unchanged. New field → rescued or added, never a silent drop.</text>
+  </svg>
+  </div>
+  <div class="okbox"><b>The connection in one sentence:</b> the tool you pick decides <i>who</i> keeps the re-run state (amber), and only an append-only, metadata-stamped Bronze table (purple) makes that state <i>auditable</i>. If a re-run ever doubles your data, <code>source_file</code> + <code>ingested_at</code> show you exactly which batch did it.</div>
+</section>
+
+<!-- ============ 3. WALKTHROUGH ============ -->
+<section class="lesson" data-title="End-to-end walkthrough" data-min="10">
+  <div class="eyebrow">3 · End-to-end walkthrough · ~10 min</div>
+  <h2>One file's life in a re-runnable Bronze pipeline</h2>
+  <p class="lead">Follow <code>orders_003.json</code> from the moment it lands to the moment Silver can trust it. Click through the steps. Each one names the decision that is active at that point.</p>
+  <div class="stepper" id="wtSteps"></div>
+  <div class="card step-body" id="wtBody"></div>
+  <div style="display:flex;gap:8px"><button class="btn" id="wtPrev">← Prev</button><button class="btn primary" id="wtNext">Next →</button></div>
+</section>
+<!-- ============ 4. DRILL ============ -->
+<section class="lesson" data-title="Decision drill" data-min="8">
+  <div class="eyebrow">4 · Decision drill · ~8 min</div>
+  <h2>Five sources, four tools: pick one and defend it</h2>
+  <p class="lead">This is the exam's "choose the ingestion tool" framing. Answer out loud first, then click. The feedback also names the re-run state and the drift plan, because the tool is only the first of the three decisions.</p>
+  <div id="drill"></div>
+  <p class="score" id="drillScore"></p>
+  <button class="btn small" id="drillReset">↺ Reset drill</button>
+</section>
+
+<!-- ============ 5. HANDS-ON ============ -->
+<section class="lesson" data-title="Hands-on: re-run & drift" data-min="20">
+  <div class="eyebrow">5 · Hands-on · ~20 min · Free Edition (serverless)</div>
+  <h2>Build it, re-run it, drift it</h2>
+  <p class="lead">This is a short version of the Oct 19 build. The goal is not "Auto Loader works". The goal is to <b>prove the three decisions</b>: the second run adds nothing (decision 2), and an unexpected field is caught without failing the load (decision 3). Create a new notebook on serverless compute and paste the cells in order.</p>
+  <div class="warn">Free Edition is serverless-only. On serverless compute, Auto Loader streams use <code>.trigger(availableNow=True)</code>; time-interval triggers aren't supported there. Databricks' serverless limitations page points continuous workloads to a continuous-mode pipeline, or to <code>Trigger.AvailableNow()</code> in a continuous job. That is exactly the "incremental batch" pattern we want here.</div>
+
+  <h3>Cell 1 · Paths and names (UC volume, separate state folders)</h3>
+  <div class="codewrap"><pre><code>CATALOG = "workspace"   # Free Edition's default catalog; change if yours differs
+SCHEMA  = "ingest_lab"
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
+spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG}.{SCHEMA}.landing")
+
+BASE       = f"/Volumes/{CATALOG}/{SCHEMA}/landing"
+SOURCE     = f"{BASE}/raw/orders"                      # where files land
+SCHEMA_LOC = f"{BASE}/_state/orders_bronze/schema"     # Auto Loader schema versions
+CHECKPOINT = f"{BASE}/_state/orders_bronze/checkpoint" # files seen + commits
+TARGET     = f"{CATALOG}.{SCHEMA}.orders_bronze"</code></pre></div>
+  <p>The state folders sit <b>outside</b> <code>SOURCE</code>, so Auto Loader never mistakes its own state files for input. One checkpoint belongs to one stream and one target. Never share it.</p>
+
+  <h3>Cell 2 · Land two nested JSON files</h3>
+  <div class="codewrap"><pre><code>import json
+
+def land(name, records):
+    # JSON Lines: one object per line (Auto Loader's default for JSON)
+    dbutils.fs.put(f"{SOURCE}/{name}", "\n".join(json.dumps(r) for r in records), overwrite=True)
+
+land("orders_001.json", [
+    {"order_id": 1001, "order_ts": "2026-10-26T08:01:00Z", "amount": 59.9,
+     "customer": {"id": "C-1", "country": "BR"}, "items": [{"sku": "A1", "qty": 2}]},
+    {"order_id": 1002, "order_ts": "2026-10-26T08:05:00Z", "amount": 12.0,
+     "customer": {"id": "C-2", "country": None}, "items": [{"sku": "B7", "qty": 1}]},
+])
+land("orders_002.json", [
+    {"order_id": 1003, "order_ts": "2026-10-26T08:20:00Z", "amount": 230.0,
+     "customer": {"id": "C-3", "country": "US"}, "items": [{"sku": "A1", "qty": 1}, {"sku": "C3", "qty": 4}]},
+    {"order_id": 1004, "order_ts": None, "amount": None,
+     "customer": {"id": "C-4", "country": "PT"}, "items": []},
+])
+display(dbutils.fs.ls(SOURCE))</code></pre></div>
+
+  <h3>Cell 3 · The pipeline: all three decisions in about 20 lines</h3>
+  <div class="codewrap"><pre><code>from pyspark.sql import functions as F
+
+def run_bronze():
+    raw = (spark.readStream
+        .format("cloudFiles")                                  # decision 1: files in a volume → Auto Loader
+        .option("cloudFiles.format", "json")
+        .option("cloudFiles.schemaLocation", SCHEMA_LOC)       # decision 3: schema is inferred once, versioned here
+        .option("cloudFiles.schemaEvolutionMode", "rescue")    # decision 3: never fail, never evolve, rescue instead
+        .option("rescuedDataColumn", "_rescued_data")
+        .load(SOURCE))
+
+    bronze = raw.select(
+        "*",                                                   # payload as landed (JSON → strings, nested → struct)
+        F.col("_metadata.file_path").alias("source_file"),     # lineage: which file
+        F.col("_metadata.file_modification_time").alias("source_file_mtime"),
+        F.current_timestamp().alias("ingested_at"))            # lineage: which run
+
+    q = (bronze.writeStream
+        .option("checkpointLocation", CHECKPOINT)              # decision 2: files already committed are skipped
+        .trigger(availableNow=True)                            # decision 2: drain the backlog, then stop
+        .toTable(TARGET))                                      # append-only UC Delta table
+    q.awaitTermination()
+
+run_bronze()
+display(spark.sql(f"SELECT source_file, count(*) AS row_count FROM {TARGET} GROUP BY source_file ORDER BY source_file"))
+display(spark.table(TARGET))</code></pre></div>
+  <p>Expected: 4 rows from 2 files. Look at the column types. Because JSON carries no types, Auto Loader infers <b>every column as a string</b>, including nested fields, unless you set <code>cloudFiles.inferColumnTypes</code> or schema hints. So <code>customer</code> is a <code>STRUCT</code> of strings and <code>amount</code> is a <code>STRING</code>. That's fine for Bronze, and casting is Silver's job (see section 8).</p>
+
+  <h3>Cell 4 · Re-run: prove "no duplicates"</h3>
+  <div class="codewrap"><pre><code>run_bronze()   # same code, same checkpoint, no new files
+
+display(spark.sql(f"""
+  SELECT count(*) AS row_count, count(DISTINCT order_id) AS distinct_orders,
+         count(DISTINCT ingested_at) AS runs_that_wrote_rows
+  FROM {TARGET}"""))
+display(spark.sql(f"DESCRIBE HISTORY {TARGET}").select("version", "timestamp", "operation", "operationMetrics"))</code></pre></div>
+  <p>Expected: still <b>4 / 4 / 1</b>. The checkpoint already lists both files, so the second <code>availableNow</code> run finds nothing new and stops. In the history, only one version wrote rows. This is what "safe to re-run" means in practice: a Job retry, a manual re-run, or a double-click on "Run now" all end up in the same state.</p>
+  <div class="warn"><b>What would break it?</b> (a) Deleting or changing <code>CHECKPOINT</code> while keeping the table: every file is new again, so you get duplicates. (b) Overwriting a file under the same name: by default Auto Loader doesn't pick up the new version, because <code>cloudFiles.allowOverwrites</code> is false. Producers should write <b>new file names</b>. (c) Two jobs writing with the same checkpoint at the same time. In the Job, use <code>max_concurrent_runs = 1</code>.</div>
+
+  <h3>Cell 5 · Drift: a file with a field nobody announced</h3>
+  <div class="codewrap"><pre><code>land("orders_003.json", [
+    {"order_id": 1005, "order_ts": "2026-10-26T09:10:00Z", "amount": 99.0,
+     "customer": {"id": "C-5", "country": "US"}, "items": [{"sku": "C3", "qty": 1}],
+     "coupon_code": "BLACKFRIDAY"},                      # ← not in the inferred schema
+])
+run_bronze()
+
+display(spark.sql(f"""
+  SELECT order_id, _rescued_data, source_file, ingested_at
+  FROM {TARGET} WHERE _rescued_data IS NOT NULL"""))
+display(spark.sql(f"SELECT count(*) AS row_count FROM {TARGET}"))   # 5: only the new file was read</code></pre></div>
+  <p>Expected: the run <b>succeeds</b>, the table now has 5 rows, and order 1005 has <code>_rescued_data</code> containing <code>coupon_code</code> as a JSON string. Nothing was lost and nothing failed. The table schema did <b>not</b> change. That is the <code>rescue</code> contract.</p>
+  <div class="note"><b>Same drift, other modes</b> (from the Auto Loader schema docs):
+    <ul>
+      <li><code>addNewColumns</code> (the default when you don't provide a schema): the stream <b>fails</b> with <code>UnknownFieldException</code> after it adds <code>coupon_code</code> to the schema. The <b>restart</b> then continues with the new column. That's why Databricks recommends running Auto Loader in Lakeflow Jobs with retries.</li>
+      <li><code>addNewColumnsWithTypeWidening</code>: like <code>addNewColumns</code>, but it also widens supported types (for example int → long). Unsupported type changes go to the rescued column.</li>
+      <li><code>failOnNewColumns</code>: the stream fails and stays failed until you update the schema or remove the file. This is a strict contract.</li>
+      <li><code>none</code>: new columns are ignored and nothing is rescued unless <code>rescuedDataColumn</code> is set.</li>
+    </ul>
+    Want flexibility instead of inferred columns? Land the whole record as <b>VARIANT</b> with <code>.option("singleVariantColumn", "payload")</code>. Drift then lives inside one column, and you decide on structure in Silver.</div>
+
+  <h3>Optional · Run it as a Lakeflow Job with the Databricks CLI</h3>
+  <p>Save Cells 1 and 3 (without the <code>display</code> lines) as a local file <code>bronze_orders.py</code> with <code># Databricks notebook source</code> as the first line. Then:</p>
+  <div class="codewrap"><pre><code># who am I + a workspace folder for the notebook
+databricks current-user me            # note your userName (email)
+databricks workspace mkdirs "/Users/&lt;you&gt;/ingest_lab"
+databricks workspace import "/Users/&lt;you&gt;/ingest_lab/bronze_orders" \
+  --file bronze_orders.py --language PYTHON --format SOURCE --overwrite</code></pre></div>
+  <p><code>job.json</code>. There is no cluster spec, so on Free Edition the task runs on serverless:</p>
+  <div class="codewrap"><pre><code>{
+  "name": "ingest_lab_orders_bronze",
+  "max_concurrent_runs": 1,
+  "tasks": [
+    {
+      "task_key": "orders_bronze",
+      "notebook_task": {
+        "notebook_path": "/Users/&lt;you&gt;/ingest_lab/bronze_orders",
+        "source": "WORKSPACE"
+      },
+      "max_retries": 2,
+      "min_retry_interval_millis": 10000
+    }
+  ]
+}</code></pre></div>
+  <div class="codewrap"><pre><code>databricks jobs create --json @job.json     # → {"job_id": 123...}
+databricks jobs run-now &lt;job_id&gt;            # waits for the run; Bronze unchanged if no new files
+databricks jobs run-now &lt;job_id&gt;            # again: still no duplicates (checkpoint)</code></pre></div>
+  <p><b>Why these settings connect:</b> <code>max_retries</code> is what makes <code>addNewColumns</code> self-healing (fail → retry → new schema). <code>max_concurrent_runs: 1</code> protects the checkpoint. A schedule plus <code>availableNow</code> gives you incremental batch without an always-on cluster.</p>
+
+  <h3>Checklist</h3>
+  <div id="hoChecks"></div>
+</section>
+<!-- ============ 6. INTERVIEW ============ -->
+<section class="lesson" data-title="Interview questions" data-min="6">
+  <div class="eyebrow">6 · Interview questions · ~6 min</div>
+  <h2>Answer out loud first, then reveal</h2>
+  <p class="lead">These are senior-DE system-design questions. They cover the same ground as the Associate exam scenarios, but they ask you to <i>justify</i> your choices.</p>
+  <details class="qa"><summary>Q1. "Your Bronze ingestion job failed halfway and someone re-ran it. How do you know you don't have duplicates?"</summary>
+    <p><b>Strong answer:</b> Re-run safety comes from the state the ingestion tool keeps, not from hoping nobody re-runs the job. With Auto Loader, the checkpoint records which files were discovered and committed, and the Delta sink commits through the checkpoint. A restart continues from the last committed point, and files already ingested are skipped. I'd prove it with lineage columns: count rows per <code>source_file</code> and per <code>ingested_at</code>. A file should appear in only one ingest batch. On the job side I set <code>max_concurrent_runs = 1</code> so two runs never share a checkpoint. I treat the checkpoint as part of the table. If I delete one, I replay the other too. With a JDBC/REST notebook there's no checkpoint, so I'd use a watermark table and an idempotent write (MERGE on the key, or <code>replaceWhere</code> on the extract window).</p></details>
+  <details class="qa"><summary>Q2. "addNewColumns or rescue for a Bronze table fed by a partner's JSON?"</summary>
+    <p><b>Strong answer:</b> It depends on who consumes the drift. <code>addNewColumns</code> keeps Bronze as close to the source as possible. New fields become columns, but the stream stops once on each change and relies on a Job retry to continue, and the schema grows without review. <code>rescue</code> never fails and never changes the schema. Unknown fields go into <code>_rescued_data</code>, where I can alert on <code>_rescued_data IS NOT NULL</code> and decide to promote a field on purpose. For a partner feed I don't control, I'd pick <code>rescue</code> or land it as VARIANT. For an internal producer with a data contract, <code>failOnNewColumns</code> can be the right choice, because there a breaking change should stop the line. In every case, nothing is silently dropped. That's the only option I'd rule out (<code>none</code> without a rescued column).</p></details>
+  <details class="qa"><summary>Q3. "availableNow or a continuously running stream?"</summary>
+    <p><b>Strong answer:</b> It's a choice between latency and cost, and the code is the same. <code>availableNow</code> processes everything that's available (in multiple batches if needed) and then stops. On a schedule, that gives incremental batch with exactly-once file handling and no idle compute. A continuously running stream keeps compute up to get low latency. On serverless jobs, time-interval triggers aren't supported. For continuous needs Databricks points you to a continuous-mode pipeline, or to <code>availableNow</code> in a continuous job. Because the checkpoint is the same, I can move from scheduled to continuous later without changing the Bronze table or re-ingesting anything.</p></details>
+  <details class="qa"><summary>Q4. "Why not MERGE into Bronze to dedupe on ingest?"</summary>
+    <p><b>Strong answer:</b> Bronze's job is to keep a faithful, replayable record of what arrived, with <code>_metadata</code> file columns and an ingest timestamp so every Silver row can be traced back to its source file and batch. Append-only writes are cheap, they work naturally with streaming, and they never destroy evidence. If the producer sends a duplicate, I want to <i>see</i> it in Bronze. Dedup by business key ("latest record wins") belongs in Silver, where the rules are explicit and testable. File-level exactly-once is the tool's job (checkpoint). Record-level dedup is a modeling decision. Mixing the two in Bronze makes both harder to reason about.</p></details>
+  <details class="qa"><summary>Q5. "When would you choose COPY INTO or Lakeflow Connect over Auto Loader?"</summary>
+    <p><b>Strong answer:</b> COPY INTO is a good fit when a SQL user needs an idempotent, re-runnable batch load of a manageable number of files, such as a one-off backfill or a small periodic drop. It skips files it has already loaded, so re-running is harmless. Auto Loader is the better fit for continuous arrival and very large file counts, and it adds schema inference/evolution and the rescued data column. Lakeflow Connect sits on a different axis: the source isn't files at all, it's a supported SaaS app or database. The managed connector owns extraction, incremental state and CDC, so I don't write or operate any of that. If no managed connector exists, I write a JDBC/REST notebook and run it as a Lakeflow Job, and I own the watermark.</p></details>
+</section>
+
+<!-- ============ 7. GO DEEPER ============ -->
+<section class="lesson" data-title="Go deeper (docs)" data-min="2">
+  <div class="eyebrow">7 · Go deeper · official docs</div>
+  <h2>Official Databricks docs (every link checked on 2026-10-26)</h2>
+  <p class="lead">Each one was fetched and returned HTTP 200 with the page title shown. Two old paths redirect, so the final URL is used here.</p>
+  <h3>Decision 1 · Tool</h3>
+  <ul>
+    <li><a href="https://docs.databricks.com/aws/en/ingestion/" target="_blank" rel="noopener">Ingest with SQL and Spark APIs</a>: the overview of ingestion options</li>
+    <li><a href="https://docs.databricks.com/aws/en/ingestion/lakeflow-connect/" target="_blank" rel="noopener">Lakeflow Connect connector concepts</a>: database (CDC) vs SaaS connectors, and how managed ingestion runs</li>
+    <li><a href="https://docs.databricks.com/aws/en/ingestion/cloud-object-storage/copy-into/" target="_blank" rel="noopener">Get started using COPY INTO to load data</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/archive/connectors/jdbc" target="_blank" rel="noopener">Query databases using JDBC</a> (Databricks now serves this page from its archive section)</li>
+    <li><a href="https://docs.databricks.com/aws/en/jobs/" target="_blank" rel="noopener">Lakeflow Jobs</a></li>
+  </ul>
+  <h3>Decision 2 · Re-run safety</h3>
+  <ul>
+    <li><a href="https://docs.databricks.com/aws/en/ingestion/cloud-object-storage/auto-loader/" target="_blank" rel="noopener">What is Auto Loader?</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/structured-streaming/checkpoints" target="_blank" rel="noopener">Structured Streaming checkpoints</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/structured-streaming/triggers" target="_blank" rel="noopener">Configure Structured Streaming trigger intervals</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/compute/serverless/limitations" target="_blank" rel="noopener">Serverless compute limitations</a> (supported triggers)</li>
+  </ul>
+  <h3>Decision 3 · Shape &amp; drift</h3>
+  <ul>
+    <li><a href="https://docs.databricks.com/aws/en/ingestion/cloud-object-storage/auto-loader/schema" target="_blank" rel="noopener">Configure schema inference and evolution in Auto Loader</a>: evolution modes and the rescued data column</li>
+    <li><a href="https://docs.databricks.com/aws/en/spark/api-options" target="_blank" rel="noopener">Spark API options reference</a>: where the old Auto Loader options page now redirects</li>
+    <li><a href="https://docs.databricks.com/aws/en/ingestion/file-metadata-column" target="_blank" rel="noopener">File metadata column</a> (<code>_metadata</code>)</li>
+    <li><a href="https://docs.databricks.com/aws/en/ingestion/variant" target="_blank" rel="noopener">Ingest data as semi-structured variant type</a> (<code>singleVariantColumn</code>)</li>
+    <li><a href="https://docs.databricks.com/aws/en/semi-structured/variant" target="_blank" rel="noopener">Query variant data</a></li>
+  </ul>
+  <h3>Hands-on environment</h3>
+  <ul>
+    <li><a href="https://docs.databricks.com/aws/en/volumes/" target="_blank" rel="noopener">What are Unity Catalog volumes?</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/getting-started/free-edition-limitations" target="_blank" rel="noopener">Databricks Free Edition limitations</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/dev-tools/cli/reference/jobs-commands" target="_blank" rel="noopener">CLI: jobs command group</a> · <a href="https://docs.databricks.com/aws/en/dev-tools/cli/reference/workspace-commands" target="_blank" rel="noopener">CLI: workspace command group</a></li>
+  </ul>
+</section>
+
+<!-- ============ 8. TEASER ============ -->
+<section class="lesson" data-title="Bridge: Bronze → Silver" data-min="3">
+  <div class="eyebrow">8 · Bridge to this week · ~3 min</div>
+  <h2>Teaser: Bronze → Silver starts with a name, a cast and a null rule</h2>
+  <p class="lead">This week's theme is Bronze-to-Silver transforms. Today's pill covers cleaning. Here's the first step, run against the table you just built. Joins, explode, dedup and tuning come later in the week.</p>
+  <div class="codewrap"><pre><code>from pyspark.sql import functions as F
+
+bronze = spark.table("workspace.ingest_lab.orders_bronze")   # by UC name, never by path
+
+silver_preview = (bronze
+    .select(
+        F.col("order_id").cast("bigint").alias("order_id"),
+        F.to_timestamp("order_ts").alias("order_ts"),
+        F.col("amount").cast("decimal(10,2)").alias("amount"),
+        F.coalesce(F.col("customer.country"), F.lit("UNKNOWN")).alias("country"),
+        "source_file", "ingested_at")                       # lineage travels with the row
+    .where(F.col("order_id").isNotNull()))
+
+display(silver_preview)</code></pre></div>
+  <p>Questions to carry into today's pill:</p>
+  <ul>
+    <li>Order 1004 has a null <code>order_ts</code> and <code>amount</code>. Drop it, default it, or quarantine it? (This connects to NJ's Monday DE pill on fail / drop / warn.)</li>
+    <li>What should happen when a string <i>can't</i> be cast? (Think ANSI mode vs a safe cast.)</li>
+    <li>Should <code>coupon_code</code> leave <code>_rescued_data</code> and become a real Silver column? Who decides?</li>
+  </ul>
+  <div class="note">Keep <code>ingest_lab</code> around for the week's pills. When you're finished, run <code>DROP SCHEMA workspace.ingest_lab CASCADE</code>, which removes the table, the volume and the state together. Remember the pairing: table and checkpoint live and die together.</div>
+  <div class="okbox"><b>Done.</b> Mark this section complete, and that's today's deep dive. Good luck with the move on Thursday. 📦</div>
+</section>
+</main>
+</div>
+<script>
+(function(){
+  "use strict";
+  var KEY = "dd-2026-10-26-db-ingestion-decisions-rerunnable-bronze-v1";
+  var state = {done:{}, current:0, drill:{}, checks:{}, theme:null, step:0};
+  function load(){ try{ var s = JSON.parse(localStorage.getItem(KEY) || "null"); if(s && typeof s === "object"){ for(var k in state){ if(s[k] !== undefined) state[k] = s[k]; } } }catch(e){} }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+  load();
+
+  var root = document.documentElement;
+  if(state.theme) root.setAttribute("data-theme", state.theme);
+  document.getElementById("themeBtn").addEventListener("click", function(){
+    var cur = root.getAttribute("data-theme") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    state.theme = cur === "dark" ? "light" : "dark"; root.setAttribute("data-theme", state.theme); save();
+  });
+
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.lesson"));
+  var navList = document.getElementById("navList");
+  var sidebar = document.getElementById("sidebar");
+
+  sections.forEach(function(sec, i){
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = "#s" + (i+1);
+    a.innerHTML = '<span class="dot">✓</span><span>' + (i+1) + ". " + sec.getAttribute("data-title") + ' <small style="color:var(--muted)">· ' + sec.getAttribute("data-min") + "m</small></span>";
+    a.addEventListener("click", function(ev){ ev.preventDefault(); show(i); sidebar.classList.remove("open"); });
+    li.appendChild(a); navList.appendChild(li);
+
+    var foot = document.createElement("div");
+    foot.className = "footer-nav";
+    var lab = document.createElement("label"); lab.className = "done-label";
+    var cb = document.createElement("input"); cb.type = "checkbox"; cb.className = "doneBox"; cb.checked = !!state.done[i];
+    cb.addEventListener("change", function(){ state.done[i] = cb.checked; save(); refresh(); });
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(" Mark section complete"));
+    var btns = document.createElement("div"); btns.style.display = "flex"; btns.style.gap = "8px";
+    if(i > 0){ var p = document.createElement("button"); p.className = "btn"; p.textContent = "← Back"; p.addEventListener("click", function(){ show(i-1); }); btns.appendChild(p); }
+    if(i < sections.length - 1){ var n = document.createElement("button"); n.className = "btn primary"; n.textContent = "Complete & continue →"; n.addEventListener("click", function(){ state.done[i] = true; save(); show(i+1); }); btns.appendChild(n); }
+    else { var f = document.createElement("button"); f.className = "btn primary"; f.textContent = "Finish ✓"; f.addEventListener("click", function(){ state.done[i] = true; save(); refresh(); }); btns.appendChild(f); }
+    foot.appendChild(lab); foot.appendChild(btns); sec.appendChild(foot);
+  });
+
+  function show(i){
+    if(i < 0 || i >= sections.length) i = 0;
+    state.current = i; save();
+    sections.forEach(function(s, j){ s.classList.toggle("active", j === i); });
+    refresh();
+    window.scrollTo(0, 0);
+    if(history.replaceState) history.replaceState(null, "", "#s" + (i+1));
+  }
+  function refresh(){
+    var links = navList.querySelectorAll("a");
+    var n = 0;
+    sections.forEach(function(s, j){
+      if(state.done[j]) n++;
+      links[j].classList.toggle("done", !!state.done[j]);
+      links[j].classList.toggle("active", j === state.current);
+      var cb = s.querySelector(".doneBox"); if(cb) cb.checked = !!state.done[j];
+    });
+    var pct = Math.round(100 * n / sections.length);
+    document.getElementById("pct").textContent = pct + "%";
+    document.getElementById("pctMobile").textContent = pct + "%";
+    document.getElementById("bar").style.width = pct + "%";
+    document.getElementById("barMobile").style.width = pct + "%";
+    document.getElementById("progMeta").textContent = n + " of " + sections.length + " sections complete";
+  }
+  document.getElementById("resetBtn").addEventListener("click", function(){
+    if(!window.confirm("Reset progress, drill answers and checklist for this lesson?")) return;
+    state.done = {}; state.drill = {}; state.checks = {}; state.step = 0; save();
+    renderDrill(); renderChecks(); renderStep(0); show(0);
+  });
+  document.getElementById("menuBtn").addEventListener("click", function(){ sidebar.classList.toggle("open"); });
+
+  /* ---------- walkthrough ---------- */
+  var steps = [
+    {t:"1 · Land", d:"Tool", b:"<p>A partner's export job writes <code>orders_003.json</code> to <code>/Volumes/workspace/ingest_lab/landing/raw/orders/</code>. Unity Catalog governs who can write to the volume and who can read it (Oct 19 deep dive). The <b>tool decision</b> was already made when you looked at this source: files that keep arriving in storage you control means <b>Auto Loader</b>. If this were Salesforce, there would be no file at all, and a Lakeflow Connect pipeline would pull the data itself.</p>"},
+    {t:"2 · Trigger", d:"Re-run", b:"<p>The Lakeflow Job's schedule fires and runs the notebook on serverless. The stream starts with <code>.trigger(availableNow=True)</code>, which means: process everything that's new since the last commit, then stop. If the job has already run five times today, that changes nothing. \"New\" is defined by the checkpoint, not by the clock.</p>"},
+    {t:"3 · Discover", d:"Re-run", b:"<p>Auto Loader lists the directory (or uses file events where configured) and checks each file against the file state stored in the <b>checkpoint</b>. <code>orders_001</code> and <code>orders_002</code> are already recorded, so they're skipped. Only <code>orders_003</code> is new. This is <b>exactly-once at the file level</b>, and it's the whole reason a re-run is safe.</p>"},
+    {t:"4 · Parse & drift", d:"Shape", b:"<p>Auto Loader reads the file with the latest schema stored in <code>cloudFiles.schemaLocation</code>. The record has <code>coupon_code</code>, which isn't in that schema. Now <code>schemaEvolutionMode</code> decides: with <b>rescue</b>, the value goes into <code>_rescued_data</code> and the run continues. With <b>addNewColumns</b>, the schema file gets a new version and the stream fails once, and the Job's retry continues with the new column. Nested data that does fit the schema lands as a <code>STRUCT</code>. With <code>singleVariantColumn</code>, it would all be one <code>VARIANT</code>.</p>"},
+    {t:"5 · Stamp & append", d:"Shape", b:"<p>Before the write, each row gets <code>_metadata.file_path</code> → <code>source_file</code>, the file's modification time, and <code>current_timestamp()</code> → <code>ingested_at</code>. The batch is <b>appended</b> to the UC Delta table <code>workspace.ingest_lab.orders_bronze</code>. Nothing is updated or merged. Bronze is a log of what arrived.</p>"},
+    {t:"6 · Commit", d:"Re-run", b:"<p>The Delta commit and the checkpoint progress are tied together. If the serverless task dies <i>before</i> the commit, the retry processes <code>orders_003</code> again and nothing was half-written. If it dies <i>after</i>, the checkpoint already lists the file and the retry skips it. Either way you get one copy. The stream then stops (availableNow) and the Job run ends green.</p>"},
+    {t:"7 · Trust", d:"All three", b:"<p>Silver reads <code>orders_bronze</code> <b>by UC name</b>, casts the strings, and applies null rules. If an analyst asks \"where did order 1005 come from?\", <code>source_file</code> and <code>ingested_at</code> answer it. If they ask \"why is coupon_code missing?\", <code>_rescued_data</code> answers it. All three decisions show up in one table: the <b>tool</b> fit the source, the <b>state</b> made re-runs a no-op, and the <b>shape</b> absorbed drift without losing data.</p>"}
+  ];
+  var wtSteps = document.getElementById("wtSteps"), wtBody = document.getElementById("wtBody");
+  steps.forEach(function(s, i){ var b = document.createElement("button"); b.textContent = s.t; b.addEventListener("click", function(){ renderStep(i); }); wtSteps.appendChild(b); });
+  function renderStep(i){
+    if(i < 0) i = 0; if(i >= steps.length) i = steps.length - 1;
+    state.step = i; save();
+    var col = steps[i].d === "Tool" ? "t1" : steps[i].d === "Re-run" ? "t2" : steps[i].d === "Shape" ? "t3" : "";
+    wtBody.innerHTML = '<span class="tag ' + col + '">Decision: ' + steps[i].d + "</span><h3 style=\"margin-top:4px\">" + steps[i].t + "</h3>" + steps[i].b;
+    Array.prototype.forEach.call(wtSteps.children, function(b, j){ b.classList.toggle("on", j === i); });
+  }
+  document.getElementById("wtPrev").addEventListener("click", function(){ renderStep(state.step - 1); });
+  document.getElementById("wtNext").addEventListener("click", function(){ renderStep(state.step + 1); });
+
+  /* ---------- decision drill ---------- */
+  var TOOLS = ["Lakeflow Connect", "Auto Loader", "COPY INTO", "JDBC/REST notebook job"];
+  var drill = [
+    {q:"Sales wants Salesforce Accounts and Opportunities in the lakehouse, refreshed incrementally. Nobody on the team wants to maintain API code, OAuth refresh or incremental cursors.", a:0,
+     why:"Salesforce is a source with a Databricks-managed connector, and the requirement is \"we don't want to own the extract\". Lakeflow Connect runs a managed, UC-governed ingestion pipeline on serverless and keeps the incremental state itself. <b>Re-run state:</b> platform-owned. <b>Drift:</b> handled by the connector. Writing a REST notebook would mean taking on all the work the team just said it doesn't want."},
+    {q:"A logistics partner drops JSON files every hour into a UC volume. Fields get added a few times a year without notice. You need data within ~1 hour.", a:1,
+     why:"Files keep arriving in storage you control, so this is Auto Loader. Run it with <code>availableNow</code> on an hourly Job schedule: incremental batch, no always-on compute. <b>Re-run state:</b> checkpoint. <b>Drift:</b> <code>rescue</code> (or <code>addNewColumns</code> + Job retries), plus <code>_metadata</code> + <code>ingested_at</code> columns for audit."},
+    {q:"Finance hands you a one-off backfill: ~3,000 CSV files for 2024 sitting in a volume. A SQL analyst will run it, and it must be safe if they run it twice.", a:2,
+     why:"This is a bounded, one-time batch of thousands of files, run by a SQL user. COPY INTO is idempotent: files already loaded into the target are skipped when you re-run, so a double run does nothing. (Auto Loader would work too, but nothing here needs a stream, a checkpoint folder or ongoing scheduling.)"},
+    {q:"A vendor exposes a paginated REST API with rate limits and an <code>updated_since</code> parameter. There's no managed connector for it.", a:3,
+     why:"With no managed connector, you own the extract. Write a Python notebook that pages through the API, respects rate limits, and lands raw responses (STRING/VARIANT) plus an ingest timestamp in Bronze, scheduled as a Lakeflow Job with retries. <b>Re-run state:</b> YOURS. Keep a high-water mark (<code>updated_since</code>) in a table and make the write idempotent (MERGE on key, or <code>replaceWhere</code> on the window)."},
+    {q:"The orders service runs on SQL Server. You need inserts, updates and deletes replicated incrementally (CDC) into the lakehouse, and the DBAs ask for minimal custom code.", a:0,
+     why:"Database CDC from a supported engine is exactly what Lakeflow Connect's database connectors are for. They read changes incrementally and manage the pipeline state. A JDBC notebook job could pull snapshots or watermark queries, but it can't see deletes without full compares, and you'd own all of it. That's DE1's point: managed connectors do the CDC work for you."}
+  ];
+  var drillEl = document.getElementById("drill");
+  function renderDrill(){
+    drillEl.innerHTML = "";
+    drill.forEach(function(s, i){
+      var box = document.createElement("div"); box.className = "scenario";
+      box.innerHTML = "<b>Scenario " + (i+1) + ".</b> " + s.q;
+      var ch = document.createElement("div"); ch.className = "choices";
+      var fb = document.createElement("div"); fb.className = "feedback";
+      TOOLS.forEach(function(t, k){
+        var b = document.createElement("button"); b.textContent = t;
+        b.addEventListener("click", function(){ state.drill[i] = k; save(); paint(); });
+        ch.appendChild(b);
+      });
+      function paint(){
+        var pick = state.drill[i];
+        if(pick === undefined){ fb.className = "feedback"; return; }
+        Array.prototype.forEach.call(ch.children, function(b, k){
+          b.disabled = true;
+          b.classList.toggle("right", k === s.a);
+          b.classList.toggle("wrong", k === pick && k !== s.a);
+        });
+        fb.className = "feedback show " + (pick === s.a ? "good" : "bad");
+        fb.innerHTML = (pick === s.a ? "✅ <b>Yes: " : "❌ <b>Best fit: ") + TOOLS[s.a] + ".</b> " + s.why;
+        score();
+      }
+      box.appendChild(ch); box.appendChild(fb); drillEl.appendChild(box);
+      paint();
+    });
+    score();
+  }
+  function score(){
+    var answered = 0, right = 0;
+    drill.forEach(function(s, i){ if(state.drill[i] !== undefined){ answered++; if(state.drill[i] === s.a) right++; } });
+    document.getElementById("drillScore").textContent = answered ? ("Score: " + right + " / " + answered + " answered (" + drill.length + " total)") : "";
+  }
+  document.getElementById("drillReset").addEventListener("click", function(){ state.drill = {}; save(); renderDrill(); });
+
+  /* ---------- hands-on checklist ---------- */
+  var checks = [
+    "Cell 3: 4 rows from 2 files; noticed JSON columns landed as strings / struct of strings",
+    "Cell 4: re-run left 4 rows and one ingest batch (no duplicates)",
+    "Cell 5: run succeeded and coupon_code showed up in _rescued_data",
+    "Can explain what addNewColumns would have done instead, and why Job retries matter",
+    "(Optional) Ran it twice as a Lakeflow Job via the Databricks CLI"
+  ];
+  var hc = document.getElementById("hoChecks");
+  function renderChecks(){
+    hc.innerHTML = "";
+    checks.forEach(function(c, i){
+      var l = document.createElement("label"); l.className = "check";
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!state.checks[i];
+      cb.addEventListener("change", function(){ state.checks[i] = cb.checked; save(); });
+      l.appendChild(cb); l.appendChild(document.createTextNode(c)); hc.appendChild(l);
+    });
+  }
+
+  /* ---------- copy buttons ---------- */
+  Array.prototype.forEach.call(document.querySelectorAll(".codewrap"), function(w){
+    var b = document.createElement("button"); b.className = "copy"; b.textContent = "Copy";
+    b.addEventListener("click", function(){
+      var txt = w.querySelector("pre").innerText;
+      var done = function(){ b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy"; }, 1200); };
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done, function(){ b.textContent = "Select & copy"; }); }
+      else { b.textContent = "Select & copy"; }
+    });
+    w.appendChild(b);
+  });
+
+  renderDrill(); renderChecks(); renderStep(state.step || 0);
+  var m = /^#s(\d+)$/.exec(location.hash || "");
+  show(m ? parseInt(m[1], 10) - 1 : (state.current || 0));
+})();
+</script>
+</body>
+</html>

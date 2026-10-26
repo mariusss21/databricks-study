@@ -8,6 +8,7 @@ Newest first.
 
 | Week | Theme | Dates |
 |---|---|---|
+| [2026-W44](2026-W44-bronze-to-silver-transforms/README.md) | Bronze to Silver transforms | Mon 2026-10-26 to Sun 2026-11-01 |
 | [2026-W43](2026-W43-ingestion-into-bronze/README.md) | Ingestion into Bronze | Mon 2026-10-19 to Sun 2026-10-25 |
 
 ## Naming convention
