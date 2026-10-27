@@ -13,7 +13,7 @@ Pill files get linked here as they land.
 | Day | Databricks pill (Gerald) | DE pill (NJ in Dollar) |
 |---|---|---|
 | Mon 2026-10-26 | [DB1: Bronze-to-Silver cleaning: reading Bronze by UC name, explicit casts, null rules, timestamp standardization](DB1-bronze-to-silver-cleaning.md) | [DE1: Silver data quality and conformance: expectations, quarantine tables, fail vs drop vs warn](DE1-silver-data-quality-and-conformance.md) |
-| Tue 2026-10-27 | DB2: Join types on Databricks: inner, left, cross, multi-key, broadcast joins (plus union vs unionByName) | DE2: Dimensional modeling basics: facts, dimensions, grain, surrogate keys, star schema |
+| Tue 2026-10-27 | DB2: Join types on Databricks: inner, left, cross, multi-key, broadcast joins (plus union vs unionByName) | [DE2: Dimensional modeling basics: facts, dimensions, grain, surrogate keys, star schema](DE2-dimensional-modeling-basics.md) |
 | Wed 2026-10-28 | DB3: Column and row surgery: withColumn/select/alias, drop/rename, filter, split, explode and grain changes | DE3: Grain control: flattening nested data into child tables, join fan-out traps, testing the grain |
 | Thu 2026-10-29 | DB4: Dedup and "latest record wins": row_number() windows vs dropDuplicates, and MERGE INTO Silver | DE4: SCD Type 1 vs Type 2 and when each fits |
 | Fri 2026-10-30 | DB5: Aggregations and profiling: count, countDistinct vs approx_count_distinct, summary/describe, picking a Gold grain | DE5: Incremental Silver-to-Gold with Delta Change Data Feed vs full recompute |
