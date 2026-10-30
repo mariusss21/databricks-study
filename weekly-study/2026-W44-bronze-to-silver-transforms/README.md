@@ -23,6 +23,7 @@ Pill files get linked here as they land.
 ## Deep dives (Zé Carlos)
 
 - **Databricks, Mon 2026-10-26:** [Connection Deep Dive: Ingestion Decisions → One Re-runnable Bronze Pipeline](deepdive-db-ingestion-decisions-rerunnable-bronze.html) ([brief from Gerald](deepdive-db-ingestion-decisions-rerunnable-bronze-brief.md)). It covers the 2026-W43 study week (Ingestion into Bronze) and ends with a teaser for this week's theme.
+- **Data engineering, Fri 2026-10-30:** [Connection Deep Dive: Silver that holds up: quality gates, grain, and history in one pipeline](deepdive-de-silver-that-holds-up.html). It connects this week's DE pills DE1–DE4 (quality gates, dimensional modeling, grain control, SCD Type 1 vs 2) into one re-runnable orders + customers pipeline.
 
 The deep dives are self-contained HTML files. Download one and open it in a browser; GitHub's file view shows the source, not the rendered page.
 

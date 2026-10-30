@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silver that holds up: quality gates, grain, and history in one pipeline · Connection deep dive</title>
+<meta name="description" content="Friday Data Engineering connection deep dive (2026-10-30): quality gates and quarantine, grain and fan-out, SCD2 with AUTO CDC or MERGE, and an as-was fact in one re-runnable pipeline.">
+<style>
+:root{
+  --bg:#f6f7fb;--panel:#fff;--panel2:#f0f2f8;--text:#1b1f2a;--muted:#5b6476;--border:#dde1ea;
+  --accent:#ff3621;--accent-soft:#fff0ed;--ok:#11845b;--ok-soft:#e5f6ee;--bad:#c62f3a;--bad-soft:#fdecee;
+  --warn:#9a6700;--warn-soft:#fff6dd;--info:#1f5fbf;--info-soft:#e9f1ff;
+  --code-bg:#0f1420;--code-text:#e6e9f0;
+  --t1:#2f6fd6;--t2:#b7791f;--t3:#8a4fd8;--t4:#0f8a6a;--br:#0f9d74;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+  --radius:12px;--sidebar:290px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:#0d1117;--panel:#151b24;--panel2:#1b2330;--text:#e6e9ef;--muted:#9aa4b6;--border:#2a3342;
+  --accent:#ff6a55;--accent-soft:#2a1814;--ok:#3ccf91;--ok-soft:#10261d;--bad:#ff6b77;--bad-soft:#2b1418;
+  --warn:#f0c04a;--warn-soft:#2a230f;--info:#7fb2ff;--info-soft:#121f36;--code-bg:#0a0e16;
+  --t1:#6fa3ff;--t2:#f0c04a;--t3:#b48cff;--t4:#3fd1a4;--br:#3ccf91;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;font-size:16px}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel2);border:1px solid var(--border);padding:.05em .35em;border-radius:5px;overflow-wrap:anywhere}
+pre{background:var(--code-bg);color:var(--code-text);padding:14px 16px;border-radius:10px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.5;margin:0}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+.codewrap{position:relative;margin:12px 0}
+.copy{position:absolute;top:8px;right:8px;font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid #3a4456;background:#1d2533;color:#e6e9f0;cursor:pointer}
+.layout{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--panel);border-right:1px solid var(--border);padding:18px 14px 24px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;gap:10px;align-items:center}
+.logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#ff9a3c);display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px;flex:none}
+.brand h1{font-size:15px;line-height:1.25;margin:0}
+.brand small{color:var(--muted);font-size:12px}
+.progress-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.progress-top{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+.bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin:6px 0}
+.bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),#ff9a3c);transition:width .3s}
+.progress-meta{font-size:12px;color:var(--muted)}
+nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+nav a{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;text-decoration:none;color:var(--text);font-size:14px}
+nav a:hover{background:var(--panel2)}
+nav a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+nav .dot{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--border);margin-top:2px;display:grid;place-items:center;font-size:11px;color:#fff}
+nav a.done .dot{background:var(--ok);border-color:var(--ok)}
+.side-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+.btn{font:inherit;font-size:14px;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.small{font-size:12px;padding:5px 10px}
+main{padding:28px clamp(16px,4vw,48px) 80px;max-width:980px}
+section.lesson{display:none}
+section.lesson.active{display:block;animation:fade .25s}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;color:var(--accent)}
+h2{font-size:26px;line-height:1.25;margin:4px 0 6px}
+h3{font-size:18px;margin:22px 0 6px}
+.lead{color:var(--muted);font-size:17px;margin-top:0}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);margin:14px 0}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;margin-bottom:4px}
+.t1{color:var(--t1)}.t2{color:var(--t2)}.t3{color:var(--t3)}
+.b1{border-top:4px solid var(--t1)}.b2{border-top:4px solid var(--t2)}.b3{border-top:4px solid var(--t3)}
+.note{border-left:4px solid var(--info);background:var(--info-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.warn{border-left:4px solid var(--warn);background:var(--warn-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.okbox{border-left:4px solid var(--ok);background:var(--ok-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--panel2)}
+.tablewrap{overflow-x:auto}
+.footer-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:28px;padding-top:16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.done-label{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted)}
+.svgwrap{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:10px;overflow-x:auto}
+.svgwrap svg{width:100%;min-width:720px;height:auto;display:block}
+.svgwrap text{font-family:var(--sans);fill:var(--text)}
+.svgwrap .muted{fill:var(--muted)}
+.stepper{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.stepper button{font:inherit;font-size:13px;padding:6px 10px;border-radius:99px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.stepper button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.step-body{min-height:190px}
+.scenario{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin:14px 0;box-shadow:var(--shadow)}
+.choices{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.choices button{font:inherit;font-size:14px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);cursor:pointer}
+.choices button.right{background:var(--ok-soft);border-color:var(--ok);color:var(--ok);font-weight:700}
+.choices button.wrong{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+.choices button:disabled{cursor:default}
+.feedback{display:none;padding:10px 12px;border-radius:8px;font-size:15px}
+.feedback.show{display:block}
+.feedback.good{background:var(--ok-soft);border-left:4px solid var(--ok)}
+.feedback.bad{background:var(--bad-soft);border-left:4px solid var(--bad)}
+.score{font-weight:700}
+details.qa{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin:12px 0;box-shadow:var(--shadow)}
+details.qa summary{cursor:pointer;font-weight:650}
+details.qa[open] summary{margin-bottom:8px}
+.check{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.check input{margin-top:5px}
+.mobilebar{display:none}
+@media (max-width:860px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:fixed;inset:0 auto 0 0;width:min(86vw,320px);transform:translateX(-105%);transition:transform .25s;z-index:20;box-shadow:var(--shadow)}
+  .sidebar.open{transform:none}
+  .mobilebar{display:flex;gap:10px;align-items:center;position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--border);padding:8px 12px}
+  .mobilebar .bar{flex:1;margin:0}
+}
+
+.t4{color:var(--t4)}.b4{border-top:4px solid var(--t4)}
+
+</style>
+</head>
+<body>
+<div class="mobilebar">
+  <button class="btn small" id="menuBtn" aria-label="Open navigation">☰ Sections</button>
+  <div class="bar" aria-hidden="true"><span id="barMobile"></span></div>
+  <span id="pctMobile" style="font-size:13px;color:var(--muted)">0%</span>
+</div>
+<div class="layout">
+<aside class="sidebar" id="sidebar">
+  <div class="brand">
+    <div class="logo">DD</div>
+    <div><h1>Silver that holds up</h1><small>Connection deep dive · Fri 2026-10-30 · Data Engineering · ~60 min</small></div>
+  </div>
+  <div class="progress-card">
+    <div class="progress-top"><span>Progress</span><span id="pct">0%</span></div>
+    <div class="bar"><span id="bar"></span></div>
+    <div class="progress-meta" id="progMeta">0 of 0 sections complete</div>
+  </div>
+  <nav aria-label="Sections"><ol id="navList"></ol></nav>
+  <div class="side-actions">
+    <button class="btn small" id="themeBtn">◐ Theme</button>
+    <button class="btn small" id="resetBtn">↺ Reset progress</button>
+  </div>
+</aside>
+<main id="main">
+<!-- ============ 1. RECAP ============ -->
+<section class="lesson" data-title="Recap: four topics, one design" data-min="5">
+  <div class="eyebrow">1 · Recap · ~5 min</div>
+  <h2>Four pills, one design decision</h2>
+  <p class="lead">Last Friday ended with an <b>append-only, re-runnable Bronze</b>: Auto Loader checkpoints, CDC landed as raw change rows, and dedup/replay handled at Silver. This week's DE pills (DE1–DE4) cover what happens next. Today's claim is simple: <b>you can't build trustworthy history (SCD2) or correct facts unless every row passed a quality gate first and every table has a declared, tested grain.</b> A senior engineer designs these four together.</p>
+  <div class="grid3">
+    <div class="card b1"><span class="tag t1">DE1 · Quality &amp; conformance</span>
+      <ul>
+        <li><b>Validate</b> (is the row usable?) vs <b>conform</b> (cast, rename, standardize codes and time zones).</li>
+        <li>Every rule gets an <b>explicit action</b>: warn, drop, fail, or quarantine.</li>
+        <li>LDP expectations: <code>EXPECT</code>, <code>ON VIOLATION DROP ROW</code>, <code>ON VIOLATION FAIL UPDATE</code> (Python: <code>expect</code>, <code>expect_or_drop</code>, <code>expect_or_fail</code>, <code>expect_all*</code>).</li>
+        <li>Quarantine = the inverted rule writes bad rows <i>with a reason</i> to their own table. Delta <code>NOT NULL</code>/<code>CHECK</code> constraints are the last line of defense on the table itself.</li>
+      </ul></div>
+    <div class="card b2"><span class="tag t2">DE2 · Dimensional basics</span>
+      <ul>
+        <li><b>Grain first</b>: "one row per ___" before any column list.</li>
+        <li><b>Facts</b> = events/measures at a grain. <b>Dims</b> = descriptive context.</li>
+        <li><b>Surrogate keys</b> decouple the warehouse from source IDs and let one customer have many versions.</li>
+        <li><b>Unknown member (-1)</b>: a fact row never disappears because its dimension row is missing or late.</li>
+      </ul></div>
+    <div class="card b3"><span class="tag t3">DE3 · Grain control</span>
+      <ul>
+        <li>Nested arrays become <b>child tables</b>, one per grain (<code>posexplode_outer</code> keeps a position and keeps parents with empty arrays).</li>
+        <li><b>Fan-out</b>: join two "many" sides to the same parent and every measure multiplies.</li>
+        <li>Fix: <b>aggregate the many side to the parent grain first</b>, then join.</li>
+        <li>Prove it: uniqueness on the declared key, row-count reconciliation.</li>
+      </ul></div>
+    <div class="card" style="border-top:4px solid var(--t4)"><span class="tag t4">DE4 · SCD1 vs SCD2</span>
+      <ul>
+        <li><b>Type 1</b> overwrites (no history). <b>Type 2</b> closes the old row and opens a new version (<code>__START_AT</code>/<code>__END_AT</code> or <code>valid_from</code>/<code>valid_to</code>).</li>
+        <li>Pick Type 2 <b>per attribute</b>: only what the business reports history on.</li>
+        <li>Facts join on the <b>surrogate key as of event time</b>.</li>
+        <li>Build with <code>MERGE INTO</code> by hand or <code>AUTO CDC ... STORED AS SCD TYPE 2</code>.</li>
+      </ul></div>
+  </div>
+  <div class="note"><b>Tie-back to Gerald's track this week:</b> DB1 cleaning (casts, null rules) is the <i>conform</i> half of DE1. DB2 joins are where fan-out happens. DB3 <code>explode</code> is how you change grain. DB4 dedup and <code>MERGE INTO</code> is the engine under SCD2.</div>
+  <h3>The one-sentence version</h3>
+  <p><b>Gate → grain → history → fact → test.</b> Each step depends on the one before it. A bad row that passes the gate becomes a bad version in the dimension. An undeclared grain becomes a doubled revenue number. A fact joined on the business key instead of the versioned surrogate key becomes a fan-out.</p>
+</section>
+
+<!-- ============ 2. MAP ============ -->
+<section class="lesson" data-title="Connection map" data-min="4">
+  <div class="eyebrow">2 · Connection map · ~4 min</div>
+  <h2>One pipeline, four ideas wired together</h2>
+  <p class="lead">Read left to right. Blue is the quality gate (DE1), amber is grain (DE3), purple is history (DE4), green is the star schema (DE2). The dashed boxes are the tests that prove each hand-off.</p>
+  <div class="svgwrap">
+  <svg viewBox="0 0 1000 440" role="img" aria-label="Connection map: Bronze feeds pass a quality gate, split by grain, customers become an SCD2 dimension, the fact joins on the surrogate key as of order time, and tests guard each hand-off">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a93a6"/></marker>
+    </defs>
+    <text x="20" y="28" font-size="12" font-weight="700" class="muted">BRONZE (append-only, re-runnable)</text>
+    <text x="250" y="28" font-size="12" font-weight="700" class="muted">QUALITY GATE (DE1)</text>
+    <text x="470" y="28" font-size="12" font-weight="700" class="muted">SILVER: ONE TABLE PER GRAIN (DE3) / HISTORY (DE4)</text>
+    <text x="800" y="28" font-size="12" font-weight="700" class="muted">GOLD STAR (DE2)</text>
+    <g font-size="13">
+      <rect x="15" y="60" width="190" height="64" rx="10" fill="none" stroke="#8a93a6"/>
+      <text x="27" y="84">bronze.orders_raw</text><text x="27" y="104" font-size="11" class="muted">JSON · items[] · payments[]</text>
+      <rect x="15" y="270" width="190" height="64" rx="10" fill="none" stroke="#8a93a6"/>
+      <text x="27" y="294">bronze.customers_cdc</text><text x="27" y="314" font-size="11" class="muted">op · lsn · segment · country · email</text>
+
+      <rect x="245" y="60" width="180" height="64" rx="10" fill="none" stroke="var(--t1)" stroke-width="2"/>
+      <text x="257" y="84">expectations</text><text x="257" y="104" font-size="11" class="muted">not-null keys · amounts &gt; 0</text>
+      <rect x="245" y="270" width="180" height="64" rx="10" fill="none" stroke="var(--t1)" stroke-width="2"/>
+      <text x="257" y="294">expectations</text><text x="257" y="314" font-size="11" class="muted">op IN (I,U,D) · lsn not null</text>
+      <rect x="265" y="165" width="140" height="58" rx="10" fill="none" stroke="var(--bad)" stroke-width="2"/>
+      <text x="277" y="189">quarantine</text><text x="277" y="208" font-size="11" class="muted">row + dq_reason</text>
+
+      <rect x="470" y="45" width="200" height="40" rx="9" fill="none" stroke="var(--t3)" stroke-width="2"/>
+      <text x="482" y="70">silver.orders · 1 / order</text>
+      <rect x="470" y="95" width="200" height="40" rx="9" fill="none" stroke="var(--t3)" stroke-width="2"/>
+      <text x="482" y="120">silver.order_items · 1 / line</text>
+      <rect x="470" y="145" width="200" height="40" rx="9" fill="none" stroke="var(--t3)" stroke-width="2"/>
+      <text x="482" y="170">silver.order_payments</text>
+      <rect x="470" y="270" width="200" height="64" rx="10" fill="none" stroke="var(--t4)" stroke-width="2"/>
+      <text x="482" y="294">silver.dim_customer</text><text x="482" y="314" font-size="11" class="muted">SCD2 on segment, country</text>
+
+      <rect x="770" y="80" width="210" height="64" rx="10" fill="none" stroke="var(--t2)" stroke-width="2"/>
+      <text x="782" y="104">gold.fact_order_line</text><text x="782" y="124" font-size="11" class="muted">1 / order line · customer_sk</text>
+      <rect x="770" y="270" width="210" height="64" rx="10" fill="none" stroke="var(--t2)" stroke-width="2"/>
+      <text x="782" y="294">dim_customer (versions)</text><text x="782" y="314" font-size="11" class="muted">+ unknown member -1</text>
+    </g>
+    <g stroke="#8a93a6" stroke-width="1.6" fill="none" marker-end="url(#arr)">
+      <path d="M205,92 L243,92"/>
+      <path d="M205,302 L243,302"/>
+      <path d="M335,124 L335,163"/>
+      <path d="M335,270 L335,225"/>
+      <path d="M425,80 L468,65"/>
+      <path d="M425,92 L468,115"/>
+      <path d="M425,104 L468,163"/>
+      <path d="M425,302 L468,302"/>
+      <path d="M670,115 L768,108"/>
+      <path d="M670,302 L768,302"/>
+      <path d="M875,268 L875,146"/>
+    </g>
+    <text x="885" y="215" font-size="11" class="muted">as-was join:</text>
+    <text x="885" y="230" font-size="11" class="muted">order_ts in</text>
+    <text x="885" y="245" font-size="11" class="muted">[valid_from, valid_to)</text>
+    <text x="680" y="196" font-size="11" class="muted">aggregate payments</text>
+    <text x="680" y="210" font-size="11" class="muted">to order grain first</text>
+    <path d="M670,165 C720,165 720,140 768,128" stroke="#8a93a6" stroke-width="1.2" stroke-dasharray="4 4" fill="none" marker-end="url(#arr)"/>
+    <g font-size="12">
+      <rect x="15" y="372" width="300" height="52" rx="10" fill="none" stroke="var(--ok)" stroke-dasharray="6 4"/>
+      <text x="27" y="394" font-weight="700">Test 1 · reconciliation</text><text x="27" y="412" class="muted" font-size="11">bronze rows = silver rows + quarantine rows</text>
+      <rect x="345" y="372" width="300" height="52" rx="10" fill="none" stroke="var(--ok)" stroke-dasharray="6 4"/>
+      <text x="357" y="394" font-weight="700">Test 2 · grain uniqueness</text><text x="357" y="412" class="muted" font-size="11">0 duplicates on (order_id, line_no), fact = item lines</text>
+      <rect x="675" y="372" width="305" height="52" rx="10" fill="none" stroke="var(--ok)" stroke-dasharray="6 4"/>
+      <text x="687" y="394" font-weight="700">Test 3 · history sanity</text><text x="687" y="412" class="muted" font-size="11">at most 1 current row per customer_id</text>
+    </g>
+  </svg>
+  </div>
+  <div class="tablewrap"><table>
+    <tr><th>Hand-off</th><th>What breaks if you skip the earlier step</th></tr>
+    <tr><td>Gate → History</td><td>A CDC row with a junk <code>op</code> or a null <code>lsn</code> becomes a permanent, wrong version in <code>dim_customer</code>. History amplifies bad data: a Type 1 table forgets it on the next update, but a Type 2 table keeps it forever.</td></tr>
+    <tr><td>Grain → Fact</td><td>Without a declared grain on <code>order_items</code> and <code>order_payments</code>, joining both to orders silently multiplies revenue.</td></tr>
+    <tr><td>History → Fact</td><td>A dim with several versions per customer is a <i>many</i> side too. Join it on <code>customer_id</code> alone and you get fan-out again.</td></tr>
+    <tr><td>Everything → Tests</td><td>Grain and history are just claims until a test checks them on every run.</td></tr>
+  </table></div>
+</section>
+
+<!-- ============ 3. QUALITY GATE ============ -->
+<section class="lesson" data-title="Walkthrough 1: quality gate" data-min="7">
+  <div class="eyebrow">3 · Walkthrough · step 1 of 5 · ~7 min</div>
+  <h2>The gate: an explicit action for every rule</h2>
+  <p class="lead">The scenario: an e-commerce company lands <code>bronze.orders_raw</code> (JSON orders with nested <code>items</code> and <code>payments</code> arrays) and <code>bronze.customers_cdc</code> (change rows from the customer DB). Before anything is reshaped, every row goes through a gate.</p>
+  <h3>The four actions and when each one fits</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Action</th><th>LDP SQL</th><th>Use when</th><th>Cost of choosing wrong</th></tr>
+    <tr><td><b>Warn</b> (keep, count)</td><td><code>CONSTRAINT c EXPECT (cond)</code></td><td>The row is still usable and the issue is cosmetic or fixable downstream</td><td>Bad values flow into reports, but the metrics show it</td></tr>
+    <tr><td><b>Drop</b></td><td><code>... ON VIOLATION DROP ROW</code></td><td>Known noise that nobody will ever fix (test records, heartbeats)</td><td>You lose evidence. Only the count in the event log remains</td></tr>
+    <tr><td><b>Fail</b></td><td><code>... ON VIOLATION FAIL UPDATE</code></td><td>A systemic break where continuing would corrupt targets (for example the sequencing column is missing)</td><td>The pipeline stops. Fine for contract breaks, too much for one bad row</td></tr>
+    <tr><td><b>Quarantine</b></td><td>inverted rule → separate table, or a flag column</td><td>The row matters to the business and someone must fix or replay it</td><td>Needs an owner and a replay path, or it becomes a graveyard</td></tr>
+  </table></div>
+  <div class="codewrap"><pre><code>-- Lakeflow Declarative Pipeline (SQL). Gate on the orders feed.
+CREATE OR REFRESH STREAMING TABLE orders_gated (
+  CONSTRAINT has_order_id   EXPECT (order_id IS NOT NULL),
+  CONSTRAINT positive_lines EXPECT (NOT exists(items, i -&gt; i.price &lt;= 0 OR i.qty &lt;= 0))
+) AS
+SELECT *,
+  CASE WHEN order_id IS NULL                                THEN 'null_order_id'
+       WHEN items IS NULL OR size(items) = 0                THEN 'no_items'
+       WHEN exists(items, i -&gt; i.price &lt;= 0 OR i.qty &lt;= 0)  THEN 'non_positive_amount'
+  END AS dq_reason                       -- NULL means the row passed
+FROM STREAM(bronze.orders_raw);
+
+-- Downstream: good rows feed Silver, flagged rows feed quarantine (with the reason).
+CREATE OR REFRESH MATERIALIZED VIEW orders_quarantine AS
+SELECT * FROM orders_gated WHERE dq_reason IS NOT NULL;</code></pre></div>
+  <p>This is the <b>quarantine-flag pattern</b>: the expectations are <i>warn-only</i>, so their pass/fail counts land in the pipeline event log, and the <code>dq_reason</code> column decides routing. Nothing disappears silently, and <b>bronze rows = silver rows + quarantine rows</b> becomes a test you can run.</p>
+  <div class="warn"><b>Accuracy note:</b> <code>DROP ROW</code> keeps only the <i>count</i> of dropped rows in the event log, not the rows themselves. If anyone might ask "which orders were dropped and why?", you want quarantine, not drop.</div>
+  <h3>Exercise: pick the action for each rule</h3>
+  <p>Decide first, then click. The explanation tells you what a senior reviewer would expect.</p>
+  <div id="drill"></div>
+  <p class="score" id="drillScore"></p>
+  <button class="btn small" id="drillReset">↺ Reset exercise</button>
+  <div class="note"><b>Table-level backstop:</b> after the gate, a Delta constraint like <code>ALTER TABLE silver.order_items ADD CONSTRAINT positive_price CHECK (price &gt; 0)</code> makes any later writer that skips the gate fail. Expectations decide what to do with rows. Constraints protect the table no matter who writes to it.</div>
+</section>
+<!-- ============ 4. GRAIN ============ -->
+<section class="lesson" data-title="Walkthrough 2: grain & fan-out" data-min="7">
+  <div class="eyebrow">4 · Walkthrough · step 2 of 5 · ~7 min</div>
+  <h2>Grain: one table per "one row per ___"</h2>
+  <p class="lead">An order has two independent arrays. If you keep them in one table you have no clear grain. Split them:</p>
+  <div class="tablewrap"><table>
+    <tr><th>Table</th><th>Grain (one row per…)</th><th>Key</th><th>How</th></tr>
+    <tr><td><code>silver.orders</code></td><td>order</td><td><code>order_id</code></td><td>select the scalar columns</td></tr>
+    <tr><td><code>silver.order_items</code></td><td>order line</td><td><code>(order_id, line_no)</code></td><td><code>posexplode_outer(items)</code>, <code>line_no = pos + 1</code></td></tr>
+    <tr><td><code>silver.order_payments</code></td><td>payment</td><td><code>(order_id, payment_no)</code></td><td><code>posexplode_outer(payments)</code></td></tr>
+  </table></div>
+  <div class="codewrap"><pre><code>from pyspark.sql import functions as F
+
+items = (spark.table("orders_gated").where("dq_reason IS NULL")
+  .select("order_id", "customer_id", "order_ts",
+          F.posexplode_outer("items").alias("pos", "item"))
+  .select("order_id", (F.col("pos") + 1).alias("line_no"), "customer_id", "order_ts",
+          F.col("item.sku").alias("sku"), F.col("item.qty").alias("qty"),
+          F.col("item.price").alias("price"))
+  .withColumn("line_amount", F.col("qty") * F.col("price")))</code></pre></div>
+  <p><b>Why <code>posexplode_outer</code>?</b> <code>pos</code> gives a deterministic line number, so <code>(order_id, line_no)</code> is the same key on every re-run, as long as the source keeps array order stable (if it doesn't, use a source line ID). <code>_outer</code> keeps an order whose array is empty or null, with a null position, instead of silently removing the parent. In our pipeline the gate already quarantined orders with no items, so <code>_outer</code> is defense in depth.</p>
+
+  <h3>The fan-out trap, with numbers</h3>
+  <p>Order <b>1001</b> has 2 items (A: 1 × 40, B: 2 × 30 = 100 total) and 2 payments (card 60, voucher 40 = 100 total). The other valid orders have one item and one payment each: 1002 = 25, 1003 = 40, 1004 = 30.</p>
+  <div class="grid3">
+    <div class="card"><b>order_items (5 rows)</b>
+      <div class="tablewrap"><table><tr><th>order</th><th>line</th><th>amount</th></tr>
+      <tr><td>1001</td><td>1</td><td>40</td></tr><tr><td>1001</td><td>2</td><td>60</td></tr>
+      <tr><td>1002</td><td>1</td><td>25</td></tr><tr><td>1003</td><td>1</td><td>40</td></tr><tr><td>1004</td><td>1</td><td>30</td></tr></table></div></div>
+    <div class="card"><b>order_payments (5 rows)</b>
+      <div class="tablewrap"><table><tr><th>order</th><th>no</th><th>amount</th></tr>
+      <tr><td>1001</td><td>1</td><td>60 card</td></tr><tr><td>1001</td><td>2</td><td>40 voucher</td></tr>
+      <tr><td>1002</td><td>1</td><td>25</td></tr><tr><td>1003</td><td>1</td><td>40</td></tr><tr><td>1004</td><td>1</td><td>30</td></tr></table></div></div>
+  </div>
+  <div class="codewrap"><pre><code>-- Someone "just adds payments" to the revenue query
+SELECT SUM(i.line_amount) AS revenue, SUM(p.amount) AS paid
+FROM order_items i
+JOIN order_payments p ON p.order_id = i.order_id;</code></pre></div>
+  <div class="scenario"><b>Spot the fan-out.</b> Correct revenue is <b>195</b>. What does this query return for <code>revenue</code>?
+    <div class="choices" id="fanChoices"></div>
+    <div class="feedback" id="fanFb"></div>
+  </div>
+  <div class="codewrap"><pre><code>-- Fix: bring each many-side to the parent grain (order) BEFORE joining
+WITH itm AS (SELECT order_id, SUM(line_amount) AS revenue FROM order_items    GROUP BY order_id),
+     pay AS (SELECT order_id, SUM(amount)      AS paid    FROM order_payments GROUP BY order_id)
+SELECT SUM(itm.revenue) AS revenue, SUM(pay.paid) AS paid     -- 195, 195
+FROM itm LEFT JOIN pay USING (order_id);</code></pre></div>
+  <div class="note"><b>Make the grain visible:</b> Unity Catalog informational constraints document it: <code>ALTER TABLE order_items ADD CONSTRAINT pk_items PRIMARY KEY (order_id, line_no) RELY</code> (key columns must be <code>NOT NULL</code>). They aren't enforced, so you still need the uniqueness test. <code>RELY</code> tells the optimizer it may trust the key for some rewrites, so only add it when a test backs it up. On the Gold side, star queries usually <b>broadcast</b> the small dimension, and liquid clustering on the fact (for example by <code>order_date</code>) keeps scans small.</div>
+</section>
+
+<!-- ============ 5. HISTORY ============ -->
+<section class="lesson" data-title="Walkthrough 3: SCD2 history" data-min="10">
+  <div class="eyebrow">5 · Walkthrough · step 3 of 5 · ~10 min</div>
+  <h2>History: <code>dim_customer</code> as SCD2, declared then hand-built</h2>
+  <p class="lead">The business reports revenue by <b>segment</b> and <b>country</b> "as it was at order time", so those two attributes get Type 2. <b>Email</b> is contact data: nobody reports on last month's email, so it's Type 1 (overwrite in place).</p>
+  <h3>A. Declared: AUTO CDC in a Lakeflow pipeline</h3>
+  <div class="codewrap"><pre><code>-- 1) Gate the CDC feed (per-rule actions from the exercise)
+CREATE OR REFRESH STREAMING TABLE customers_cdc_clean (
+  CONSTRAINT has_lsn  EXPECT (lsn IS NOT NULL)         ON VIOLATION FAIL UPDATE,
+  CONSTRAINT not_test EXPECT (customer_id NOT LIKE 'TEST-%') ON VIOLATION DROP ROW,
+  CONSTRAINT valid_op EXPECT (op IN ('I', 'U', 'D'))   -- warn here; inverted rule feeds a quarantine table
+) AS SELECT * FROM STREAM(bronze.customers_cdc);
+
+-- 2) Declare the target, then the flow
+CREATE OR REFRESH STREAMING TABLE dim_customer;
+
+CREATE FLOW dim_customer_scd2 AS AUTO CDC INTO dim_customer
+FROM stream(customers_cdc_clean)
+KEYS (customer_id)
+APPLY AS DELETE WHEN op = 'D'
+SEQUENCE BY lsn
+COLUMNS * EXCEPT (op, lsn, ingested_at)
+STORED AS SCD TYPE 2
+TRACK HISTORY ON segment, country;</code></pre></div>
+  <p>In practice the flow reads only the rows that passed <code>valid_op</code> (add <code>WHERE op IN ('I','U','D')</code> in a view between them). What each clause buys you:</p>
+  <ul>
+    <li><code>KEYS (customer_id)</code>: the business key. Each key's versions are tracked independently.</li>
+    <li><code>SEQUENCE BY lsn</code>: the <b>source</b> order, not arrival order. Late events are put in their correct place in history. <code>NULL</code> sequencing values aren't supported, which is why <code>has_lsn</code> fails the update.</li>
+    <li><code>STORED AS SCD TYPE 2</code> adds <code>__START_AT</code>/<code>__END_AT</code>, which take the <b>data type of the SEQUENCE BY column</b>. Here they hold LSNs. The current row has <code>__END_AT IS NULL</code>.</li>
+    <li><code>TRACK HISTORY ON segment, country</code>: only these columns open a new version. An email change updates the current version in place, so email behaves as Type 1.</li>
+  </ul>
+  <div class="warn"><b>Design consequence for the as-was join:</b> with <code>SEQUENCE BY lsn</code>, the validity range is in LSNs, but orders carry a timestamp. Either sequence by the source commit time with the LSN as a tie-breaker, <code>SEQUENCE BY STRUCT(changed_at, lsn)</code> (then <code>__START_AT.changed_at</code> is a timestamp), or keep LSN sequencing and map versions to times in Gold. AUTO CDC also doesn't generate a surrogate key. Derive one, for example <code>xxhash64(customer_id, __START_AT)</code>, in the Gold view. Requirements: AUTO CDC needs a <b>serverless, Pro or Advanced</b> pipeline, and it does <b>not</b> run as a plain notebook cell.</div>
+
+  <h3>B. Hand-written: the staged-union MERGE</h3>
+  <p>This is roughly what AUTO CDC saves you from writing. A single <code>MERGE</code> must both <i>close</i> the old version and <i>insert</i> the new one for the same key, but one source row can only drive one action. The trick is to stage each changed row <b>twice</b>: once with its real key (matches the current row and closes it) and once with a <code>NULL</code> merge key (can never match, so it gets inserted).</p>
+  <div class="codewrap"><pre><code>MERGE INTO dim_customer t
+USING (
+  SELECT b.customer_id AS merge_key, b.* FROM cust_batch b          -- closes / updates / inserts new keys
+  UNION ALL
+  SELECT NULL AS merge_key, b.* FROM cust_batch b                   -- inserts the new version
+  JOIN dim_customer d ON d.customer_id = b.customer_id AND d.is_current
+  WHERE b.op &lt;&gt; 'D' AND b.lsn &gt; d.lsn
+    AND (NOT (b.segment &lt;=&gt; d.segment) OR NOT (b.country &lt;=&gt; d.country))
+) s
+ON t.customer_id = s.merge_key AND t.is_current
+WHEN MATCHED AND s.lsn &gt; t.lsn AND s.op = 'D' THEN
+  UPDATE SET is_current = false, valid_to = s.changed_at
+WHEN MATCHED AND s.lsn &gt; t.lsn
+     AND (NOT (s.segment &lt;=&gt; t.segment) OR NOT (s.country &lt;=&gt; t.country)) THEN
+  UPDATE SET is_current = false, valid_to = s.changed_at            -- Type 2: close
+WHEN MATCHED AND s.lsn &gt; t.lsn THEN
+  UPDATE SET email = s.email, lsn = s.lsn                           -- Type 1: in place
+WHEN NOT MATCHED AND s.op &lt;&gt; 'D' THEN
+  INSERT (customer_sk, customer_id, segment, country, email, lsn, valid_from, valid_to, is_current)
+  VALUES (xxhash64(s.customer_id, s.changed_at), s.customer_id, s.segment, s.country,
+          s.email, s.lsn, s.changed_at, NULL, true);</code></pre></div>
+  <ul>
+    <li><code>cust_batch</code> must have <b>one row per key</b> (latest LSN in the batch, from a <code>row_number()</code> window, Gerald's DB4). Otherwise MERGE fails with multiple source rows matching one target row.</li>
+    <li><code>&lt;=&gt;</code> is null-safe equality, so a change from <code>NULL</code> to a value still counts as a change.</li>
+    <li>The <code>s.lsn &gt; t.lsn</code> guard makes the MERGE <b>idempotent</b>: re-running the same batch changes nothing.</li>
+    <li>A deterministic hash surrogate key (instead of an identity column) gives the same <code>customer_sk</code> if you rebuild the table from Bronze. Identity values would be renumbered.</li>
+  </ul>
+  <h3>Timeline: changes arriving out of order</h3>
+  <p>Customer <b>C1</b> changes three times at the source, but the change at <b>lsn 20</b> arrives late, in a later batch. Slide through arrival order and compare three implementations.</p>
+  <div class="scenario">
+    <label for="tl" style="font-weight:700">Arrival step: <span id="tlLabel"></span></label>
+    <input type="range" id="tl" min="0" max="3" step="1" value="0" style="width:100%;margin:10px 0">
+    <div id="tlEvent" class="note" style="margin-top:0"></div>
+    <div class="grid3" id="tlTables"></div>
+    <div id="tlTake" class="okbox"></div>
+  </div>
+</section>
+<!-- ============ 6. FACT + TESTS ============ -->
+<section class="lesson" data-title="Walkthrough 4–5: fact join & tests" data-min="7">
+  <div class="eyebrow">6 · Walkthrough · steps 4–5 of 5 · ~7 min</div>
+  <h2>The fact: surrogate key as of order time, -1 when unknown</h2>
+  <p class="lead"><code>gold.fact_order_line</code> has the grain of <code>order_items</code> (one row per order line) and carries <code>customer_sk</code>, the key of the <b>version that was valid when the order happened</b>.</p>
+  <div class="codewrap"><pre><code>CREATE OR REPLACE TABLE gold.fact_order_line AS
+SELECT i.order_id, i.line_no, i.order_ts, i.sku, i.qty, i.line_amount,
+       COALESCE(d.customer_sk, -1) AS customer_sk        -- unknown / late-arriving customer
+FROM silver.order_items i
+LEFT JOIN silver.dim_customer d
+  ON  d.customer_id = i.customer_id
+  AND i.order_ts &gt;= d.valid_from
+  AND (i.order_ts &lt; d.valid_to OR d.valid_to IS NULL);   -- half-open range: exactly one version</code></pre></div>
+  <p>The dim also gets one explicit <b>unknown member</b> row (<code>customer_sk = -1</code>, segment <code>'Unknown'</code>), so an inner join from fact to dim never drops revenue. Order 1004 belongs to <b>C9</b>, which isn't in the CDC feed yet, so it maps to -1 instead of disappearing.</p>
+  <h3>The SCD2 fan-out bug</h3>
+  <p>C1 has <b>two</b> versions (SMB/BR until 2026-10-12, then Enterprise/PT). Join on the business key alone and every C1 line matches both:</p>
+  <div class="codewrap"><pre><code>-- WRONG: no current-row filter, no time range
+SELECT SUM(i.line_amount) FROM order_items i
+JOIN dim_customer d ON d.customer_id = i.customer_id;     -- 305, and C9's 30 is silently gone</code></pre></div>
+  <div class="tablewrap"><table>
+    <tr><th>Join condition</th><th>What you get</th><th>C1 + C2 revenue</th></tr>
+    <tr><td><code>customer_id</code> only</td><td>Fan-out: each C1 line × 2 versions</td><td class="bad">(100 + 40) × 2 + 25 = <b>305</b></td></tr>
+    <tr><td><code>customer_id</code> + <code>__END_AT IS NULL</code> (or <code>is_current</code>)</td><td>Correct row count, <b>as-is</b> attributes (today's segment)</td><td>165 · Enterprise 140, SMB 25</td></tr>
+    <tr><td><code>customer_id</code> + time range</td><td>Correct row count, <b>as-was</b> attributes</td><td>165 · SMB 125, Enterprise 40</td></tr>
+  </table></div>
+  <p>The wrong query has <b>two</b> bugs: C1's lines are doubled (280 instead of 140), and the inner join silently drops C9's 30 because C9 has no dim row. The correct total, with the -1 member, is <b>195</b>. Both correct versions are legitimate. They answer different questions. In practice the <b>as-was</b> answer is stored in the fact as <code>customer_sk</code>, and the <b>as-is</b> answer comes from joining <code>customer_sk</code> → <code>customer_id</code> → the current row.</p>
+
+  <h3>"What changes if we re-run?"</h3>
+  <p>Next week C1 moves to segment <b>Strategic</b> and C9 finally arrives in the CDC feed. You re-run the whole pipeline from Bronze. For each number, what happens?</p>
+  <div id="rerun"></div>
+
+  <h3>Step 5: tests that prove it</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Test</th><th>Query shape</th><th>Expected in our data</th></tr>
+    <tr><td>Grain uniqueness</td><td><code>COUNT(*) - COUNT(DISTINCT order_id, line_no)</code> on items and fact</td><td>0</td></tr>
+    <tr><td>Reconciliation</td><td>bronze rows vs silver rows + quarantine rows</td><td>6 = 4 + 2</td></tr>
+    <tr><td>Fact completeness</td><td>fact rows = item rows, and <code>SUM(line_amount)</code> matches</td><td>5 = 5, 195 = 195</td></tr>
+    <tr><td>History sanity</td><td><code>GROUP BY customer_id HAVING COUNT_IF(is_current) &gt; 1</code></td><td>no rows</td></tr>
+    <tr><td>Unknown-member watch</td><td>share of revenue on <code>customer_sk = -1</code></td><td>30 / 195, alert if it grows</td></tr>
+  </table></div>
+  <div class="note">Run these as a final task in the Job (or as expectations on a small "checks" materialized view in the pipeline), so a broken grain fails the run <b>before</b> the dashboard refreshes. UC data quality monitoring adds freshness and volume anomaly checks on top, catching "the feed stopped" problems that row-level rules can't see.</div>
+</section>
+<!-- ============ 7. HANDS-ON ============ -->
+<section class="lesson" data-title="Hands-on (short)" data-min="10">
+  <div class="eyebrow">7 · Hands-on · ~10 min · Databricks Free Edition</div>
+  <h2>Gate, split, SCD2-merge, join, test: five cells</h2>
+  <p class="lead">Kept short on purpose (moving day is tomorrow 📦). Open a notebook on serverless compute. Cells 1, 2, 4 and 5 are SQL (<code>%sql</code>), and cell 3 is Python. All the data is embedded. AUTO CDC needs a Lakeflow pipeline, so the notebook-runnable piece here is the <b>MERGE</b> path, the same logic written by hand.</p>
+  <h3>Cell 1 · Bronze data (SQL)</h3>
+  <div class="codewrap"><pre><code>%sql
+CREATE SCHEMA IF NOT EXISTS workspace.silver_lab;
+USE workspace.silver_lab;
+
+CREATE OR REPLACE TABLE orders_raw AS
+SELECT * FROM VALUES
+  ('1001', 'C1', TIMESTAMP'2026-10-03 10:00:00',
+     ARRAY(NAMED_STRUCT('sku','A','qty',1,'price',40.0D), NAMED_STRUCT('sku','B','qty',2,'price',30.0D)),
+     ARRAY(NAMED_STRUCT('method','card','amount',60.0D), NAMED_STRUCT('method','voucher','amount',40.0D))),
+  ('1002', 'C2', TIMESTAMP'2026-10-08 11:00:00',
+     ARRAY(NAMED_STRUCT('sku','C','qty',1,'price',25.0D)), ARRAY(NAMED_STRUCT('method','card','amount',25.0D))),
+  ('1003', 'C1', TIMESTAMP'2026-10-20 09:30:00',
+     ARRAY(NAMED_STRUCT('sku','A','qty',1,'price',40.0D)), ARRAY(NAMED_STRUCT('method','pix','amount',40.0D))),
+  ('1004', 'C9', TIMESTAMP'2026-10-21 15:00:00',
+     ARRAY(NAMED_STRUCT('sku','B','qty',1,'price',30.0D)), ARRAY(NAMED_STRUCT('method','card','amount',30.0D))),
+  ('1005', 'C2', TIMESTAMP'2026-10-22 08:00:00',
+     ARRAY(NAMED_STRUCT('sku','C','qty',1,'price',-25.0D)), ARRAY(NAMED_STRUCT('method','card','amount',-25.0D))),
+  (NULL,   'C2', TIMESTAMP'2026-10-22 08:05:00',
+     ARRAY(NAMED_STRUCT('sku','C','qty',1,'price',25.0D)), ARRAY(NAMED_STRUCT('method','card','amount',25.0D)))
+AS t(order_id, customer_id, order_ts, items, payments);
+
+CREATE OR REPLACE TABLE customers_cdc AS
+SELECT * FROM VALUES
+  (1, 'C1', 'I', 10, TIMESTAMP'2026-10-01 09:00:00', 'SMB',        'BR', 'ana@old.example'),
+  (1, 'C2', 'I', 15, TIMESTAMP'2026-10-02 09:00:00', 'SMB',        'BR', 'bia@old.example'),
+  (1, 'C3', 'X', 16, TIMESTAMP'2026-10-02 10:00:00', 'SMB',        'BR', 'caio@example.com'),
+  (2, 'C1', 'U', 30, TIMESTAMP'2026-10-12 09:00:00', 'Enterprise', 'PT', 'ana@new.example'),
+  (2, 'C2', 'U', 35, TIMESTAMP'2026-10-15 09:00:00', 'SMB',        'BR', 'bia@new.example')
+AS t(batch_id, customer_id, op, lsn, changed_at, segment, country, email);</code></pre></div>
+
+  <h3>Cell 2 · Quality gate + quarantine (SQL)</h3>
+  <div class="codewrap"><pre><code>%sql
+CREATE OR REPLACE TABLE orders_checked AS
+SELECT *,
+  CASE WHEN order_id IS NULL                               THEN 'null_order_id'
+       WHEN items IS NULL OR size(items) = 0               THEN 'no_items'
+       WHEN exists(items, i -&gt; i.price &lt;= 0 OR i.qty &lt;= 0) THEN 'non_positive_amount'
+  END AS dq_reason
+FROM orders_raw;
+
+CREATE OR REPLACE TABLE orders_quarantine AS
+SELECT *, current_timestamp() AS quarantined_at FROM orders_checked WHERE dq_reason IS NOT NULL;
+
+CREATE OR REPLACE TABLE orders AS
+SELECT order_id, customer_id, order_ts FROM orders_checked WHERE dq_reason IS NULL;
+
+CREATE OR REPLACE TABLE customers_cdc_quarantine AS
+SELECT *, 'invalid_op' AS dq_reason FROM customers_cdc WHERE op NOT IN ('I', 'U', 'D');
+
+SELECT dq_reason, COUNT(*) AS n FROM orders_quarantine GROUP BY dq_reason;   -- 2 rows: null_order_id, non_positive_amount</code></pre></div>
+
+  <h3>Cell 3 · Grain split + fan-out (Python)</h3>
+  <div class="codewrap"><pre><code>from pyspark.sql import functions as F
+spark.sql("USE workspace.silver_lab")
+ok = spark.table("orders_checked").where("dq_reason IS NULL")
+
+items = (ok.select("order_id", "customer_id", "order_ts", F.posexplode_outer("items").alias("pos", "item"))
+  .select("order_id", (F.col("pos") + 1).alias("line_no"), "customer_id", "order_ts",
+          F.col("item.sku").alias("sku"), F.col("item.qty").alias("qty"), F.col("item.price").alias("price"))
+  .withColumn("line_amount", F.col("qty") * F.col("price")))
+items.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable("order_items")
+
+pays = (ok.select("order_id", F.posexplode_outer("payments").alias("pos", "p"))
+  .select("order_id", (F.col("pos") + 1).alias("payment_no"),
+          F.col("p.method").alias("method"), F.col("p.amount").alias("amount")))
+pays.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable("order_payments")
+
+# Fan-out: two many-sides joined to the same parent
+spark.sql("""SELECT SUM(i.line_amount) AS revenue_wrong
+             FROM order_items i JOIN order_payments p USING (order_id)""").show()   # 295.0
+spark.sql("""SELECT SUM(revenue) AS revenue_right FROM (
+               SELECT order_id, SUM(line_amount) AS revenue FROM order_items GROUP BY order_id)""").show()  # 195.0</code></pre></div>
+
+  <h3>Cell 4 · dim_customer SCD2 via staged-union MERGE (Python driving SQL)</h3>
+  <div class="codewrap"><pre><code>spark.sql("USE workspace.silver_lab")
+spark.sql("""CREATE OR REPLACE TABLE dim_customer (
+  customer_sk BIGINT, customer_id STRING, segment STRING, country STRING, email STRING,
+  lsn BIGINT, valid_from TIMESTAMP, valid_to TIMESTAMP, is_current BOOLEAN)""")
+spark.sql("""INSERT INTO dim_customer VALUES
+  (-1, '-1', 'Unknown', 'Unknown', NULL, -1, TIMESTAMP'1900-01-01 00:00:00', NULL, true)""")
+
+MERGE_SQL = """
+MERGE INTO dim_customer t
+USING (
+  SELECT b.customer_id AS merge_key, b.* FROM cust_batch b
+  UNION ALL
+  SELECT NULL AS merge_key, b.* FROM cust_batch b
+  JOIN dim_customer d ON d.customer_id = b.customer_id AND d.is_current
+  WHERE b.op &lt;&gt; 'D' AND b.lsn &gt; d.lsn
+    AND (NOT (b.segment &lt;=&gt; d.segment) OR NOT (b.country &lt;=&gt; d.country))
+) s
+ON t.customer_id = s.merge_key AND t.is_current
+WHEN MATCHED AND s.lsn &gt; t.lsn AND s.op = 'D' THEN
+  UPDATE SET is_current = false, valid_to = s.changed_at
+WHEN MATCHED AND s.lsn &gt; t.lsn AND (NOT (s.segment &lt;=&gt; t.segment) OR NOT (s.country &lt;=&gt; t.country)) THEN
+  UPDATE SET is_current = false, valid_to = s.changed_at
+WHEN MATCHED AND s.lsn &gt; t.lsn THEN
+  UPDATE SET email = s.email, lsn = s.lsn
+WHEN NOT MATCHED AND s.op &lt;&gt; 'D' THEN
+  INSERT (customer_sk, customer_id, segment, country, email, lsn, valid_from, valid_to, is_current)
+  VALUES (xxhash64(s.customer_id, s.changed_at), s.customer_id, s.segment, s.country,
+          s.email, s.lsn, s.changed_at, NULL, true)
+"""
+
+for batch in [1, 2, 2]:          # batch 2 twice = the re-run test
+    spark.sql(f"""CREATE OR REPLACE TEMP VIEW cust_batch AS
+      SELECT batch_id, customer_id, op, lsn, changed_at, segment, country, email FROM (
+        SELECT *, row_number() OVER (PARTITION BY customer_id ORDER BY lsn DESC) AS rn
+        FROM customers_cdc WHERE batch_id = {batch} AND op IN ('I', 'U', 'D'))
+      WHERE rn = 1""")
+    spark.sql(MERGE_SQL)
+
+display(spark.sql("SELECT * FROM dim_customer ORDER BY customer_id, valid_from"))</code></pre></div>
+  <p>Expected: C1 has two rows (SMB/BR closed at 2026-10-12, Enterprise/PT current). C2 has <b>one</b> row with <code>bia@new.example</code> (Type 1, in place). C3 is missing (quarantined), and the -1 row is there. The second run of batch 2 changes nothing: <code>DESCRIBE HISTORY dim_customer</code> shows the last MERGE with zero rows updated or inserted.</p>
+
+  <h3>Cell 5 · Fact join + tests (SQL)</h3>
+  <div class="codewrap"><pre><code>%sql
+USE workspace.silver_lab;
+CREATE OR REPLACE TABLE fact_order_line AS
+SELECT i.order_id, i.line_no, i.order_ts, i.sku, i.qty, i.line_amount,
+       COALESCE(d.customer_sk, -1) AS customer_sk
+FROM order_items i
+LEFT JOIN dim_customer d
+  ON d.customer_id = i.customer_id AND i.order_ts &gt;= d.valid_from
+ AND (i.order_ts &lt; d.valid_to OR d.valid_to IS NULL);
+
+-- As-was revenue by segment: SMB 125, Enterprise 40, Unknown 30
+SELECT d.segment, SUM(f.line_amount) AS revenue
+FROM fact_order_line f JOIN dim_customer d ON d.customer_sk = f.customer_sk
+GROUP BY d.segment ORDER BY revenue DESC;
+
+-- Tests: every value should be 0 (or the two sides equal)
+SELECT
+  (SELECT COUNT(*) - COUNT(DISTINCT order_id, line_no) FROM order_items)      AS dup_item_lines,
+  (SELECT COUNT(*) - COUNT(DISTINCT order_id, line_no) FROM fact_order_line)  AS dup_fact_lines,
+  (SELECT COUNT(*) FROM orders_raw)
+    - (SELECT COUNT(*) FROM orders) - (SELECT COUNT(*) FROM orders_quarantine) AS unreconciled_orders,
+  (SELECT COUNT(*) FROM order_items) - (SELECT COUNT(*) FROM fact_order_line) AS lost_fact_lines,
+  (SELECT COUNT(*) FROM (SELECT customer_id FROM dim_customer
+                         GROUP BY customer_id HAVING COUNT_IF(is_current) &gt; 1)) AS multi_current;</code></pre></div>
+  <div class="note"><b>Try the bug:</b> change the fact join to <code>ON d.customer_id = i.customer_id</code> only and re-run the tests: <code>dup_fact_lines</code> becomes 3 and <code>lost_fact_lines</code> becomes -3 (C1 has 3 lines, each matching 2 versions). That's how a grain test catches a fan-out. Clean up with <code>DROP SCHEMA workspace.silver_lab CASCADE</code>.</div>
+  <h3>Checklist</h3>
+  <div id="hoChecks"></div>
+</section>
+<!-- ============ 8. SIDEBAR ============ -->
+<section class="lesson" data-title="Sidebar: Snowflake & dbt" data-min="3">
+  <div class="eyebrow">8 · Tool-gap sidebar · ~3 min</div>
+  <h2>Same design, other tools</h2>
+  <p class="lead">US job posts often say "dbt + Snowflake". The concepts carry over directly. Only the names change.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Concept</th><th>Databricks</th><th>dbt</th><th>Snowflake</th></tr>
+    <tr><td>Quality gate</td><td>LDP expectations, Delta <code>NOT NULL</code>/<code>CHECK</code></td><td>tests: <code>not_null</code>, <code>accepted_values</code>, <code>relationships</code>; model contracts</td><td>Only <code>NOT NULL</code> is enforced; PK/UNIQUE/FK are informational, so checks live in dbt tests or the pipeline</td></tr>
+    <tr><td>Grain test</td><td>uniqueness query, UC informational PK (<code>RELY</code>)</td><td><code>unique</code> test (on a column or an expression)</td><td>same as dbt</td></tr>
+    <tr><td>SCD2</td><td>AUTO CDC <code>STORED AS SCD TYPE 2</code> → <code>__START_AT</code>/<code>__END_AT</code></td><td><b>snapshots</b> (<code>strategy: timestamp</code> or <code>check</code>) → <code>dbt_valid_from</code>/<code>dbt_valid_to</code></td><td>hand-written <code>MERGE</code> (very similar to Delta's)</td></tr>
+    <tr><td>Idempotent upsert</td><td><code>MERGE INTO</code></td><td>incremental model with <code>unique_key</code></td><td><code>MERGE</code></td></tr>
+    <tr><td>Change tracking</td><td>Delta Change Data Feed + Job / pipeline</td><td>(source freshness, incremental filters)</td><td><b>Streams</b> + <b>Tasks</b></td></tr>
+    <tr><td>Declarative refresh</td><td>LDP materialized views</td><td>models (<code>table</code>/<code>view</code>)</td><td>Dynamic Tables (roughly)</td></tr>
+  </table></div>
+  <div class="note"><b>Interview line:</b> "On Databricks I'd push quality into the pipeline with expectations <i>and</i> into the table with CHECK constraints. On Snowflake only NOT NULL is enforced, so I'd lean on dbt tests and contracts and make them blocking in CI."</div>
+</section>
+
+<!-- ============ 9. INTERVIEW ============ -->
+<section class="lesson" data-title="Interview questions" data-min="5">
+  <div class="eyebrow">9 · Interview questions · ~5 min</div>
+  <h2>Answer out loud first, then reveal</h2>
+  <p class="lead">Senior US DE loops test whether you see these four topics as one design. Take 60–90 seconds per question.</p>
+  <details class="qa"><summary>Q1 (design). "Design the Silver and Gold layers for orders and customers so revenue by customer segment is correct historically and stays correct when the pipeline re-runs."</summary>
+    <p><b>Strong answer:</b> I start by stating the grain of every table: <code>orders</code> is one row per order, <code>order_items</code> one per line keyed on <code>(order_id, line_no)</code>, <code>order_payments</code> one per payment, <code>dim_customer</code> one per customer <i>version</i>, and <code>fact_order_line</code> one per order line. Bronze to Silver goes through a quality gate where each rule has an explicit action. Rows the business cares about go to quarantine with a reason, and I reconcile bronze = silver + quarantine on every run. <code>segment</code> and <code>country</code> are SCD2 because we report history on them. Email is Type 1. The dimension is sequenced by a source ordering column (the LSN), so out-of-order CDC can't corrupt history. On Databricks that's AUTO CDC with <code>SEQUENCE BY</code> and <code>TRACK HISTORY ON</code>, or a guarded MERGE. The fact stores the surrogate key of the version valid at order time, with -1 for unknown customers. Re-runs are idempotent because everything is MERGE or AUTO CDC, never a blind append. Tests check grain uniqueness and at most one current row per key. Finally I make the as-was vs as-is choice explicit and offer both: as-was through the fact's surrogate key, as-is through the current row.</p></details>
+  <details class="qa"><summary>Q2 (debugging). "Revenue in the dashboard doubled after someone added the payments table to the query. What happened and how do you prevent it?"</summary>
+    <p><b>Strong answer:</b> That's join fan-out. Items and payments are both <i>many</i> sides of an order. Joining both to the order produces items × payments rows per order, so an order with 2 lines and 2 payments is counted twice. The fix is to aggregate each many side to the parent grain (order) before joining, or to keep payments out of a line-grain fact entirely. To prevent it: every table has a declared grain, documented as an informational PK in Unity Catalog. A uniqueness test on that key runs in CI and in the Job. A row-count/revenue reconciliation between the fact and its source table would have failed the moment the row count grew. I'd also make sure reviewers ask "what's the grain after this join?" in code review.</p></details>
+  <details class="qa"><summary>Q3 (behavioral, tech lead). "Tell me about a time bad data reached a report."</summary>
+    <p><b>Strong answer shape (use a real story):</b> <b>Situation:</b> one sentence on the report and who noticed. <b>Gap:</b> name the missing gate exactly, for example "a nullable key with no rule, so rows were silently dropped by an inner join". <b>Fix:</b> what you did that day (backfill from Bronze, which works because Bronze is append-only and replayable) and how you told stakeholders. <b>Standard:</b> what you put in place for the <i>team</i>, not just that pipeline: a per-rule action policy (warn/drop/fail/quarantine with an owner for each quarantine table), grain tests required on every new table, and reconciliation counts on the run dashboard. Close with a measurable result, such as "no repeat incidents in six months" or "time to detect went from days to one run".</p></details>
+  <details class="qa"><summary>Q4 (trade-off). "Why not make every dimension column Type 2, just to be safe?"</summary>
+    <p><b>Strong answer:</b> Because history isn't free and it isn't always correct. Every tracked change creates a version, so a frequently updated column (last login, email, a counter) explodes the dim's row count and makes as-was joins slower and harder to reason about. It also changes meaning: if email were Type 2, a corrected typo would look like a "new customer state". I pick Type 2 per attribute: only what the business reports on historically (segment, country, price tier). Everything else is Type 1. With AUTO CDC that's exactly <code>TRACK HISTORY ON segment, country</code>. Anything else is a conversation with the data's consumers, not a default.</p></details>
+  <details class="qa"><summary>Q5 (detail). "Identity column or hash for the surrogate key?"</summary>
+    <p><b>Strong answer:</b> Both work, with different trade-offs. A Delta identity column gives compact, unique BIGINTs but assigns new values if you rebuild the table, so every fact has to be rebuilt with it. A deterministic hash of the business key and version start (for example <code>xxhash64(customer_id, valid_from)</code>) is reproducible across rebuilds and environments, which fits a pipeline that's meant to be re-run from Bronze. Its costs are a tiny collision risk (tested with a uniqueness check) and wider keys if you use SHA-based hashes. Either way, -1 is reserved for the unknown member.</p></details>
+</section>
+
+<!-- ============ 10. QUIZ ============ -->
+<section class="lesson" data-title="Self-check quiz" data-min="3">
+  <div class="eyebrow">10 · Self-check · ~3 min</div>
+  <h2>Seven quick checks</h2>
+  <p class="lead">One click per question. Your score is saved with your progress.</p>
+  <div id="quiz"></div>
+  <p class="score" id="quizScore"></p>
+  <button class="btn small" id="quizReset">↺ Reset quiz</button>
+</section>
+
+<!-- ============ 11. RECAP ============ -->
+<section class="lesson" data-title="Recap & go deeper" data-min="3">
+  <div class="eyebrow">11 · Recap · ~3 min</div>
+  <h2>One screen: gate → grain → history → fact → test</h2>
+  <div class="svgwrap">
+  <svg viewBox="0 0 1000 250" role="img" aria-label="Recap: gate, grain, history, fact, test, each feeding the next">
+    <defs>
+      <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a93a6"/></marker>
+    </defs>
+    <g font-size="13">
+      <rect x="10" y="30" width="180" height="150" rx="12" fill="none" stroke="var(--t1)" stroke-width="2"/>
+      <text x="22" y="56" font-weight="700">1 · Gate (DE1)</text>
+      <text x="22" y="80" font-size="12" class="muted">action per rule</text>
+      <text x="22" y="98" font-size="12" class="muted">quarantine + reason</text>
+      <text x="22" y="116" font-size="12" class="muted">CHECK constraints</text>
+      <text x="22" y="140" font-size="12">protects: history</text>
+      <rect x="210" y="30" width="180" height="150" rx="12" fill="none" stroke="var(--t3)" stroke-width="2"/>
+      <text x="222" y="56" font-weight="700">2 · Grain (DE3)</text>
+      <text x="222" y="80" font-size="12" class="muted">1 table per grain</text>
+      <text x="222" y="98" font-size="12" class="muted">posexplode_outer</text>
+      <text x="222" y="116" font-size="12" class="muted">aggregate many first</text>
+      <text x="222" y="140" font-size="12">protects: facts</text>
+      <rect x="410" y="30" width="180" height="150" rx="12" fill="none" stroke="var(--t4)" stroke-width="2"/>
+      <text x="422" y="56" font-weight="700">3 · History (DE4)</text>
+      <text x="422" y="80" font-size="12" class="muted">SCD2 only where reported</text>
+      <text x="422" y="98" font-size="12" class="muted">SEQUENCE BY lsn</text>
+      <text x="422" y="116" font-size="12" class="muted">AUTO CDC or MERGE</text>
+      <text x="422" y="140" font-size="12">protects: as-was</text>
+      <rect x="610" y="30" width="180" height="150" rx="12" fill="none" stroke="var(--t2)" stroke-width="2"/>
+      <text x="622" y="56" font-weight="700">4 · Star (DE2)</text>
+      <text x="622" y="80" font-size="12" class="muted">fact on surrogate key</text>
+      <text x="622" y="98" font-size="12" class="muted">as of event time</text>
+      <text x="622" y="116" font-size="12" class="muted">-1 unknown member</text>
+      <text x="622" y="140" font-size="12">protects: revenue</text>
+      <rect x="810" y="30" width="180" height="150" rx="12" fill="none" stroke="var(--ok)" stroke-width="2" stroke-dasharray="6 4"/>
+      <text x="822" y="56" font-weight="700">5 · Tests</text>
+      <text x="822" y="80" font-size="12" class="muted">uniqueness per grain</text>
+      <text x="822" y="98" font-size="12" class="muted">bronze = silver + quar.</text>
+      <text x="822" y="116" font-size="12" class="muted">≤ 1 current row / key</text>
+      <text x="822" y="140" font-size="12">proves: all of it</text>
+    </g>
+    <g stroke="#8a93a6" stroke-width="1.6" fill="none" marker-end="url(#arr2)">
+      <path d="M190,105 L208,105"/><path d="M390,105 L408,105"/><path d="M590,105 L608,105"/><path d="M790,105 L808,105"/>
+    </g>
+    <text x="10" y="215" font-size="13">Re-run safety comes from the same choices: append-only Bronze, MERGE/AUTO CDC instead of appends, a deterministic line_no and surrogate key, and source sequencing.</text>
+    <text x="10" y="236" font-size="13" class="muted">As-was (fact's customer_sk) vs as-is (current row): decide which one the report means, and offer both when needed.</text>
+  </svg>
+  </div>
+  <h3>Go deeper (links checked on 2026-10-30)</h3>
+  <ul id="links">
+    <li><a href="https://docs.databricks.com/aws/en/ldp/cdc" target="_blank" rel="noopener">The AUTO CDC APIs: simplify change data capture with pipelines</a> (SCD1/SCD2 examples, out-of-order handling, <code>TRACK HISTORY ON</code>)</li>
+    <li><a href="https://docs.databricks.com/aws/en/ldp/developer/ldp-sql-ref-apply-changes-into" target="_blank" rel="noopener">AUTO CDC INTO (pipelines) SQL reference</a> (every clause, and the rule that <code>__START_AT</code>/<code>__END_AT</code> take the SEQUENCE BY type)</li>
+    <li><a href="https://docs.databricks.com/aws/en/ldp/expectations" target="_blank" rel="noopener">Manage data quality with pipeline expectations</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/delta/merge" target="_blank" rel="noopener">Upsert into a Delta table using MERGE</a> (includes the SCD Type 2 MERGE pattern)</li>
+    <li><a href="https://docs.databricks.com/aws/en/tables/constraints" target="_blank" rel="noopener">Constraints on Databricks</a> (enforced NOT NULL/CHECK, informational PK/FK, <code>RELY</code>)</li>
+    <li><a href="https://docs.databricks.com/aws/en/sql/language-manual/functions/posexplode_outer" target="_blank" rel="noopener">posexplode_outer function</a></li>
+    <li><a href="https://docs.getdbt.com/docs/build/snapshots" target="_blank" rel="noopener">dbt snapshots</a> and <a href="https://docs.getdbt.com/docs/build/data-tests" target="_blank" rel="noopener">dbt data tests</a></li>
+    <li><a href="https://docs.snowflake.com/en/user-guide/streams-intro" target="_blank" rel="noopener">Snowflake Streams introduction</a></li>
+  </ul>
+  <div class="okbox"><b>Done.</b> Mark this section complete and that's the Friday deep dive. Today's DE5 pill picks up from here: incremental Silver-to-Gold with Delta Change Data Feed vs full recompute. Good luck with the move this weekend. 📦</div>
+</section>
+</main>
+</div>
+<script>
+(function(){
+  "use strict";
+  var KEY = "dd-2026-10-30-de-silver-that-holds-up-v1";
+  var state = {done:{}, current:0, drill:{}, quiz:{}, rerun:{}, fan:null, checks:{}, theme:null, tl:0};
+  function load(){ try{ var s = JSON.parse(localStorage.getItem(KEY) || "null"); if(s && typeof s === "object"){ for(var k in state){ if(s[k] !== undefined) state[k] = s[k]; } } }catch(e){} }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+  load();
+
+  var root = document.documentElement;
+  if(state.theme) root.setAttribute("data-theme", state.theme);
+  document.getElementById("themeBtn").addEventListener("click", function(){
+    var cur = root.getAttribute("data-theme") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    state.theme = cur === "dark" ? "light" : "dark"; root.setAttribute("data-theme", state.theme); save();
+  });
+  var sidebar = document.getElementById("sidebar");
+  document.getElementById("menuBtn").addEventListener("click", function(){ sidebar.classList.toggle("open"); });
+
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.lesson"));
+  var navList = document.getElementById("navList");
+  sections.forEach(function(sec, i){
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = "#s" + (i+1);
+    a.innerHTML = '<span class="dot">✓</span><span>' + (i+1) + ". " + sec.getAttribute("data-title") + ' <small style="color:var(--muted)">· ' + sec.getAttribute("data-min") + "m</small></span>";
+    a.addEventListener("click", function(ev){ ev.preventDefault(); show(i); sidebar.classList.remove("open"); });
+    li.appendChild(a); navList.appendChild(li);
+    var foot = document.createElement("div"); foot.className = "footer-nav";
+    var lab = document.createElement("label"); lab.className = "done-label";
+    var cb = document.createElement("input"); cb.type = "checkbox"; cb.className = "doneBox"; cb.checked = !!state.done[i];
+    cb.addEventListener("change", function(){ state.done[i] = cb.checked; save(); refresh(); });
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(" Mark section complete"));
+    var btns = document.createElement("div"); btns.style.display = "flex"; btns.style.gap = "8px";
+    if(i > 0){ var p = document.createElement("button"); p.className = "btn"; p.textContent = "← Back"; p.addEventListener("click", function(){ show(i-1); }); btns.appendChild(p); }
+    if(i < sections.length - 1){ var n = document.createElement("button"); n.className = "btn primary"; n.textContent = "Complete & continue →"; n.addEventListener("click", function(){ state.done[i] = true; save(); show(i+1); }); btns.appendChild(n); }
+    else { var f = document.createElement("button"); f.className = "btn primary"; f.textContent = "Finish ✓"; f.addEventListener("click", function(){ state.done[i] = true; save(); refresh(); }); btns.appendChild(f); }
+    foot.appendChild(lab); foot.appendChild(btns); sec.appendChild(foot);
+  });
+  function show(i){
+    if(i < 0 || i >= sections.length) i = 0;
+    state.current = i; save();
+    sections.forEach(function(s, j){ s.classList.toggle("active", j === i); });
+    refresh(); window.scrollTo(0, 0);
+    if(history.replaceState) history.replaceState(null, "", "#s" + (i+1));
+  }
+  function refresh(){
+    var links = navList.querySelectorAll("a"), n = 0;
+    sections.forEach(function(s, j){
+      if(state.done[j]) n++;
+      links[j].classList.toggle("done", !!state.done[j]);
+      links[j].classList.toggle("active", j === state.current);
+      var cb = s.querySelector(".doneBox"); if(cb) cb.checked = !!state.done[j];
+    });
+    var pct = Math.round(100 * n / sections.length);
+    document.getElementById("pct").textContent = pct + "%";
+    document.getElementById("pctMobile").textContent = pct + "%";
+    document.getElementById("bar").style.width = pct + "%";
+    document.getElementById("barMobile").style.width = pct + "%";
+    document.getElementById("progMeta").textContent = n + " of " + sections.length + " sections complete";
+  }
+
+  /* generic multiple-choice renderer */
+  function renderMC(container, items, store, scoreEl, opts){
+    container.innerHTML = "";
+    items.forEach(function(s, i){
+      var box = document.createElement("div"); box.className = "scenario";
+      var head = document.createElement("div"); head.innerHTML = "<b>" + (opts.label || "Q") + (i+1) + ".</b> " + s.q; box.appendChild(head);
+      var ch = document.createElement("div"); ch.className = "choices";
+      var fb = document.createElement("div"); fb.className = "feedback";
+      var options = s.opts || opts.options;
+      options.forEach(function(t, k){
+        var b = document.createElement("button"); b.innerHTML = t;
+        b.addEventListener("click", function(){ if(store[i] !== undefined) return; store[i] = k; save(); paint(); score(); });
+        ch.appendChild(b);
+      });
+      function paint(){
+        var pick = store[i];
+        if(pick === undefined){ fb.className = "feedback"; return; }
+        Array.prototype.forEach.call(ch.children, function(b, k){
+          b.disabled = true;
+          b.classList.toggle("right", k === s.a);
+          b.classList.toggle("wrong", k === pick && k !== s.a);
+        });
+        fb.className = "feedback show " + (pick === s.a ? "good" : "bad");
+        fb.innerHTML = (pick === s.a ? "✅ <b>Yes: " : "❌ <b>Best answer: ") + options[s.a] + ".</b> " + s.why;
+      }
+      box.appendChild(ch); box.appendChild(fb); container.appendChild(box); paint();
+    });
+    function score(){
+      if(!scoreEl) return;
+      var answered = 0, right = 0;
+      items.forEach(function(s, i){ if(store[i] !== undefined){ answered++; if(store[i] === s.a) right++; } });
+      scoreEl.textContent = answered ? ("Score: " + right + " / " + answered + " answered (" + items.length + " total)" + (answered === items.length ? (right >= items.length - 1 ? " · solid." : " · re-read the sections you missed.") : "")) : "";
+    }
+    score();
+  }
+
+  /* exercise: pick the action per rule */
+  var ACTIONS = ["Warn", "Drop", "Fail", "Quarantine"];
+  var drill = [
+    {q:"<code>orders_raw</code>: <code>order_id IS NOT NULL</code>. A few rows per day arrive without an ID because of a checkout retry bug.", a:3,
+     why:"Without an ID the row can't be deduped, joined or MERGEd, so it can't enter Silver. But it's real money, so someone has to find it and fix it. Quarantine it with <code>dq_reason = 'null_order_id'</code> and count it in the reconciliation. Failing the whole pipeline for a few rows would block every good order too."},
+    {q:"<code>orders_raw</code>: every item has <code>price &gt; 0</code> and <code>qty &gt; 0</code>.", a:3,
+     why:"A negative price may be a refund modeled wrong, or a bug. Either way finance will ask about it. Keep the evidence with a reason so it can be corrected and replayed. Dropping it hides revenue, and warning lets it reach the fact."},
+    {q:"<code>customers_cdc</code>: <code>lsn IS NOT NULL</code>. This is the column the SCD2 history is sequenced by.", a:2,
+     why:"A missing sequence value is a systemic producer break, not a single bad row, and AUTO CDC doesn't support NULL sequencing values. Continuing could write versions in the wrong order. That's the case for <code>ON VIOLATION FAIL UPDATE</code>: stop, fix the feed, re-run. Bronze is replayable, so nothing is lost."},
+    {q:"<code>customers_cdc</code>: <code>op IN ('I','U','D')</code>. A new op code <code>'X'</code> showed up once.", a:3,
+     why:"You can't apply a change whose meaning you don't know, and guessing would corrupt the dimension's history. Quarantine it and alert the source team. If it turns out to be a new legitimate op, extend the rule and replay the rows from quarantine."},
+    {q:"<code>customers_cdc</code>: <code>email</code> matches a basic pattern. Email is a Type 1 attribute that no report or join uses.", a:0,
+     why:"The customer row is still valid for every metric, so keep it and count the violations (a plain <code>EXPECT</code>). Quarantining a customer over an email typo would push their orders to the -1 member, which is a much worse error."},
+    {q:"<code>customers_cdc</code>: <code>customer_id NOT LIKE 'TEST-%'</code>. The source team's load-test records leak into the feed.", a:1,
+     why:"This is known noise that nobody will fix or replay, so <code>ON VIOLATION DROP ROW</code> is fine. The event log still records how many were dropped, so a sudden spike is visible."},
+    {q:"<code>orders_raw</code>: <code>customer_id</code> exists in <code>dim_customer</code>. Order 1004 references C9, which hasn't arrived in CDC yet.", a:0,
+     why:"Referential gaps are normal with late-arriving dimensions. Keep the order, map it to the unknown member <code>-1</code> in the fact, and watch the share of revenue on -1. Quarantining would delay real revenue, and dropping would lose it."}
+  ];
+  function drawDrill(){ renderMC(document.getElementById("drill"), drill, state.drill, document.getElementById("drillScore"), {label:"Rule ", options:ACTIONS}); }
+  document.getElementById("drillReset").addEventListener("click", function(){ state.drill = {}; save(); drawDrill(); });
+
+  /* spot the fan-out */
+  var fanOpts = ["195", "245", "295", "390"];
+  function drawFan(){
+    var ch = document.getElementById("fanChoices"), fb = document.getElementById("fanFb");
+    ch.innerHTML = "";
+    fanOpts.forEach(function(t, k){
+      var b = document.createElement("button"); b.textContent = t;
+      b.addEventListener("click", function(){ if(state.fan !== null) return; state.fan = k; save(); paint(); });
+      ch.appendChild(b);
+    });
+    function paint(){
+      if(state.fan === null){ fb.className = "feedback"; return; }
+      Array.prototype.forEach.call(ch.children, function(b, k){ b.disabled = true; b.classList.toggle("right", k === 2); b.classList.toggle("wrong", k === state.fan && k !== 2); });
+      fb.className = "feedback show " + (state.fan === 2 ? "good" : "bad");
+      fb.innerHTML = (state.fan === 2 ? "✅ <b>295.</b> " : "❌ <b>It's 295.</b> ") + "Order 1001 becomes 2 items × 2 payments = 4 rows. Each item line appears twice, so its 100 counts as 200. The single-item, single-payment orders are unaffected: 200 + 25 + 40 + 30 = <b>295</b>. <code>SUM(p.amount)</code> is inflated the same way (also 295). Nothing errors, and the number only looks a bit too high, which is why only a grain test catches it.";
+    }
+    paint();
+  }
+
+  /* SCD2 timeline */
+  function T(rows){ var h = '<div class="tablewrap"><table><tr><th>seg</th><th>country</th><th>email</th><th>start</th><th>end</th></tr>';
+    rows.forEach(function(r){ var bad = r[5] ? ' style="background:var(--bad-soft)"' : ''; h += "<tr" + bad + "><td>" + r[0] + "</td><td>" + r[1] + "</td><td>" + r[2] + "</td><td>" + r[3] + "</td><td>" + (r[4] === null ? "<b>null</b>" : r[4]) + "</td></tr>"; });
+    return h + "</table></div>"; }
+  var tl = [
+    {ev:"Batch 1 · <b>lsn 10</b> (2026-10-01): C1 inserted, SMB / BR / ana@old",
+     naive:[["SMB","BR","ana@old",10,null]], guard:[["SMB","BR","ana@old",10,null]], auto:[["SMB","BR","ana@old",10,null]],
+     take:"All three agree: one current version. Easy while events arrive in order."},
+    {ev:"Batch 1 · <b>lsn 30</b> (2026-10-12): segment → Enterprise (the full row image already has country PT and ana@new)",
+     naive:[["SMB","BR","ana@old",10,30],["Enterprise","PT","ana@new",30,null]], guard:[["SMB","BR","ana@old",10,30],["Enterprise","PT","ana@new",30,null]], auto:[["SMB","BR","ana@old",10,30],["Enterprise","PT","ana@new",30,null]],
+     take:"Still in agreement. Note that the source's lsn 20 change hasn't arrived yet."},
+    {ev:"Batch 2 · <b>lsn 20 arrives late</b> (2026-10-05): country BR → PT, still SMB",
+     naive:[["SMB","BR","ana@old",10,30],["Enterprise","PT","ana@new",30,20,1],["SMB","PT","ana@old",20,null,1]],
+     guard:[["SMB","BR","ana@old",10,30],["Enterprise","PT","ana@new",30,null]],
+     auto:[["SMB","BR","ana@old",10,20],["SMB","PT","ana@old",20,30],["Enterprise","PT","ana@new",30,null]],
+     take:"<b>Naive</b> (arrival order) closes the newest version with an end before its start and makes a stale state current, so C1 is now 'SMB' in every as-is report. <b>Guarded MERGE</b> (<code>s.lsn &gt; t.lsn</code>) ignores the late event: the current row is right, but the 2026-10-05 → 10-12 interval says BR instead of PT. <b>AUTO CDC</b> uses <code>SEQUENCE BY lsn</code> to put the event in its place in history."},
+    {ev:"Batch 3 · <b>lsn 40</b> (2026-10-20): only email changes → ana@new2 (Enterprise / PT unchanged)",
+     naive:[["SMB","BR","ana@old",10,30],["Enterprise","PT","ana@new",30,20,1],["SMB","PT","ana@old",20,40,1],["Enterprise","PT","ana@new2",40,null,1]],
+     guard:[["SMB","BR","ana@old",10,30],["Enterprise","PT","ana@new2",30,null]],
+     auto:[["SMB","BR","ana@old",10,20],["SMB","PT","ana@old",20,30],["Enterprise","PT","ana@new2",30,null]],
+     take:"Email isn't tracked, so the guarded MERGE and AUTO CDC update the current version <b>in place</b> (Type 1). Naive compares against its wrong current row, sees a segment 'change' and creates a fourth, bogus version. <b>Lesson:</b> sequencing by a source column is what makes SCD2 correct under late data. If you hand-roll it, either guard and accept small gaps, or rebuild the affected keys' history from Bronze with <code>LEAD()</code> over the LSN."}
+  ];
+  var tlInput = document.getElementById("tl");
+  function drawTL(){
+    var i = state.tl || 0; tlInput.value = i;
+    var s = tl[i];
+    document.getElementById("tlLabel").textContent = (i+1) + " of " + tl.length;
+    document.getElementById("tlEvent").innerHTML = s.ev;
+    document.getElementById("tlTables").innerHTML =
+      '<div class="card"><b>Naive MERGE (arrival order)</b>' + T(s.naive) + '</div>' +
+      '<div class="card"><b>Guarded MERGE (lsn &gt; current)</b>' + T(s.guard) + '</div>' +
+      '<div class="card"><b>AUTO CDC · SEQUENCE BY lsn</b>' + T(s.auto) + '</div>';
+    document.getElementById("tlTake").innerHTML = s.take;
+  }
+  tlInput.addEventListener("input", function(){ state.tl = parseInt(tlInput.value, 10) || 0; save(); drawTL(); });
+
+  /* re-run question */
+  var RR = ["Unchanged", "Changes", "Doubles"];
+  var rerun = [
+    {q:"October revenue by segment, <b>as-was</b> (via the fact's <code>customer_sk</code>): SMB 125 · Enterprise 40.", a:0,
+     why:"Order 1001 still falls in C1's SMB version and 1003 in the Enterprise version. The new 'Strategic' version starts next week, after these orders. Deterministic keys and MERGE (or AUTO CDC) give the same numbers on every re-run. That's what 'stays correct when it re-runs' means."},
+    {q:"October revenue by segment, <b>as-is</b> (joined to the current row): Enterprise 140 · SMB 25.", a:1,
+     why:"As-is answers 'what are today's customers worth?'. C1's 140 moves to <b>Strategic</b>. That's correct behavior, not a bug, but someone reading the dashboard must know which of the two they're looking at."},
+    {q:"Order 1004 (C9), currently on the <b>-1 unknown member</b>.", a:1,
+     why:"On a full rebuild, the as-of join now finds C9's version. That holds only if the version's <code>valid_from</code> is on or before the order time. If C9's first CDC row is dated after the order, it stays -1 unless you backdate the first version or use an 'inferred member' pattern. An <i>incremental</i> fact load wouldn't revisit old lines at all. Plan a late-arriving-dimension fix-up step."},
+    {q:"Total October revenue (195), if the payments join were still in the query.", a:2,
+     why:"Fan-out doesn't depend on re-runs. It's wrong (295 with this data) every time. Re-running only makes it consistently wrong, which is why grain tests matter more than re-run safety here. (Technically 295 isn't exactly double. It doubles whatever order has 2 × 2 rows.)"}
+  ];
+  function drawRerun(){ renderMC(document.getElementById("rerun"), rerun, state.rerun, null, {label:"R", options:RR}); }
+
+  /* quiz */
+  var quiz = [
+    {q:"Which action fits a rule whose failure means the SCD2 sequencing column is missing?", opts:["Warn", "Drop", "Fail the update", "Quarantine"], a:2,
+     why:"It's a systemic break that would corrupt history. Stop, fix, replay from Bronze."},
+    {q:"Why <code>posexplode_outer</code> rather than <code>explode</code> for <code>order_items</code>?", opts:["It's faster", "It returns a position for a stable line key and keeps parents with empty/null arrays", "It deduplicates items", "It is required by Delta"], a:1,
+     why:"Position → <code>line_no</code>, and <code>_outer</code> keeps the parent instead of dropping it."},
+    {q:"Revenue doubled after joining items and payments to orders. The best fix is…", opts:["SELECT DISTINCT", "Aggregate each many-side to the order grain before joining", "Use a broadcast join", "Switch to a LEFT JOIN"], a:1,
+     why:"DISTINCT can collapse legitimate identical lines. Join type and strategy don't change the cardinality."},
+    {q:"With <code>SEQUENCE BY lsn</code> and <code>STORED AS SCD TYPE 2</code>, what's in <code>__START_AT</code>?", opts:["The pipeline's processing time", "An LSN value (same type as the SEQUENCE BY column)", "The source commit timestamp", "A surrogate key"], a:1,
+     why:"<code>__START_AT</code>/<code>__END_AT</code> take the SEQUENCE BY type. For time ranges, sequence by a timestamp, for example <code>STRUCT(changed_at, lsn)</code>."},
+    {q:"<code>TRACK HISTORY ON segment, country</code>. An email change arrives. What happens?", opts:["A new version is created", "The current version's email is updated in place", "The change is ignored", "The pipeline fails"], a:1,
+     why:"Untracked columns behave as Type 1 on the current row."},
+    {q:"The staged-union MERGE stages each changed row twice. Why the <code>NULL</code> merge key?", opts:["To delete the row", "It can never match, so that copy goes to WHEN NOT MATCHED and inserts the new version", "To bypass constraints", "To trigger schema evolution"], a:1,
+     why:"The real-key copy closes the current row, and the NULL-key copy inserts the new one, all in one atomic MERGE."},
+    {q:"Joining the fact to an SCD2 dim on <code>customer_id</code> only, without <code>__END_AT IS NULL</code> or a time range, causes…", opts:["Nothing, keys are unique", "Fan-out: one fact line per customer version", "Fewer rows", "A MERGE conflict"], a:1,
+     why:"The dim's grain is one row per customer <i>version</i>, so it's a many side. Store the as-of surrogate key in the fact."}
+  ];
+  function drawQuiz(){ renderMC(document.getElementById("quiz"), quiz, state.quiz, document.getElementById("quizScore"), {label:"Q"}); }
+  document.getElementById("quizReset").addEventListener("click", function(){ state.quiz = {}; save(); drawQuiz(); });
+
+  /* hands-on checklist */
+  var checks = [
+    "Cell 2: quarantine has 2 rows (null_order_id, non_positive_amount); orders has 4",
+    "Cell 3: saw 295 (wrong) vs 195 (right) and can explain why",
+    "Cell 4: dim_customer has 2 C1 versions, 1 C2 row with the new email, the -1 row; the re-run of batch 2 changed nothing",
+    "Cell 5: as-was revenue SMB 125 / Enterprise 40 / Unknown 30; all tests 0",
+    "Broke the fact join on purpose and watched dup_fact_lines catch it"
+  ];
+  var hc = document.getElementById("hoChecks");
+  function drawChecks(){
+    hc.innerHTML = "";
+    checks.forEach(function(c, i){
+      var l = document.createElement("label"); l.className = "check";
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!state.checks[i];
+      cb.addEventListener("change", function(){ state.checks[i] = cb.checked; save(); });
+      l.appendChild(cb); l.appendChild(document.createTextNode(c)); hc.appendChild(l);
+    });
+  }
+
+  /* copy buttons */
+  Array.prototype.forEach.call(document.querySelectorAll(".codewrap"), function(w){
+    var b = document.createElement("button"); b.className = "copy"; b.textContent = "Copy";
+    b.addEventListener("click", function(){
+      var txt = w.querySelector("pre").innerText;
+      var done = function(){ b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy"; }, 1200); };
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done, function(){ b.textContent = "Select & copy"; }); }
+      else { b.textContent = "Select & copy"; }
+    });
+    w.appendChild(b);
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", function(){
+    if(!window.confirm("Reset progress, exercises, quiz and checklist for this lesson?")) return;
+    state.done = {}; state.drill = {}; state.quiz = {}; state.rerun = {}; state.fan = null; state.checks = {}; state.tl = 0; save();
+    drawDrill(); drawFan(); drawTL(); drawRerun(); drawQuiz(); drawChecks(); show(0);
+  });
+
+  drawDrill(); drawFan(); drawTL(); drawRerun(); drawQuiz(); drawChecks();
+  var m = /^#s(\d+)$/.exec(location.hash || "");
+  show(m ? parseInt(m[1], 10) - 1 : (state.current || 0));
+})();
+</script>
+</body>
+</html>
