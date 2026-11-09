@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connection Deep Dive: Bronze → Silver → Gold, one grain at a time (W44 recap)</title>
+<meta name="description" content="Databricks connection deep dive for Mario Carvalho, Mon 2026-11-09: re-entry review of W44 (DB1–DB5): cleaning, joins and unions, explode, dedup and MERGE, aggregations and profiling, connected by grain on one orders + customers dataset.">
+<style>
+:root{
+  --bg:#f6f7fb;--panel:#fff;--panel2:#f0f2f8;--text:#1b1f2a;--muted:#5b6476;--border:#dde1ea;
+  --accent:#ff3621;--accent-soft:#fff0ed;--ok:#11845b;--ok-soft:#e5f6ee;--bad:#c62f3a;--bad-soft:#fdecee;
+  --warn:#9a6700;--warn-soft:#fff6dd;--info:#1f5fbf;--info-soft:#e9f1ff;
+  --code-bg:#0f1420;--code-text:#e6e9f0;
+  --t1:#2f6fd6;--t2:#b7791f;--t3:#8a4fd8;--t4:#0f9d74;--t5:#c2410c;--br:#0f9d74;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+  --radius:12px;--sidebar:290px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:#0d1117;--panel:#151b24;--panel2:#1b2330;--text:#e6e9ef;--muted:#9aa4b6;--border:#2a3342;
+  --accent:#ff6a55;--accent-soft:#2a1814;--ok:#3ccf91;--ok-soft:#10261d;--bad:#ff6b77;--bad-soft:#2b1418;
+  --warn:#f0c04a;--warn-soft:#2a230f;--info:#7fb2ff;--info-soft:#121f36;--code-bg:#0a0e16;
+  --t1:#6fa3ff;--t2:#f0c04a;--t3:#b48cff;--t4:#3ccf91;--t5:#fb923c;--br:#3ccf91;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;font-size:16px}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel2);border:1px solid var(--border);padding:.05em .35em;border-radius:5px;overflow-wrap:anywhere}
+pre{background:var(--code-bg);color:var(--code-text);padding:14px 16px;border-radius:10px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.5;margin:0}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+.codewrap{position:relative;margin:12px 0}
+.copy{position:absolute;top:8px;right:8px;font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid #3a4456;background:#1d2533;color:#e6e9f0;cursor:pointer}
+.layout{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--panel);border-right:1px solid var(--border);padding:18px 14px 24px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;gap:10px;align-items:center}
+.logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#ff9a3c);display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px;flex:none}
+.brand h1{font-size:15px;line-height:1.25;margin:0}
+.brand small{color:var(--muted);font-size:12px}
+.progress-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.progress-top{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+.bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin:6px 0}
+.bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),#ff9a3c);transition:width .3s}
+.progress-meta{font-size:12px;color:var(--muted)}
+nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+nav a{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;text-decoration:none;color:var(--text);font-size:14px}
+nav a:hover{background:var(--panel2)}
+nav a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+nav .dot{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--border);margin-top:2px;display:grid;place-items:center;font-size:11px;color:#fff}
+nav a.done .dot{background:var(--ok);border-color:var(--ok)}
+.side-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+.btn{font:inherit;font-size:14px;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.small{font-size:12px;padding:5px 10px}
+main{padding:28px clamp(16px,4vw,48px) 80px;max-width:980px}
+section.lesson{display:none}
+section.lesson.active{display:block;animation:fade .25s}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;color:var(--accent)}
+h2{font-size:26px;line-height:1.25;margin:4px 0 6px}
+h3{font-size:18px;margin:22px 0 6px}
+.lead{color:var(--muted);font-size:17px;margin-top:0}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);margin:14px 0}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;margin-bottom:4px}
+.t1{color:var(--t1)}.t2{color:var(--t2)}.t3{color:var(--t3)}
+.b1{border-top:4px solid var(--t1)}.b2{border-top:4px solid var(--t2)}.b3{border-top:4px solid var(--t3)}
+.note{border-left:4px solid var(--info);background:var(--info-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.warn{border-left:4px solid var(--warn);background:var(--warn-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.okbox{border-left:4px solid var(--ok);background:var(--ok-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--panel2)}
+.tablewrap{overflow-x:auto}
+.footer-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:28px;padding-top:16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.done-label{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted)}
+.svgwrap{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:10px;overflow-x:auto}
+.svgwrap svg{width:100%;min-width:720px;height:auto;display:block}
+.svgwrap text{font-family:var(--sans);fill:var(--text)}
+.svgwrap .muted{fill:var(--muted)}
+.stepper{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.stepper button{font:inherit;font-size:13px;padding:6px 10px;border-radius:99px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.stepper button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.step-body{min-height:190px}
+.scenario{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin:14px 0;box-shadow:var(--shadow)}
+.choices{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.choices button{font:inherit;font-size:14px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);cursor:pointer}
+.choices button.right{background:var(--ok-soft);border-color:var(--ok);color:var(--ok);font-weight:700}
+.choices button.wrong{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+.choices button:disabled{cursor:default}
+.feedback{display:none;padding:10px 12px;border-radius:8px;font-size:15px}
+.feedback.show{display:block}
+.feedback.good{background:var(--ok-soft);border-left:4px solid var(--ok)}
+.feedback.bad{background:var(--bad-soft);border-left:4px solid var(--bad)}
+.score{font-weight:700}
+details.qa{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin:12px 0;box-shadow:var(--shadow)}
+details.qa summary{cursor:pointer;font-weight:650}
+details.qa[open] summary{margin-bottom:8px}
+.check{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.check input{margin-top:5px}
+.mobilebar{display:none}
+@media (max-width:860px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:fixed;inset:0 auto 0 0;width:min(86vw,320px);transform:translateX(-105%);transition:transform .25s;z-index:20;box-shadow:var(--shadow)}
+  .sidebar.open{transform:none}
+  .mobilebar{display:flex;gap:10px;align-items:center;position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--border);padding:8px 12px}
+  .mobilebar .bar{flex:1;margin:0}
+}
+
+.t4{color:var(--t4)}.t5{color:var(--t5)}
+.b4{border-top:4px solid var(--t4)}.b5{border-top:4px solid var(--t5)}
+.rule{font-weight:700;margin:6px 0}
+.count{display:inline-block;font-family:var(--mono);font-weight:800;font-size:15px;background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:2px 10px;margin:2px 0}
+.grain{display:inline-block;font-size:12px;font-weight:700;background:var(--info-soft);color:var(--info);border-radius:99px;padding:2px 9px}
+td.n,th.n{text-align:right;font-family:var(--mono)}
+tr.gone td{text-decoration:line-through;color:var(--muted)}
+tr.hl td{background:var(--warn-soft)}
+.counts-strip{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.counts-strip span{font-family:var(--mono);font-size:12px;border:1px solid var(--border);border-radius:99px;padding:2px 9px;background:var(--panel2)}
+.counts-strip span.on{background:var(--accent);border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<div class="mobilebar">
+  <button class="btn small" id="menuBtn" aria-label="Open navigation">☰ Sections</button>
+  <div class="bar" aria-hidden="true"><span id="barMobile"></span></div>
+  <span id="pctMobile" style="font-size:13px;color:var(--muted)">0%</span>
+</div>
+<div class="layout">
+<aside class="sidebar" id="sidebar">
+  <div class="brand">
+    <div class="logo">DD</div>
+    <div><h1>Bronze → Silver → Gold, one grain at a time</h1><small>Connection deep dive · Mon 2026-11-09 · Databricks · W44 recap · ~55 min</small></div>
+  </div>
+  <div class="progress-card">
+    <div class="progress-top"><span>Progress</span><span id="pct">0%</span></div>
+    <div class="bar"><span id="bar"></span></div>
+    <div class="progress-meta" id="progMeta">0 of 0 sections complete</div>
+  </div>
+  <nav aria-label="Sections"><ol id="navList"></ol></nav>
+  <div class="side-actions">
+    <button class="btn small" id="themeBtn">◐ Theme</button>
+    <button class="btn small" id="resetBtn">↺ Reset progress</button>
+  </div>
+</aside>
+<main id="main">
+<!-- ============ 1. RECAP ============ -->
+<section class="lesson" data-title="Recap: five rules" data-min="8">
+  <div class="eyebrow">1 · Recap · ~8 min</div>
+  <h2>Welcome back: W44 in five rules</h2>
+  <p class="lead">You've had a week off, so this is a re-entry review rather than new material. Your W44 pills (DB1–DB5, Oct 26–30) covered the code that turns Bronze into Silver and Gold. Each card below is one pill reduced to the single rule worth remembering. After that, the rest of the lesson runs all five on one small dataset, so you can see how they fit together.</p>
+  <div class="grid3">
+    <div class="card b1"><span class="tag t1">DB1 · Bronze → Silver cleaning</span>
+      <p class="rule">Bad values become NULLs you can count, not failed jobs.</p>
+      <ul>
+        <li><code>CAST</code> fails the query on bad input when ANSI mode is on (the Databricks SQL default). <code>try_cast</code> / <code>try_to_timestamp</code> return NULL instead.</li>
+        <li><code>coalesce(a, b)</code> is the first non-null value. Use it only when the fallback means something.</li>
+        <li><code>na.drop(subset=[key])</code> (or <code>WHERE key IS NOT NULL</code>) for rows you can't use. <code>na.fill</code> only fills columns whose type matches the fill value.</li>
+        <li>Always count the NULLs that <code>try_*</code> produced.</li>
+      </ul></div>
+    <div class="card b2"><span class="tag t2">DB2 · Joins &amp; unions</span>
+      <p class="rule">Know what a join will do to the row count before you run it. Union by name, not by position.</p>
+      <ul>
+        <li><b>inner</b> drops unmatched rows. <b>left</b> keeps all left rows. <b>semi</b> = "has a match" (left columns only, never duplicates). <b>anti</b> = "has no match" (orphan check).</li>
+        <li>Duplicate keys on the dimension side <b>fan out</b> the fact rows.</li>
+        <li><code>BROADCAST</code> a small dimension to skip the shuffle on the big side.</li>
+        <li><code>union</code> matches by position (like <code>UNION ALL</code>). <code>unionByName</code> matches by name.</li>
+      </ul></div>
+    <div class="card b3"><span class="tag t3">DB3 · Column &amp; row surgery</span>
+      <p class="rule">Column operations never change the row count. Generators do. Ask "one row per what?" after every explode.</p>
+      <ul>
+        <li><code>select</code> / <code>withColumn</code> / <code>alias</code> / <code>split</code> leave the number of rows alone.</li>
+        <li><code>explode</code>: one row per element, and parents with a NULL or empty array <b>disappear</b>.</li>
+        <li><code>explode_outer</code>: those parents stay, as one row with a NULL element.</li>
+        <li>Order-level measures (the total) don't belong on line-level rows.</li>
+      </ul></div>
+    <div class="card b4"><span class="tag t4">DB4 · Dedup &amp; upsert</span>
+      <p class="rule">Get one row per key with a survivor rule you chose, then use a guarded MERGE so re-runs do nothing.</p>
+      <ul>
+        <li><code>row_number() OVER (PARTITION BY key ORDER BY ts DESC, tiebreak DESC) = 1</code>, written with <code>QUALIFY</code> in Databricks SQL.</li>
+        <li><code>dropDuplicates([key])</code> doesn't let you pick the survivor. <code>rank</code> ties can keep two rows.</li>
+        <li><code>MERGE INTO</code> is one atomic Delta commit. It fails if several source rows try to update the same target row.</li>
+        <li><code>WHEN MATCHED AND s.ts &gt; t.ts</code> makes the second run a no-op and blocks late, stale records.</li>
+      </ul></div>
+    <div class="card b5"><span class="tag t5">DB5 · Aggregations &amp; profiling → Gold</span>
+      <p class="rule">Declare Gold's grain before you aggregate, and know what each count leaves out.</p>
+      <ul>
+        <li><code>count(*)</code> counts rows. <code>count(col)</code> skips NULLs. <code>count(DISTINCT col)</code> is exact and skips NULLs.</li>
+        <li><code>approx_count_distinct</code> (HyperLogLog++) is cheaper for huge, high-cardinality columns.</li>
+        <li><code>describe()</code> gives count/mean/stddev/min/max. <code>summary()</code> adds the 25/50/75% percentiles.</li>
+        <li>Reconcile Gold totals against Silver. Distinct counts don't add up across groups.</li>
+      </ul></div>
+    <div class="card" style="border-top:4px solid var(--accent)"><span class="tag" style="color:var(--accent)">The thread · Grain</span>
+      <p class="rule">Every step either keeps the grain, changes it on purpose, or breaks it by accident.</p>
+      <ul>
+        <li><b>explode</b> multiplies rows (new grain: lines).</li>
+        <li><b>joins</b> can fan rows out (broken grain).</li>
+        <li><b>dedup</b> restores one row per key.</li>
+        <li><b>Gold</b> picks a new, coarser grain on purpose.</li>
+        <li><b>Profiling counts</b> are how you prove which one happened.</li>
+      </ul></div>
+  </div>
+  <div class="note"><b>Quick self-check before moving on:</b> without scrolling up, can you say what <code>count(amount)</code> does with a NULL amount, and what <code>explode</code> does with an empty array? If either took more than two seconds, re-read that card.</div>
+</section>
+
+<!-- ============ 2. MAP ============ -->
+<section class="lesson" data-title="Connection map" data-min="5">
+  <div class="eyebrow">2 · Connection map · ~5 min</div>
+  <h2>Where each topic happens, and what one row means at each stage</h2>
+  <p class="lead">Read it left to right. The numbered badges are the W44 pills, placed on the arrow where they run. The blue pill under each table is its grain. The orange marks show where a shuffle happens, which is the bridge to today's tuning pill.</p>
+  <div class="svgwrap">
+  <svg viewBox="0 0 980 450" role="img" aria-label="Connection map: Bronze to Silver to Gold, with the five topics on the arrows and the grain at each stage">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a93a6"/></marker>
+    </defs>
+    <!-- Bronze -->
+    <rect x="15" y="105" width="175" height="120" rx="12" fill="#cd7f32" fill-opacity=".14" stroke="#cd7f32" stroke-width="2"/>
+    <text x="102" y="132" text-anchor="middle" font-weight="800" font-size="17">Bronze</text>
+    <text x="102" y="155" text-anchor="middle" font-size="13" font-family="monospace">bronze_orders</text>
+    <text x="102" y="176" text-anchor="middle" font-size="12" class="muted">append-only · strings</text>
+    <text x="102" y="194" text-anchor="middle" font-size="12" class="muted">nested items array</text>
+    <text x="102" y="212" text-anchor="middle" font-size="12" class="muted">8 rows</text>
+    <rect x="22" y="238" width="161" height="40" rx="8" fill="#1f5fbf" fill-opacity=".12"/>
+    <text x="102" y="254" text-anchor="middle" font-size="12" font-weight="700" fill="#1f5fbf">grain: one row per</text>
+    <text x="102" y="270" text-anchor="middle" font-size="12" font-weight="700" fill="#1f5fbf">arrival (file/record)</text>
+
+    <!-- arrow Bronze -> Silver orders -->
+    <line x1="192" y1="150" x2="398" y2="150" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+    <rect x="205" y="72" width="182" height="66" rx="8" fill="#2f6fd6" fill-opacity=".12" stroke="#2f6fd6"/>
+    <text x="215" y="91" font-size="13" font-weight="800" fill="#2f6fd6">① Clean (DB1)</text>
+    <text x="215" y="109" font-size="11.5">try_cast · try_to_timestamp</text>
+    <text x="215" y="126" font-size="11.5">coalesce · na.drop(key)</text>
+    <rect x="205" y="162" width="182" height="82" rx="8" fill="#0f9d74" fill-opacity=".12" stroke="#0f9d74"/>
+    <text x="215" y="181" font-size="13" font-weight="800" fill="#0f9d74">④ Dedup + MERGE (DB4)</text>
+    <text x="215" y="199" font-size="11.5">QUALIFY row_number() = 1</text>
+    <text x="215" y="216" font-size="11.5">MERGE … WHEN MATCHED</text>
+    <text x="215" y="233" font-size="11.5">AND s.ts &gt; t.ts</text>
+    <text x="300" y="266" text-anchor="middle" font-size="12" font-weight="700" fill="#c2410c">⇄ shuffle (window)</text>
+
+    <!-- Silver container -->
+    <rect x="400" y="40" width="240" height="355" rx="14" fill="#9aa4b6" fill-opacity=".08" stroke="#9aa4b6" stroke-dasharray="6 5"/>
+    <text x="520" y="62" text-anchor="middle" font-weight="800" font-size="17">Silver</text>
+    <rect x="415" y="80" width="210" height="80" rx="10" fill="#9aa4b6" fill-opacity=".18" stroke="#8a93a6" stroke-width="2"/>
+    <text x="520" y="104" text-anchor="middle" font-size="13" font-family="monospace" font-weight="700">silver_orders</text>
+    <text x="520" y="123" text-anchor="middle" font-size="12" class="muted">typed · deduped · 5 rows</text>
+    <rect x="428" y="132" width="184" height="20" rx="6" fill="#1f5fbf" fill-opacity=".12"/>
+    <text x="520" y="146" text-anchor="middle" font-size="12" font-weight="700" fill="#1f5fbf">grain: one row per order_id</text>
+
+    <line x1="520" y1="162" x2="520" y2="278" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+    <rect x="530" y="185" width="104" height="70" rx="8" fill="#8a4fd8" fill-opacity=".12" stroke="#8a4fd8"/>
+    <text x="538" y="203" font-size="12.5" font-weight="800" fill="#8a4fd8">③ Reshape</text>
+    <text x="538" y="220" font-size="11">(DB3) explode</text>
+    <text x="538" y="236" font-size="11">select · alias</text>
+    <text x="538" y="250" font-size="11">split · cast</text>
+    <text x="510" y="225" text-anchor="end" font-size="11.5" font-weight="700" fill="#c62f3a">rows ×</text>
+
+    <rect x="415" y="280" width="210" height="80" rx="10" fill="#9aa4b6" fill-opacity=".18" stroke="#8a93a6" stroke-width="2"/>
+    <text x="520" y="304" text-anchor="middle" font-size="13" font-family="monospace" font-weight="700">silver_order_lines</text>
+    <text x="520" y="323" text-anchor="middle" font-size="12" class="muted">exploded items · 9 rows</text>
+    <rect x="422" y="332" width="196" height="20" rx="6" fill="#1f5fbf" fill-opacity=".12"/>
+    <text x="520" y="346" text-anchor="middle" font-size="12" font-weight="700" fill="#1f5fbf">grain: one row per (order, sku)</text>
+
+    <!-- dim -->
+    <rect x="660" y="300" width="140" height="62" rx="10" fill="#9aa4b6" fill-opacity=".18" stroke="#8a93a6" stroke-width="2"/>
+    <text x="730" y="324" text-anchor="middle" font-size="12.5" font-family="monospace" font-weight="700">dim_customers</text>
+    <text x="730" y="343" text-anchor="middle" font-size="11.5" class="muted">4 rows · small</text>
+    <line x1="790" y1="298" x2="790" y2="238" stroke="#b7791f" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+
+    <!-- arrow Silver -> Gold -->
+    <line x1="627" y1="120" x2="808" y2="160" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+    <rect x="650" y="20" width="148" height="80" rx="8" fill="#b7791f" fill-opacity=".12" stroke="#b7791f"/>
+    <text x="658" y="39" font-size="12.5" font-weight="800" fill="#b7791f">② Join (DB2)</text>
+    <text x="658" y="56" font-size="11">LEFT JOIN + BROADCAST</text>
+    <text x="658" y="72" font-size="11">anti = orphan check</text>
+    <text x="658" y="88" font-size="11">unionByName for batches</text>
+    <rect x="650" y="168" width="148" height="66" rx="8" fill="#c2410c" fill-opacity=".12" stroke="#c2410c"/>
+    <text x="658" y="187" font-size="12.5" font-weight="800" fill="#c2410c">⑤ Aggregate (DB5)</text>
+    <text x="658" y="204" font-size="11">count(*) · count(col)</text>
+    <text x="658" y="220" font-size="11">count(DISTINCT) · approx</text>
+    <text x="652" y="252" font-size="12" font-weight="700" fill="#c2410c">⇄ shuffle (GROUP BY)</text>
+    <text x="652" y="270" font-size="11" class="muted">broadcast dim: no shuffle</text>
+    <text x="652" y="284" font-size="11" class="muted">on the big side</text>
+
+    <!-- Gold -->
+    <rect x="810" y="105" width="160" height="120" rx="12" fill="#d4a017" fill-opacity=".16" stroke="#d4a017" stroke-width="2"/>
+    <text x="890" y="132" text-anchor="middle" font-weight="800" font-size="17">Gold</text>
+    <text x="890" y="153" text-anchor="middle" font-size="11" font-family="monospace">gold_daily_country_sales</text>
+    <text x="890" y="174" text-anchor="middle" font-size="12" class="muted">orders · customers</text>
+    <text x="890" y="192" text-anchor="middle" font-size="12" class="muted">revenue · 4 rows</text>
+    <rect x="815" y="238" width="150" height="40" rx="8" fill="#1f5fbf" fill-opacity=".12"/>
+    <text x="890" y="254" text-anchor="middle" font-size="12" font-weight="700" fill="#1f5fbf">grain (declared): one</text>
+    <text x="890" y="270" text-anchor="middle" font-size="12" font-weight="700" fill="#1f5fbf">row per (date, country)</text>
+
+    <!-- profiling strip -->
+    <rect x="15" y="408" width="955" height="34" rx="8" fill="#ff3621" fill-opacity=".08" stroke="#ff3621" stroke-opacity=".5"/>
+    <text x="492" y="430" text-anchor="middle" font-size="12.5" font-weight="700">Profile every arrow (DB5): 8 Bronze → 7 clean → 5 orders → 9 lines · LEFT JOIN keeps 5 → 4 Gold rows · Σ revenue 280.50 on both sides</text>
+  </svg>
+  </div>
+  <div class="okbox"><b>Why the numbering doesn't match the run order.</b> The pills came in the order you learned them (1→5). The pipeline runs in the order the grain requires: clean (1) → dedup + MERGE at the order key (4) → explode into lines (3) → join + aggregate into Gold (2, 5). You dedup <i>before</i> you explode because the business key is <code>order_id</code>. Explode first and the stale version's items get mixed in with the current ones (you'll see the 13-row trap in the walkthrough).</div>
+</section>
+<!-- ============ 3. WALKTHROUGH ============ -->
+<section class="lesson" data-title="End-to-end walkthrough" data-min="12">
+  <div class="eyebrow">3 · End-to-end walkthrough · ~12 min</div>
+  <h2>One small dataset, every step, a row count after each</h2>
+  <p class="lead">Eight Bronze rows of orders, each with a nested <code>items</code> array, plus a four-row <code>dim_customers</code>. Before you click <b>Next</b>, predict the count for the next step. The strip below tracks where you are.</p>
+  <div class="counts-strip" id="wtStrip"></div>
+  <div class="stepper" id="wtSteps"></div>
+  <div class="card step-body" id="wtBody">
+
+  <div class="wt" data-t="0 · Bronze" data-n="8 rows">
+    <span class="tag" style="color:#cd7f32">Bronze · as landed</span>
+    <h3 style="margin-top:4px">bronze_orders: 8 rows, all strings, append-only</h3>
+    <div class="tablewrap"><table>
+      <tr><th>#</th><th>order_id</th><th>customer_id</th><th>order_ts</th><th>updated_at</th><th>amount</th><th>items (sku × qty)</th><th>_ingested_at</th></tr>
+      <tr><td>1</td><td>o1001</td><td>c1</td><td>2026-10-26 09:15:00</td><td>NULL</td><td>'120.50'</td><td>A×2, B×1, E×1</td><td>10-26 12:00</td></tr>
+      <tr><td>2</td><td>o1002</td><td>c2</td><td>2026-10-26 10:00:00</td><td>NULL</td><td>'80.00'</td><td>C×1</td><td>10-26 12:00</td></tr>
+      <tr class="hl"><td>3</td><td>o1003</td><td>c3</td><td>2026-10-26 11:30:00</td><td>NULL</td><td><b>'abc'</b></td><td><b>[ ]</b> (empty)</td><td>10-26 12:00</td></tr>
+      <tr class="hl"><td>4</td><td>o1004</td><td><b>c9</b></td><td>2026-10-26 11:45:00</td><td>NULL</td><td>'45.00'</td><td><b>NULL</b></td><td>10-26 12:00</td></tr>
+      <tr class="hl"><td>5</td><td><b>NULL</b></td><td>c1</td><td>2026-10-26 11:50:00</td><td>NULL</td><td>'10.00'</td><td>A×1</td><td>10-26 12:00</td></tr>
+      <tr class="hl"><td>6</td><td>o1001</td><td>c1</td><td>2026-10-26 09:15:00</td><td>NULL</td><td>'120.50'</td><td>A×2, B×1, E×1</td><td><b>10-27 09:30</b></td></tr>
+      <tr class="hl"><td>7</td><td>o1002</td><td>c2</td><td>2026-10-26 10:00:00</td><td><b>2026-10-27 09:00:00</b></td><td>'85.00'</td><td>C×1, D×2, A×1, F×1</td><td>10-27 09:30</td></tr>
+      <tr><td>8</td><td>o1005</td><td>c2</td><td>2026-10-27 08:00:00</td><td>NULL</td><td>'30.00'</td><td>B×3, C×1</td><td>10-27 09:30</td></tr>
+    </table></div>
+    <p>Every highlighted row is a trap one of the pills prepared you for: a bad amount (3), an empty and a NULL array (3, 4), an orphan customer <code>c9</code> (4), a missing key (5), a resent file (6), and an update (7).</p>
+    <p><span class="grain">grain: one row per arrival</span>, not per order. That's correct for Bronze, which keeps the record of what arrived. <code>dim_customers</code>: c1 Ana BR · c2 Bruno BR · c3 Carla PT · c4 Diego AR (no orders).</p>
+  </div>
+
+  <div class="wt" data-t="1 · Clean" data-n="7 rows">
+    <span class="tag t1">DB1 · Clean</span>
+    <h3 style="margin-top:4px">Type it, null the garbage, drop what has no key</h3>
+    <div class="codewrap"><pre><code>-- Cell 2 (SQL): DB1 cleaning as a view (re-evaluated every time Bronze grows)
+CREATE OR REPLACE TEMP VIEW orders_clean AS
+SELECT
+  order_id,
+  customer_id,
+  try_to_timestamp(order_ts, 'yyyy-MM-dd HH:mm:ss')                 AS order_ts,
+  coalesce(try_to_timestamp(updated_at, 'yyyy-MM-dd HH:mm:ss'),
+           try_to_timestamp(order_ts,   'yyyy-MM-dd HH:mm:ss'))     AS change_ts,
+  try_cast(amount AS DECIMAL(10,2))                                  AS amount,  -- 'abc' -&gt; NULL
+  items,
+  _ingested_at
+FROM bronze_orders
+WHERE order_id IS NOT NULL;                                          -- = na.drop(subset=["order_id"])
+
+SELECT count(*) AS clean_rows, count(amount) AS rows_with_amount FROM orders_clean;  -- 7, 6</code></pre></div>
+    <ul>
+      <li>Row 5 has no <code>order_id</code>, so <code>WHERE order_id IS NOT NULL</code> (= <code>na.drop(subset=["order_id"])</code>) removes it. <span class="count">8 → 7</span></li>
+      <li>Row 3's <code>'abc'</code> becomes <b>NULL</b> through <code>try_cast</code>. A plain <code>CAST</code> with ANSI on would have failed the whole job over one value. <code>count(*) = 7</code> but <code>count(amount) = 6</code>. That gap of 1 is your data-quality metric.</li>
+      <li><code>change_ts = coalesce(updated_at, order_ts)</code> gives every row a "version time". This is a meaningful fallback (no update means the creation time is the version), not a sentinel.</li>
+    </ul>
+    <p><span class="grain">grain: still one row per arrival</span>. Cleaning changes values, not the meaning of a row.</p>
+  </div>
+
+  <div class="wt" data-t="2 · Dedup" data-n="5 rows">
+    <span class="tag t4">DB4 · Dedup</span>
+    <h3 style="margin-top:4px">Latest record wins: one row per order_id</h3>
+    <div class="codewrap"><pre><code>SELECT * FROM orders_clean
+QUALIFY row_number() OVER (PARTITION BY order_id
+                           ORDER BY change_ts DESC, _ingested_at DESC) = 1;</code></pre></div>
+    <div class="tablewrap"><table>
+      <tr><th>Method</th><th class="n">Rows</th><th>What happened</th></tr>
+      <tr><td><code>QUALIFY row_number() = 1</code></td><td class="n">5</td><td>o1001: keeps the later-ingested copy (tie on change_ts). o1002: keeps the <b>update</b> (85.00, 4 items), because its change_ts is newer.</td></tr>
+      <tr><td><code>SELECT DISTINCT *</code> / <code>dropDuplicates()</code></td><td class="n">7</td><td>Nothing removed: the resend differs in <code>_ingested_at</code>, and the update differs in nearly every column.</td></tr>
+      <tr><td><code>dropDuplicates(["order_id"])</code></td><td class="n">5</td><td>Right count, but the survivor is <b>arbitrary</b>. It may keep o1002 at 80.00.</td></tr>
+      <tr class="hl"><td>explode <i>before</i> dedup</td><td class="n">13</td><td>3+1+0+0+3+4+2 lines. The stale o1002 C×1 line and both o1001 copies are now mixed in, and there's no clean key left to fix it.</td></tr>
+    </table></div>
+    <p><span class="count">7 → 5</span> <span class="grain">grain: one row per order_id</span>. This is the first grain change, and it's deliberate.</p>
+  </div>
+
+  <div class="wt" data-t="3 · MERGE" data-n="5 rows (twice)">
+    <span class="tag t4">DB4 · Upsert</span>
+    <h3 style="margin-top:4px">MERGE INTO silver_orders, then run it again</h3>
+    <div class="codewrap"><pre><code>MERGE INTO silver_orders AS t
+USING (
+  SELECT * FROM orders_clean
+  QUALIFY row_number() OVER (PARTITION BY order_id
+                             ORDER BY change_ts DESC, _ingested_at DESC) = 1
+) AS s
+ON t.order_id = s.order_id
+WHEN MATCHED AND s.change_ts &gt; t.change_ts THEN UPDATE SET *
+WHEN NOT MATCHED THEN INSERT *;</code></pre></div>
+    <div class="tablewrap"><table>
+      <tr><th>Run</th><th class="n">affected</th><th class="n">updated</th><th class="n">inserted</th><th class="n">silver rows</th><th>Why</th></tr>
+      <tr><td>1 (empty target)</td><td class="n">5</td><td class="n">0</td><td class="n">5</td><td class="n">5</td><td>Nothing matches, so every source row goes through <code>WHEN NOT MATCHED</code></td></tr>
+      <tr><td>2 (same input)</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">5</td><td>All 5 match, but none has <code>s.change_ts &gt; t.change_ts</code>, so the run is a no-op</td></tr>
+      <tr><td>3 (bonus: late batch)</td><td class="n">1</td><td class="n">1</td><td class="n">0</td><td class="n">5</td><td>o1005 v2 is newer, so it updates (35.00). A stale o1002 replay loses the QUALIFY.</td></tr>
+    </table></div>
+    <p>Two things make this idempotent. Dedup guarantees <b>at most one source row per key</b>, and without it MERGE raises an error when several source rows try to update the same target row. The <b>guard</b> on the matched clause turns "same data again" into zero changes and stops late, older records from overwriting newer ones. The steps below use the state after run 2.</p>
+  </div>
+
+  <div class="wt" data-t="4 · Explode" data-n="9 lines">
+    <span class="tag t3">DB3 · Reshape</span>
+    <h3 style="margin-top:4px">Orders → order lines: the grain changes on purpose</h3>
+    <div class="tablewrap"><table>
+      <tr><th>order_id</th><th>items</th><th class="n">explode</th><th class="n">explode_outer</th></tr>
+      <tr><td>o1001</td><td>A×2, B×1, E×1</td><td class="n">3</td><td class="n">3</td></tr>
+      <tr><td>o1002</td><td>C×1, D×2, A×1, F×1</td><td class="n">4</td><td class="n">4</td></tr>
+      <tr class="hl"><td>o1003</td><td>[ ] empty</td><td class="n">0</td><td class="n">1 (item NULL)</td></tr>
+      <tr class="hl"><td>o1004</td><td>NULL</td><td class="n">0</td><td class="n">1 (item NULL)</td></tr>
+      <tr><td>o1005</td><td>B×3, C×1</td><td class="n">2</td><td class="n">2</td></tr>
+      <tr><th>Total</th><th></th><th class="n">9</th><th class="n">11</th></tr>
+    </table></div>
+    <p><code>silver_order_lines</code> uses <code>explode</code>, because an order without items has no line, and the order itself is still in <code>silver_orders</code>. Choose <code>explode_outer</code> when every parent must survive <i>in this same table</i>, for example a flat export with one row per order line, plus one row per order that has none. <code>item.sku AS sku</code>, <code>try_cast(item.qty AS INT) AS qty</code> are column surgery, so they don't change the row count.</p>
+    <p><span class="count">5 orders → 9 lines</span> <span class="grain">grain: one row per (order_id, sku)</span>. Grain test: <code>GROUP BY order_id, sku HAVING count(*) &gt; 1</code> returns 0 rows. Σ qty = 13.</p>
+  </div>
+
+  <div class="wt" data-t="5 · Join" data-n="5 rows (left)">
+    <span class="tag t2">DB2 · Enrich</span>
+    <h3 style="margin-top:4px">Add the customer's country: pick the join by what it does to the count</h3>
+    <div class="tablewrap"><table>
+      <tr><th>Join (silver_orders ⋈ dim_customers)</th><th class="n">Rows</th><th>Read it as</th></tr>
+      <tr><td><code>JOIN</code> (inner)</td><td class="n">4</td><td>o1004 (c9) silently disappears, and so does its 45.00</td></tr>
+      <tr><td><code>LEFT JOIN</code></td><td class="n">5</td><td>every order kept, o1004's country is NULL → <code>coalesce(country, 'UNKNOWN')</code></td></tr>
+      <tr><td><code>LEFT ANTI JOIN</code></td><td class="n">1</td><td>the orphan check: which orders have no customer? (o1004)</td></tr>
+      <tr><td><code>dim LEFT SEMI JOIN orders</code></td><td class="n">3</td><td>customers who ordered: c1, c2, c3. c2 has 2 orders but appears <b>once</b>.</td></tr>
+    </table></div>
+    <p><b>Fan-out what-if:</b> if <code>dim_customers</code> held c2 twice (say, two history versions), the LEFT JOIN would return <b>7</b> rows, because o1002 and o1005 each match twice. Always check that the dimension's key is unique (<code>GROUP BY customer_id HAVING count(*) &gt; 1</code>) before joining.</p>
+    <p><b>Broadcast:</b> the dimension is tiny, so <code>/*+ BROADCAST(c) */</code> (or <code>F.broadcast(dim)</code>) ships it to every task, and the big side isn't shuffled. <b>Unions:</b> if a late batch arrives from a partner file with columns in a different order, stack it with <code>unionByName</code>. <code>union</code> would put <code>customer_id</code> values into <code>order_id</code> without raising an error.</p>
+    <p><span class="count">LEFT: 5 → 5</span> <span class="grain">grain: still one row per order_id</span>, because the dimension key is unique.</p>
+  </div>
+
+  <div class="wt" data-t="6 · Gold" data-n="4 rows">
+    <span class="tag t5">DB5 · Aggregate &amp; profile</span>
+    <h3 style="margin-top:4px">Declare the grain first: one row per (order_date, country)</h3>
+    <div class="tablewrap"><table>
+      <tr><th>order_date</th><th>country</th><th class="n">orders<br><small>count(*)</small></th><th class="n">orders_with_amount<br><small>count(amount)</small></th><th class="n">customers<br><small>count(DISTINCT)</small></th><th class="n">revenue<br><small>sum(amount)</small></th></tr>
+      <tr><td>2026-10-26</td><td>BR</td><td class="n">2</td><td class="n">2</td><td class="n">2</td><td class="n">205.50</td></tr>
+      <tr class="hl"><td>2026-10-26</td><td>PT</td><td class="n">1</td><td class="n">0</td><td class="n">1</td><td class="n">NULL</td></tr>
+      <tr><td>2026-10-26</td><td>UNKNOWN</td><td class="n">1</td><td class="n">1</td><td class="n">1</td><td class="n">45.00</td></tr>
+      <tr><td>2026-10-27</td><td>BR</td><td class="n">1</td><td class="n">1</td><td class="n">1</td><td class="n">30.00</td></tr>
+    </table></div>
+    <ul>
+      <li><b>Reconcile:</b> Σ orders = 5 = silver rows. Σ revenue = 280.50 = <code>sum(amount)</code> in Silver. If an inner join had been used, Gold would show 235.50 and nobody would notice.</li>
+      <li><b>PT row:</b> <code>count(*) = 1</code>, <code>count(amount) = 0</code>, <code>sum(amount) = NULL</code>. The sum of only NULLs is NULL, not 0.</li>
+      <li><b>Distinct counts don't add up:</b> the <code>customers</code> column sums to 5, but there are only <b>4</b> distinct customers overall (c2 ordered on both days).</li>
+      <li><b>Fan-out trap:</b> <code>sum(o.amount)</code> over orders joined to lines gives <b>761.50</b>, because each order's total repeats once per line. Order-level measures stay at order grain.</li>
+      <li><b>Profile Silver:</b> <code>count(*)=5</code>, <code>count(amount)=4</code>, <code>count(DISTINCT customer_id)=4</code>, <code>approx_count_distinct</code> ≈ 4. <code>summary()</code> on amount: count 4, mean 70.125, min 30.00, max 120.50, plus 25/50/75% (30, 45, 85).</li>
+    </ul>
+    <p><span class="count">5 → 4 Gold rows</span> <span class="grain">grain: one row per (order_date, country)</span>, coarser on purpose, and written down.</p>
+  </div>
+  </div>
+  <div style="display:flex;gap:8px"><button class="btn" id="wtPrev">← Prev</button><button class="btn primary" id="wtNext">Next →</button></div>
+</section>
+
+<!-- ============ 4. PREDICT ============ -->
+<section class="lesson" data-title="Predict the count" data-min="6">
+  <div class="eyebrow">4 · Interactive check · ~6 min</div>
+  <h2>Predict the count</h2>
+  <p class="lead">Every question uses the walkthrough data. If you get one wrong, the explanation tells you which pill to re-read.</p>
+  <div id="drill"></div>
+  <p class="score" id="drillScore"></p>
+  <button class="btn small" id="drillReset">↺ Reset answers</button>
+</section>
+<!-- ============ 5. HANDS-ON ============ -->
+<section class="lesson" data-title="Hands-on notebook" data-min="15">
+  <div class="eyebrow">5 · Hands-on · ~15 min · Databricks Free Edition</div>
+  <h2>Run the whole pipeline in one notebook</h2>
+  <p class="lead">Create a notebook, attach it to <b>serverless</b>, set the default language to <b>SQL</b>, and paste one cell at a time (Python cells start with <code>%python</code>). Everything lands in <code>workspace.dd_w44</code>. Cell 1 recreates the tables, so running from the top always starts fresh. Expected results are in the comments.</p>
+  <div class="note">The counts in these cells were checked against the sample data on local Spark 3.5 + Delta 3.2 (with <code>QUALIFY</code> rewritten as a subquery, since open-source Spark doesn't have it). On Databricks, run them exactly as written.</div>
+  <h3>Setup: Bronze, the dimension, an empty Silver target</h3>
+  <div class="codewrap"><pre><code>-- Cell 1 (SQL): sandbox schema + Bronze sample (8 rows, raw strings, nested items)
+USE CATALOG workspace;                 -- Free Edition's default catalog
+CREATE SCHEMA IF NOT EXISTS dd_w44;
+USE SCHEMA dd_w44;
+
+CREATE OR REPLACE TABLE bronze_orders AS
+SELECT order_id, customer_id, order_ts, updated_at, amount,
+       from_json(items_json, 'ARRAY&lt;STRUCT&lt;sku: STRING, qty: STRING&gt;&gt;') AS items,
+       CAST(ingested_at AS TIMESTAMP) AS _ingested_at
+FROM VALUES
+  ('o1001','c1','2026-10-26 09:15:00', NULL, '120.50',
+     '[{"sku":"A","qty":"2"},{"sku":"B","qty":"1"},{"sku":"E","qty":"1"}]', '2026-10-26 12:00:00'),
+  ('o1002','c2','2026-10-26 10:00:00', NULL, '80.00',
+     '[{"sku":"C","qty":"1"}]', '2026-10-26 12:00:00'),
+  ('o1003','c3','2026-10-26 11:30:00', NULL, 'abc', '[]', '2026-10-26 12:00:00'),
+  ('o1004','c9','2026-10-26 11:45:00', NULL, '45.00', NULL, '2026-10-26 12:00:00'),
+  (NULL,   'c1','2026-10-26 11:50:00', NULL, '10.00',
+     '[{"sku":"A","qty":"1"}]', '2026-10-26 12:00:00'),
+  ('o1001','c1','2026-10-26 09:15:00', NULL, '120.50',               -- resent file
+     '[{"sku":"A","qty":"2"},{"sku":"B","qty":"1"},{"sku":"E","qty":"1"}]', '2026-10-27 09:30:00'),
+  ('o1002','c2','2026-10-26 10:00:00', '2026-10-27 09:00:00', '85.00', -- update
+     '[{"sku":"C","qty":"1"},{"sku":"D","qty":"2"},{"sku":"A","qty":"1"},{"sku":"F","qty":"1"}]',
+     '2026-10-27 09:30:00'),
+  ('o1005','c2','2026-10-27 08:00:00', NULL, '30.00',
+     '[{"sku":"B","qty":"3"},{"sku":"C","qty":"1"}]', '2026-10-27 09:30:00')
+AS t(order_id, customer_id, order_ts, updated_at, amount, items_json, ingested_at);
+
+CREATE OR REPLACE TABLE dim_customers AS
+SELECT * FROM VALUES ('c1','Ana','BR'), ('c2','Bruno','BR'), ('c3','Carla','PT'), ('c4','Diego','AR')
+AS t(customer_id, name, country);
+
+-- Empty Silver target, so the first MERGE is pure inserts
+CREATE OR REPLACE TABLE silver_orders (
+  order_id STRING, customer_id STRING, order_ts TIMESTAMP, change_ts TIMESTAMP,
+  amount DECIMAL(10,2), items ARRAY&lt;STRUCT&lt;sku: STRING, qty: STRING&gt;&gt;, _ingested_at TIMESTAMP);
+
+SELECT count(*) AS bronze_rows FROM bronze_orders;   -- 8</code></pre></div>
+  <h3>DB1: clean</h3>
+  <div class="codewrap"><pre><code>-- Cell 2 (SQL): DB1 cleaning as a view (re-evaluated every time Bronze grows)
+CREATE OR REPLACE TEMP VIEW orders_clean AS
+SELECT
+  order_id,
+  customer_id,
+  try_to_timestamp(order_ts, 'yyyy-MM-dd HH:mm:ss')                 AS order_ts,
+  coalesce(try_to_timestamp(updated_at, 'yyyy-MM-dd HH:mm:ss'),
+           try_to_timestamp(order_ts,   'yyyy-MM-dd HH:mm:ss'))     AS change_ts,
+  try_cast(amount AS DECIMAL(10,2))                                  AS amount,  -- 'abc' -&gt; NULL
+  items,
+  _ingested_at
+FROM bronze_orders
+WHERE order_id IS NOT NULL;                                          -- = na.drop(subset=["order_id"])
+
+SELECT count(*) AS clean_rows, count(amount) AS rows_with_amount FROM orders_clean;  -- 7, 6</code></pre></div>
+  <h3>DB4: dedup, compared</h3>
+  <div class="codewrap"><pre><code>-- Cell 3 (SQL): DB4 dedup, three ways
+SELECT 'QUALIFY row_number() = 1' AS method, count(*) AS n FROM (
+  SELECT * FROM orders_clean
+  QUALIFY row_number() OVER (PARTITION BY order_id
+                             ORDER BY change_ts DESC, _ingested_at DESC) = 1)
+UNION ALL
+SELECT 'DISTINCT * (full row)', count(*) FROM (SELECT DISTINCT * FROM orders_clean)
+UNION ALL
+SELECT 'explode BEFORE dedup (trap)', count(*) FROM (
+  SELECT order_id, explode(items) AS item FROM orders_clean);
+-- expect 5, 7, 13</code></pre></div>
+  <div class="codewrap"><pre><code>%python
+# Cell 4 (Python): the same with the DataFrame API
+df = spark.table("orders_clean")
+print(df.dropDuplicates().count())              # 7: the resend differs in _ingested_at
+print(df.dropDuplicates(["order_id"]).count())  # 5, but YOU don't choose which o1002 survives</code></pre></div>
+  <h3>DB4: MERGE, twice</h3>
+  <div class="codewrap"><pre><code>-- Cell 5 (SQL): DB4 MERGE INTO Silver. Run this cell TWICE.
+MERGE INTO silver_orders AS t
+USING (
+  SELECT * FROM orders_clean
+  QUALIFY row_number() OVER (PARTITION BY order_id
+                             ORDER BY change_ts DESC, _ingested_at DESC) = 1
+) AS s
+ON t.order_id = s.order_id
+WHEN MATCHED AND s.change_ts &gt; t.change_ts THEN UPDATE SET *
+WHEN NOT MATCHED THEN INSERT *;
+-- run 1: num_affected_rows = 5 (num_inserted_rows = 5)
+-- run 2: num_affected_rows = 0   &lt;- idempotent: nothing newer, nothing new
+
+SELECT count(*) AS silver_orders FROM silver_orders;   -- 5 after both runs</code></pre></div>
+  <h3>DB3: explode vs explode_outer, then the lines table</h3>
+  <div class="codewrap"><pre><code>-- Cell 6 (SQL): DB3 explode changes the grain
+SELECT 'explode' AS fn, count(*) AS n FROM (SELECT order_id, explode(items) AS item FROM silver_orders)
+UNION ALL
+SELECT 'explode_outer', count(*) FROM (SELECT order_id, explode_outer(items) AS item FROM silver_orders);
+-- expect 9 and 11 (o1003 has [], o1004 has NULL)
+
+CREATE OR REPLACE TABLE silver_order_lines AS          -- grain: one row per (order_id, sku)
+SELECT order_id, item.sku AS sku, try_cast(item.qty AS INT) AS qty
+FROM (SELECT order_id, explode(items) AS item FROM silver_orders);
+
+-- grain test: must return zero rows
+SELECT order_id, sku, count(*) AS n FROM silver_order_lines GROUP BY ALL HAVING count(*) &gt; 1;</code></pre></div>
+  <h3>DB2: joins and unions</h3>
+  <div class="codewrap"><pre><code>-- Cell 7 (SQL): DB2 what each join does to the row count
+SELECT 'inner' AS join_type, count(*) AS n
+  FROM silver_orders o JOIN dim_customers c ON o.customer_id = c.customer_id
+UNION ALL SELECT 'left', count(*)
+  FROM silver_orders o LEFT JOIN dim_customers c ON o.customer_id = c.customer_id
+UNION ALL SELECT 'left anti (orphan orders)', count(*)
+  FROM silver_orders o LEFT ANTI JOIN dim_customers c ON o.customer_id = c.customer_id
+UNION ALL SELECT 'left semi (customers with orders)', count(*)
+  FROM dim_customers c LEFT SEMI JOIN silver_orders o ON o.customer_id = c.customer_id;
+-- expect 4, 5, 1, 3</code></pre></div>
+  <div class="codewrap"><pre><code>%python
+# Cell 8 (Python): union is by POSITION, unionByName is by NAME
+a = spark.createDataFrame([("o9", "c1")], "order_id string, customer_id string")
+b = spark.createDataFrame([("c2", "o8")], "customer_id string, order_id string")
+a.union(b).show()         # second row: order_id = 'c2'  (silently wrong)
+a.unionByName(b).show()   # second row: order_id = 'o8'  (correct)</code></pre></div>
+  <h3>DB5: Gold at a declared grain, reconciled</h3>
+  <div class="codewrap"><pre><code>-- Cell 9 (SQL): DB5 Gold at a declared grain: one row per (order_date, country)
+CREATE OR REPLACE TABLE gold_daily_country_sales AS
+SELECT /*+ BROADCAST(c) */
+  to_date(o.order_ts)            AS order_date,
+  coalesce(c.country, 'UNKNOWN') AS country,
+  count(*)                       AS orders,
+  count(o.amount)                AS orders_with_amount,
+  count(DISTINCT o.customer_id)  AS customers,
+  sum(o.amount)                  AS revenue
+FROM silver_orders o
+LEFT JOIN dim_customers c ON o.customer_id = c.customer_id
+GROUP BY ALL;
+
+SELECT * FROM gold_daily_country_sales ORDER BY order_date, country;   -- 4 rows
+
+-- reconcile Gold with Silver, then show the fan-out trap
+SELECT (SELECT sum(revenue) FROM gold_daily_country_sales)  AS gold_revenue,     -- 280.50
+       (SELECT sum(amount)  FROM silver_orders)             AS silver_revenue,   -- 280.50
+       (SELECT sum(o.amount) FROM silver_orders o
+          JOIN silver_order_lines l ON o.order_id = l.order_id) AS fanned_out;   -- 761.50 (wrong grain)</code></pre></div>
+  <div class="codewrap"><pre><code>-- Cell 10 (SQL): DB5 profiling
+SELECT count(*) AS rows, count(amount) AS with_amount,
+       count(DISTINCT customer_id) AS customers, approx_count_distinct(customer_id) AS customers_approx
+FROM silver_orders;          -- 5, 4, 4, 4</code></pre></div>
+  <div class="codewrap"><pre><code>%python
+# Cell 11 (Python): describe vs summary
+s = spark.table("silver_orders")
+s.select("amount").describe().show()   # count, mean, stddev, min, max
+s.select("amount").summary().show()    # + 25%, 50%, 75% (approximate percentiles)</code></pre></div>
+  <h3>Bonus: a late batch proves the guard</h3>
+  <div class="codewrap"><pre><code>-- Cell 12 (SQL, bonus): a late batch with one real update and one stale replay
+INSERT INTO bronze_orders
+SELECT order_id, customer_id, order_ts, updated_at, amount,
+       from_json(items_json, 'ARRAY&lt;STRUCT&lt;sku: STRING, qty: STRING&gt;&gt;'),
+       CAST(ingested_at AS TIMESTAMP)
+FROM VALUES
+  ('o1005','c2','2026-10-27 08:00:00','2026-10-27 10:00:00','35.00',
+     '[{"sku":"B","qty":"3"},{"sku":"C","qty":"1"}]', '2026-10-27 11:00:00'),   -- newer
+  ('o1002','c2','2026-10-26 10:00:00', NULL, '80.00',
+     '[{"sku":"C","qty":"1"}]', '2026-10-27 11:00:00')                          -- stale replay
+AS t(order_id, customer_id, order_ts, updated_at, amount, items_json, ingested_at);
+
+-- now re-run Cell 5 (the MERGE): num_updated_rows = 1, num_inserted_rows = 0
+-- o1005 is updated to 35.00; the stale o1002 loses the QUALIFY (older change_ts)
+DESCRIBE HISTORY silver_orders;   -- each MERGE commit lists operationMetrics (numTargetRowsInserted, numTargetRowsUpdated, ...)</code></pre></div>
+  <div class="warn">On run 2, "no rows changed" doesn't guarantee "no commit". Depending on the engine version and settings, <code>DESCRIBE HISTORY</code> may still show a MERGE entry for run 2 with <code>numTargetRowsInserted = 0</code> and <code>numTargetRowsUpdated = 0</code>. Idempotency is about the table's <b>content</b> being the same after any number of re-runs. Clean up when you're done with <code>DROP SCHEMA workspace.dd_w44 CASCADE;</code>.</div>
+  <h3>Checklist</h3>
+  <div id="hoChecks"></div>
+</section>
+
+<!-- ============ 6. INTERVIEW ============ -->
+<section class="lesson" data-title="Exam-style questions" data-min="7">
+  <div class="eyebrow">6 · Exam-style &amp; interview questions · ~7 min</div>
+  <h2>SQL first, like the exam. Answer out loud, then reveal.</h2>
+  <details class="qa"><summary>Q1. <code>SELECT id, name FROM a UNION SELECT name, id FROM b</code>. What goes wrong, and how do you fix it in SQL and in PySpark?</summary>
+    <p><b>Strong answer:</b> SQL set operators (<code>UNION</code>, <code>UNION ALL</code>, <code>INTERSECT</code>, <code>EXCEPT</code>) match columns <b>by position</b>, so <code>b.name</code> lands in <code>id</code>. If the types are compatible it won't even error, so the data is just wrong. Fix it in SQL by listing the columns in the same order on both sides. In PySpark, <code>df.union(other)</code> is also positional, while <code>df.unionByName(other)</code> matches by <b>name</b>, and <code>allowMissingColumns=True</code> fills columns missing on one side with NULL (useful for drifting Bronze batches). Second trap: SQL <code>UNION</code> removes duplicate rows and <code>UNION ALL</code> keeps them. The DataFrame <code>union</code>/<code>unionByName</code> methods behave like <code>UNION ALL</code>. Add <code>.distinct()</code> if you really want set semantics.</p></details>
+  <details class="qa"><summary>Q2. Orders has an <code>items</code> array. Some orders have <code>items = []</code> or <code>NULL</code>. Analysts complain those orders are missing from the flattened table. What happened?</summary>
+    <p><b>Strong answer:</b> The flattening used <code>explode(items)</code>, which emits one row per element and <b>zero</b> rows for an empty or NULL array, so those parents disappear. <code>explode_outer(items)</code> (SQL: <code>SELECT order_id, explode_outer(items) AS item FROM orders</code>, or <code>LATERAL VIEW OUTER explode(items) t AS item</code>) keeps each such parent as one row with a NULL item. In our sample that's 9 rows vs 11. Then I'd ask the grain question. If the table is "one row per order line", <code>explode</code> is right, and orders without lines belong in the orders table. If every order must appear in this table, use <code>explode_outer</code>. Either way, never put order-level totals on the exploded rows, or <code>sum</code> fans out (280.50 became 761.50 in our data).</p></details>
+  <details class="qa"><summary>Q3. Why use <code>ROW_NUMBER() … QUALIFY</code> instead of <code>dropDuplicates(["order_id"])</code> for "latest record wins"? Why not <code>RANK()</code>?</summary>
+    <p><b>Strong answer:</b> <code>QUALIFY row_number() OVER (PARTITION BY order_id ORDER BY change_ts DESC, _ingested_at DESC) = 1</code> keeps exactly one row per key, and <b>I choose</b> which one through the ORDER BY. The deterministic tiebreaker means re-runs pick the same survivor. <code>QUALIFY</code> filters on a window result without a wrapping subquery, the way <code>HAVING</code> filters on aggregates. <code>dropDuplicates(["order_id"])</code> also returns one row per key, but which row survives isn't specified, so it might keep the stale 80.00 version of o1002. <code>dropDuplicates()</code> with no columns (or <code>DISTINCT *</code>) only removes rows that are identical in every column, so a resend with a different <code>_ingested_at</code> survives (7 rows, not 5). <code>RANK()</code>/<code>DENSE_RANK()</code> give ties the same number, so <code>= 1</code> can return two rows per key and the MERGE then fails. For streams, <code>dropDuplicatesWithinWatermark</code> bounds the state.</p></details>
+  <details class="qa"><summary>Q4. Walk through what this MERGE does on the first and second run, and what happens if the source has two rows for the same <code>order_id</code>.</summary>
+    <div class="codewrap"><pre><code>MERGE INTO silver_orders t USING updates s ON t.order_id = s.order_id
+WHEN MATCHED AND s.change_ts &gt; t.change_ts THEN UPDATE SET *
+WHEN NOT MATCHED THEN INSERT *;</code></pre></div>
+    <p><b>Strong answer:</b> MERGE joins the source to the target on the ON condition and applies the clauses in a <b>single atomic Delta commit</b>. Readers see all of it or none of it. For each source row: if it matches a target row, the first <code>WHEN MATCHED</code> clause whose condition is true runs. Here that's an update only when the source is newer, and otherwise nothing happens. If it doesn't match, <code>WHEN NOT MATCHED</code> inserts it. Run 1 on an empty target inserts 5. Run 2 with the same source matches all 5, but the guard is false, so 0 rows are affected. The table's content is the same after any number of runs, which is what idempotent means. Without the guard, run 2 would rewrite 5 rows with identical values: the content is still correct, but it's wasted work, and a late, older record could overwrite a newer one. If two source rows match the <b>same target row</b> and both try to update or delete it, Delta raises an error (multiple source rows matched). That's why you dedup the source first. Watch out: an <i>insert-only</i> MERGE with duplicate source keys and no existing match would insert both. <code>UPDATE SET *</code>/<code>INSERT *</code> need matching column names, and <code>WHEN NOT MATCHED BY SOURCE</code> (delete or flag target rows missing from the source) is only safe when the source is a full snapshot.</p></details>
+  <details class="qa"><summary>Q5. <code>silver_orders</code> has 5 rows and one NULL <code>amount</code>. What do <code>count(*)</code>, <code>count(amount)</code>, <code>count(DISTINCT customer_id)</code>, <code>avg(amount)</code> return?</summary>
+    <p><b>Strong answer:</b> <code>count(*)</code> = <b>5</b>, because it counts rows, NULLs included. <code>count(amount)</code> = <b>4</b>, because <code>count(col)</code> skips NULLs. <code>count(DISTINCT customer_id)</code> = <b>4</b> (c1, c2, c3, c9). It's exact and also ignores NULLs. <code>avg(amount)</code> = 280.50 / <b>4</b> = 70.125, not 280.50 / 5, because <code>avg</code>, <code>sum</code>, <code>min</code> and <code>max</code> all ignore NULLs. On a billion-row, high-cardinality column I'd use <code>approx_count_distinct(customer_id)</code> (HyperLogLog++, default relative standard deviation 5%). It's much cheaper than an exact distinct, which has to move the distinct values through the shuffle. For finance or reconciliation I'd keep it exact. And the gap between <code>count(*)</code> and <code>count(amount)</code> is how I'd measure how many bad amounts <code>try_cast</code> turned into NULLs.</p></details>
+  <details class="qa"><summary>Q6. <code>SELECT CAST('abc' AS DECIMAL(10,2))</code> fails your Silver job. Is <code>try_cast</code> the fix?</summary>
+    <p><b>Strong answer:</b> With ANSI mode on (<code>spark.sql.ansi.enabled</code>, the default in Databricks SQL), an invalid <code>CAST</code> raises an error, so one bad value fails the whole job. <code>try_cast('abc' AS DECIMAL(10,2))</code> returns NULL, and <code>try_to_timestamp</code> does the same for timestamp strings that don't parse. So yes, it keeps the pipeline running, but only half the fix. <code>try_cast</code> <i>hides</i> bad data, so I'd also measure it (<code>count(*) - count(amount)</code>, or <code>amount_raw IS NOT NULL AND amount IS NULL</code>) and route those rows to a quarantine table or an expectation, so they're tracked rather than silently turned into NULLs. Keep plain <code>CAST</code> for columns where a bad value <i>should</i> stop the line, like the primary key.</p></details>
+</section>
+
+<!-- ============ 7. BRIDGE + DOCS ============ -->
+<section class="lesson" data-title="Tuning bridge + go deeper" data-min="3">
+  <div class="eyebrow">7 · Bridge to tuning + go deeper · ~3 min</div>
+  <h2>Where the shuffles are (today's pill takes it from here)</h2>
+  <p class="lead">This is only a bridge. Today's daily pill (the W44 DB6 that didn't go out, "Spark tuning knobs") covers the knobs. All you need to take from this lesson is <i>where</i> the shuffles happen in the pipeline you just built.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Step</th><th>Shuffle?</th><th>Knob it connects to</th></tr>
+    <tr><td>④ <code>row_number() OVER (PARTITION BY order_id …)</code></td><td>Yes: all rows for a key must meet on one task</td><td><code>spark.sql.shuffle.partitions</code>, AQE partition coalescing</td></tr>
+    <tr><td>② <code>LEFT JOIN</code> with a small dimension</td><td>No on the big side if it's broadcast</td><td><code>spark.sql.autoBroadcastJoinThreshold</code> (10 MB default). AQE can switch sort-merge → broadcast at runtime.</td></tr>
+    <tr><td>⑤ <code>GROUP BY</code> / <code>count(DISTINCT)</code></td><td>Yes: partial aggregate, shuffle, final merge. Exact distinct moves more data.</td><td>Shuffle partitions, AQE, skew handling</td></tr>
+  </table></div>
+  <p>AQE (on by default on Databricks) re-plans at shuffle boundaries using real sizes. It coalesces small post-shuffle partitions, converts sort-merge joins to broadcast joins, and splits skewed partitions. On serverless, Databricks manages most of these settings for you.</p>
+  <h3>Official docs (each link checked on 2026-11-09)</h3>
+  <ul id="docLinks">
+    <li><a href="https://docs.databricks.com/aws/en/lakehouse/medallion" target="_blank" rel="noopener">Medallion architecture</a>: what Bronze, Silver and Gold each promise</li>
+    <li><a href="https://docs.databricks.com/aws/en/sql/language-manual/functions/try_cast" target="_blank" rel="noopener">try_cast</a> (DB1)</li>
+    <li><a href="https://docs.databricks.com/aws/en/sql/language-manual/functions/explode_outer" target="_blank" rel="noopener">explode_outer</a> (DB3)</li>
+    <li><a href="https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-qry-select-qualify" target="_blank" rel="noopener">QUALIFY clause</a> (DB4)</li>
+    <li><a href="https://docs.databricks.com/aws/en/sql/language-manual/delta-merge-into" target="_blank" rel="noopener">MERGE INTO</a> (DB4)</li>
+    <li><a href="https://docs.databricks.com/aws/en/sql/language-manual/functions/approx_count_distinct" target="_blank" rel="noopener">approx_count_distinct</a> (DB5)</li>
+    <li><a href="https://docs.databricks.com/aws/en/optimizations/aqe" target="_blank" rel="noopener">Adaptive query execution</a> (tuning bridge only)</li>
+    <li><a href="https://spark.apache.org/docs/latest/sql-performance-tuning.html" target="_blank" rel="noopener">Spark SQL performance tuning</a> (tuning bridge only)</li>
+  </ul>
+  <div class="okbox"><b>One sentence to keep:</b> Bronze is one row per arrival, Silver is one row per business key (and per line after explode), and Gold is one row per declared grain. Every W44 function either keeps, changes or breaks that grain, and a count after each step tells you which.</div>
+</section>
+</main>
+</div>
+<script>
+(function(){
+  "use strict";
+  var KEY = "dd-2026-11-09-db-bronze-to-silver-to-gold-recap-v1";
+  var state = {done:{}, current:0, drill:{}, checks:{}, theme:null, step:0};
+  function load(){ try{ var s = JSON.parse(localStorage.getItem(KEY) || "null"); if(s && typeof s === "object"){ for(var k in state){ if(s[k] !== undefined) state[k] = s[k]; } } }catch(e){} }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+  load();
+
+  var root = document.documentElement;
+  if(state.theme) root.setAttribute("data-theme", state.theme);
+  document.getElementById("themeBtn").addEventListener("click", function(){
+    var cur = root.getAttribute("data-theme") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    state.theme = cur === "dark" ? "light" : "dark"; root.setAttribute("data-theme", state.theme); save();
+  });
+
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.lesson"));
+  var navList = document.getElementById("navList");
+  var sidebar = document.getElementById("sidebar");
+
+  sections.forEach(function(sec, i){
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = "#s" + (i+1);
+    a.innerHTML = '<span class="dot">✓</span><span>' + (i+1) + ". " + sec.getAttribute("data-title") + ' <small style="color:var(--muted)">· ' + sec.getAttribute("data-min") + "m</small></span>";
+    a.addEventListener("click", function(ev){ ev.preventDefault(); show(i); sidebar.classList.remove("open"); });
+    li.appendChild(a); navList.appendChild(li);
+
+    var foot = document.createElement("div");
+    foot.className = "footer-nav";
+    var lab = document.createElement("label"); lab.className = "done-label";
+    var cb = document.createElement("input"); cb.type = "checkbox"; cb.className = "doneBox"; cb.checked = !!state.done[i];
+    cb.addEventListener("change", function(){ state.done[i] = cb.checked; save(); refresh(); });
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(" Mark section complete"));
+    var btns = document.createElement("div"); btns.style.display = "flex"; btns.style.gap = "8px";
+    if(i > 0){ var p = document.createElement("button"); p.className = "btn"; p.textContent = "← Back"; p.addEventListener("click", function(){ show(i-1); }); btns.appendChild(p); }
+    if(i < sections.length - 1){ var n = document.createElement("button"); n.className = "btn primary"; n.textContent = "Complete & continue →"; n.addEventListener("click", function(){ state.done[i] = true; save(); show(i+1); }); btns.appendChild(n); }
+    else { var f = document.createElement("button"); f.className = "btn primary"; f.textContent = "Finish ✓"; f.addEventListener("click", function(){ state.done[i] = true; save(); refresh(); }); btns.appendChild(f); }
+    foot.appendChild(lab); foot.appendChild(btns); sec.appendChild(foot);
+  });
+
+  function show(i){
+    if(isNaN(i) || i < 0 || i >= sections.length) i = 0;
+    state.current = i; save();
+    sections.forEach(function(s, j){ s.classList.toggle("active", j === i); });
+    refresh();
+    window.scrollTo(0, 0);
+    try{ if(history.replaceState) history.replaceState(null, "", "#s" + (i+1)); }catch(e){}
+  }
+  function refresh(){
+    var links = navList.querySelectorAll("a");
+    var n = 0;
+    sections.forEach(function(s, j){
+      if(state.done[j]) n++;
+      links[j].classList.toggle("done", !!state.done[j]);
+      links[j].classList.toggle("active", j === state.current);
+      var cb = s.querySelector(".doneBox"); if(cb) cb.checked = !!state.done[j];
+    });
+    var pct = Math.round(100 * n / sections.length);
+    document.getElementById("pct").textContent = pct + "%";
+    document.getElementById("pctMobile").textContent = pct + "%";
+    document.getElementById("bar").style.width = pct + "%";
+    document.getElementById("barMobile").style.width = pct + "%";
+    document.getElementById("progMeta").textContent = n + " of " + sections.length + " sections complete";
+  }
+  document.getElementById("resetBtn").addEventListener("click", function(){
+    if(!window.confirm("Reset progress, answers and checklist for this lesson?")) return;
+    state.done = {}; state.drill = {}; state.checks = {}; state.step = 0; save();
+    renderDrill(); renderChecks(); renderStep(0); show(0);
+  });
+  document.getElementById("menuBtn").addEventListener("click", function(){ sidebar.classList.toggle("open"); });
+
+  /* ---------- walkthrough stepper ---------- */
+  var wts = Array.prototype.slice.call(document.querySelectorAll("#wtBody .wt"));
+  var wtSteps = document.getElementById("wtSteps"), wtStrip = document.getElementById("wtStrip");
+  wts.forEach(function(w, i){
+    var b = document.createElement("button"); b.textContent = w.getAttribute("data-t");
+    b.addEventListener("click", function(){ renderStep(i); }); wtSteps.appendChild(b);
+    var c = document.createElement("span"); c.textContent = w.getAttribute("data-t").replace(/^\d+ · /, "") + ": " + w.getAttribute("data-n");
+    wtStrip.appendChild(c);
+  });
+  function renderStep(i){
+    if(isNaN(i) || i < 0) i = 0; if(i >= wts.length) i = wts.length - 1;
+    state.step = i; save();
+    wts.forEach(function(w, j){ w.style.display = j === i ? "block" : "none"; });
+    Array.prototype.forEach.call(wtSteps.children, function(b, j){ b.classList.toggle("on", j === i); });
+    Array.prototype.forEach.call(wtStrip.children, function(c, j){ c.classList.toggle("on", j <= i); c.style.opacity = j <= i ? "1" : ".45"; });
+  }
+  document.getElementById("wtPrev").addEventListener("click", function(){ renderStep(state.step - 1); });
+  document.getElementById("wtNext").addEventListener("click", function(){ renderStep(state.step + 1); });
+
+  /* ---------- predict the count ---------- */
+  var drill = [
+    {q:"Cleaning Bronze (8 rows) with <code>WHERE order_id IS NOT NULL</code> and <code>try_cast(amount AS DECIMAL(10,2))</code>. How many rows are left?", o:["8","7","6"], a:1,
+     why:"Only the row with no <code>order_id</code> is dropped. <code>try_cast</code> turns <code>'abc'</code> into NULL but <b>keeps the row</b>, so the count is 7 and <code>count(amount)</code> is 6. (DB1)"},
+    {q:"<code>SELECT DISTINCT * FROM orders_clean</code>. How many rows?", o:["5","6","7"], a:2,
+     why:"Full-row dedup removes only rows that are identical in every column. The resent o1001 differs in <code>_ingested_at</code>, and the o1002 update differs in several columns, so nothing is removed: 7. You need a key and a survivor rule: <code>QUALIFY row_number() … = 1</code> → 5. (DB4)"},
+    {q:"<code>SELECT order_id, explode_outer(items) FROM silver_orders</code> (5 orders: 3, 4, empty, NULL and 2 items). How many rows?", o:["9","10","11"], a:2,
+     why:"3 + 4 + 2 = 9 element rows, plus one NULL-item row each for the empty array (o1003) and the NULL array (o1004) = 11. Plain <code>explode</code> gives 9. (DB3)"},
+    {q:"You run the guarded MERGE a second time with the same source. What is <code>num_affected_rows</code>?", o:["0","5","10"], a:0,
+     why:"All 5 source rows match, but <code>s.change_ts &gt; t.change_ts</code> is false for each, and there's nothing new to insert. 0 rows affected, 5 rows in Silver: idempotent. (DB4)"},
+    {q:"What if <code>dim_customers</code> had <b>two</b> rows for c2? How many rows would <code>silver_orders LEFT JOIN dim_customers</code> return?", o:["5","6","7"], a:2,
+     why:"o1002 and o1005 both belong to c2, so each matches twice: 5 + 2 = 7. That's join fan-out, and the grain is broken. Check that the dimension key is unique before you join. (DB2)"},
+    {q:"In Gold, the row (2026-10-26, PT) holds only o1003, whose amount is NULL. What are <code>count(*)</code> / <code>count(amount)</code> / <code>sum(amount)</code>?", o:["1 / 1 / 0","1 / 0 / NULL","0 / 0 / 0"], a:1,
+     why:"<code>count(*)</code> counts the row (1). <code>count(amount)</code> skips the NULL (0). <code>sum</code> over only NULLs is NULL, not 0. Use <code>coalesce(sum(amount), 0)</code> only if the business really means zero. (DB5)"}
+  ];
+  var drillEl = document.getElementById("drill");
+  function renderDrill(){
+    drillEl.innerHTML = "";
+    drill.forEach(function(s, i){
+      var box = document.createElement("div"); box.className = "scenario";
+      box.innerHTML = "<b>Q" + (i+1) + ".</b> " + s.q;
+      var ch = document.createElement("div"); ch.className = "choices";
+      var fb = document.createElement("div"); fb.className = "feedback";
+      s.o.forEach(function(t, k){
+        var b = document.createElement("button"); b.textContent = t;
+        b.addEventListener("click", function(){ state.drill[i] = k; save(); paint(); });
+        ch.appendChild(b);
+      });
+      function paint(){
+        var pick = state.drill[i];
+        if(pick === undefined){ fb.className = "feedback"; return; }
+        Array.prototype.forEach.call(ch.children, function(b, k){
+          b.disabled = true;
+          b.classList.toggle("right", k === s.a);
+          b.classList.toggle("wrong", k === pick && k !== s.a);
+        });
+        fb.className = "feedback show " + (pick === s.a ? "good" : "bad");
+        fb.innerHTML = (pick === s.a ? "✅ <b>Right: " : "❌ <b>Answer: ") + s.o[s.a] + ".</b> " + s.why;
+        score();
+      }
+      box.appendChild(ch); box.appendChild(fb); drillEl.appendChild(box);
+      paint();
+    });
+    score();
+  }
+  function score(){
+    var answered = 0, right = 0;
+    drill.forEach(function(s, i){ if(state.drill[i] !== undefined){ answered++; if(state.drill[i] === s.a) right++; } });
+    document.getElementById("drillScore").textContent = answered ? ("Score: " + right + " / " + answered + " answered (" + drill.length + " total)") : "";
+  }
+  document.getElementById("drillReset").addEventListener("click", function(){ state.drill = {}; save(); renderDrill(); });
+
+  /* ---------- hands-on checklist ---------- */
+  var checks = [
+    "Setup: 8 Bronze rows; Clean: 7 rows, 6 with an amount",
+    "Dedup: QUALIFY 5 · DISTINCT * 7 · explode-before-dedup 13",
+    "MERGE run 1 inserted 5; run 2 affected 0 rows (idempotent)",
+    "explode 9 vs explode_outer 11; the grain test returned zero rows",
+    "Joins: inner 4 · left 5 · anti 1 · semi 3; saw union put 'c2' into order_id",
+    "Gold: 4 rows, revenue 280.50 = Silver; fan-out shows 761.50",
+    "(Bonus) Late batch: MERGE updated 1, inserted 0; stale o1002 ignored"
+  ];
+  var hc = document.getElementById("hoChecks");
+  function renderChecks(){
+    hc.innerHTML = "";
+    checks.forEach(function(c, i){
+      var l = document.createElement("label"); l.className = "check";
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!state.checks[i];
+      cb.addEventListener("change", function(){ state.checks[i] = cb.checked; save(); });
+      l.appendChild(cb); l.appendChild(document.createTextNode(c)); hc.appendChild(l);
+    });
+  }
+
+  /* ---------- copy buttons ---------- */
+  Array.prototype.forEach.call(document.querySelectorAll(".codewrap"), function(w){
+    var b = document.createElement("button"); b.className = "copy"; b.textContent = "Copy";
+    b.addEventListener("click", function(){
+      var txt = w.querySelector("pre").innerText;
+      var done = function(){ b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy"; }, 1200); };
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done, function(){ b.textContent = "Select & copy"; }); }
+      else { b.textContent = "Select & copy"; }
+    });
+    w.appendChild(b);
+  });
+
+  renderDrill(); renderChecks(); renderStep(state.step || 0);
+  var m = /^#s(\d+)$/.exec(location.hash || "");
+  show(m ? parseInt(m[1], 10) - 1 : (state.current || 0));
+})();
+</script>
+</body>
+</html>
