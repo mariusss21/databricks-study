@@ -12,7 +12,7 @@ Pill files get linked here as they land.
 
 | Day | Databricks pill (Gerald) | DE pill (NJ in Dollar) |
 |---|---|---|
-| Mon 2026-11-09 |  | [DE1: Data skew and file layout as an interview story: salting, partitioning vs liquid clustering](DE1-data-skew-salting-and-liquid-clustering.md) |
+| Mon 2026-11-09 | [DB1: Spark tuning knobs](DB1-spark-tuning-knobs.md) | [DE1: Data skew and file layout as an interview story: salting, partitioning vs liquid clustering](DE1-data-skew-salting-and-liquid-clustering.md) |
 | Tue 2026-11-10 |  |  |
 | Wed 2026-11-11 |  |  |
 | Thu 2026-11-12 |  |  |
