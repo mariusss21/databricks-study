@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connection Deep Dive: A Gold table you can trust: idempotent, fast, and watched, from model to Lakeflow Job (W46)</title>
+<meta name="description" content="Data Engineering connection deep dive for Mario Carvalho, Fri 2026-11-13: contracts, idempotent Gold with REPLACE WHERE / MERGE / materialized views, skew and liquid clustering, Lakeflow Job orchestration, data quality monitoring and lineage, with a dbt sidebar.">
+<style>
+:root{
+  --bg:#f6f7fb;--panel:#fff;--panel2:#f0f2f8;--text:#1b1f2a;--muted:#5b6476;--border:#dde1ea;
+  --accent:#ff3621;--accent-soft:#fff0ed;--ok:#11845b;--ok-soft:#e5f6ee;--bad:#c62f3a;--bad-soft:#fdecee;
+  --warn:#9a6700;--warn-soft:#fff6dd;--info:#1f5fbf;--info-soft:#e9f1ff;
+  --code-bg:#0f1420;--code-text:#e6e9f0;
+  --t1:#2f6fd6;--t2:#b7791f;--t3:#8a4fd8;--t4:#0f9d74;--t5:#c2410c;--br:#0f9d74;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+  --radius:12px;--sidebar:290px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:#0d1117;--panel:#151b24;--panel2:#1b2330;--text:#e6e9ef;--muted:#9aa4b6;--border:#2a3342;
+  --accent:#ff6a55;--accent-soft:#2a1814;--ok:#3ccf91;--ok-soft:#10261d;--bad:#ff6b77;--bad-soft:#2b1418;
+  --warn:#f0c04a;--warn-soft:#2a230f;--info:#7fb2ff;--info-soft:#121f36;--code-bg:#0a0e16;
+  --t1:#6fa3ff;--t2:#f0c04a;--t3:#b48cff;--t4:#3ccf91;--t5:#fb923c;--br:#3ccf91;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;font-size:16px}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel2);border:1px solid var(--border);padding:.05em .35em;border-radius:5px;overflow-wrap:anywhere}
+pre{background:var(--code-bg);color:var(--code-text);padding:14px 16px;border-radius:10px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.5;margin:0}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+.codewrap{position:relative;margin:12px 0}
+.copy{position:absolute;top:8px;right:8px;font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid #3a4456;background:#1d2533;color:#e6e9f0;cursor:pointer}
+.layout{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--panel);border-right:1px solid var(--border);padding:18px 14px 24px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;gap:10px;align-items:center}
+.logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#ff9a3c);display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px;flex:none}
+.brand h1{font-size:15px;line-height:1.25;margin:0}
+.brand small{color:var(--muted);font-size:12px}
+.progress-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.progress-top{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+.bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin:6px 0}
+.bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),#ff9a3c);transition:width .3s}
+.progress-meta{font-size:12px;color:var(--muted)}
+nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+nav a{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;text-decoration:none;color:var(--text);font-size:14px}
+nav a:hover{background:var(--panel2)}
+nav a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+nav .dot{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--border);margin-top:2px;display:grid;place-items:center;font-size:11px;color:#fff}
+nav a.done .dot{background:var(--ok);border-color:var(--ok)}
+.side-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+.btn{font:inherit;font-size:14px;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.small{font-size:12px;padding:5px 10px}
+main{padding:28px clamp(16px,4vw,48px) 80px;max-width:980px}
+section.lesson{display:none}
+section.lesson.active{display:block;animation:fade .25s}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;color:var(--accent)}
+h2{font-size:26px;line-height:1.25;margin:4px 0 6px}
+h3{font-size:18px;margin:22px 0 6px}
+.lead{color:var(--muted);font-size:17px;margin-top:0}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);margin:14px 0}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;margin-bottom:4px}
+.t1{color:var(--t1)}.t2{color:var(--t2)}.t3{color:var(--t3)}
+.b1{border-top:4px solid var(--t1)}.b2{border-top:4px solid var(--t2)}.b3{border-top:4px solid var(--t3)}
+.note{border-left:4px solid var(--info);background:var(--info-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.warn{border-left:4px solid var(--warn);background:var(--warn-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.okbox{border-left:4px solid var(--ok);background:var(--ok-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--panel2)}
+.tablewrap{overflow-x:auto}
+.footer-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:28px;padding-top:16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.done-label{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted)}
+.svgwrap{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:10px;overflow-x:auto}
+.svgwrap svg{width:100%;min-width:720px;height:auto;display:block}
+.svgwrap text{font-family:var(--sans);fill:var(--text)}
+.svgwrap .muted{fill:var(--muted)}
+.stepper{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.stepper button{font:inherit;font-size:13px;padding:6px 10px;border-radius:99px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.stepper button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.step-body{min-height:190px}
+.scenario{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin:14px 0;box-shadow:var(--shadow)}
+.choices{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.choices button{font:inherit;font-size:14px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);cursor:pointer}
+.choices button.right{background:var(--ok-soft);border-color:var(--ok);color:var(--ok);font-weight:700}
+.choices button.wrong{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+.choices button:disabled{cursor:default}
+.feedback{display:none;padding:10px 12px;border-radius:8px;font-size:15px}
+.feedback.show{display:block}
+.feedback.good{background:var(--ok-soft);border-left:4px solid var(--ok)}
+.feedback.bad{background:var(--bad-soft);border-left:4px solid var(--bad)}
+.score{font-weight:700}
+details.qa{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin:12px 0;box-shadow:var(--shadow)}
+details.qa summary{cursor:pointer;font-weight:650}
+details.qa[open] summary{margin-bottom:8px}
+.check{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.check input{margin-top:5px}
+.mobilebar{display:none}
+@media (max-width:860px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:fixed;inset:0 auto 0 0;width:min(86vw,320px);transform:translateX(-105%);transition:transform .25s;z-index:20;box-shadow:var(--shadow)}
+  .sidebar.open{transform:none}
+  .mobilebar{display:flex;gap:10px;align-items:center;position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--border);padding:8px 12px}
+  .mobilebar .bar{flex:1;margin:0}
+}
+
+.t4{color:var(--t4)}.t5{color:var(--t5)}
+.b4{border-top:4px solid var(--t4)}.b5{border-top:4px solid var(--t5)}
+.rule{font-weight:700;margin:6px 0}
+.count{display:inline-block;font-family:var(--mono);font-weight:800;font-size:15px;background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:2px 10px;margin:2px 0}
+.grain{display:inline-block;font-size:12px;font-weight:700;background:var(--info-soft);color:var(--info);border-radius:99px;padding:2px 9px}
+td.n,th.n{text-align:right;font-family:var(--mono)}
+tr.gone td{text-decoration:line-through;color:var(--muted)}
+tr.hl td{background:var(--warn-soft)}
+.counts-strip{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.counts-strip span{font-family:var(--mono);font-size:12px;border:1px solid var(--border);border-radius:99px;padding:2px 9px;background:var(--panel2)}
+.counts-strip span.on{background:var(--accent);border-color:var(--accent);color:#fff}
+</style>
+<style>
+.pill{display:inline-block;font-family:var(--mono);font-size:12px;border:1px solid var(--border);border-radius:99px;padding:2px 9px;background:var(--panel2);margin:2px}
+.order-pick{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.order-pick button{font:inherit;font-size:14px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);cursor:pointer;text-align:left}
+.order-pick button:disabled{opacity:.4;cursor:default}
+ol.picked{margin:8px 0;padding-left:22px}
+ol.picked li{margin:4px 0}
+ol.picked li.ok{color:var(--ok)}
+ol.picked li.off{color:var(--bad)}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0}
+.kpi div{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.kpi b{display:block;font-family:var(--mono);font-size:18px}
+.kpi small{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="mobilebar">
+  <button class="btn small" id="menuBtn" aria-label="Open navigation">☰ Sections</button>
+  <div class="bar" aria-hidden="true"><span id="barMobile"></span></div>
+  <span id="pctMobile" style="font-size:13px;color:var(--muted)">0%</span>
+</div>
+<div class="layout">
+<aside class="sidebar" id="sidebar">
+  <div class="brand">
+    <div class="logo">DE</div>
+    <div><h1>A Gold table you can trust</h1><small>Connection deep dive · Fri 2026-11-13 · Data Engineering · W46 · ~60 min</small></div>
+  </div>
+  <div class="progress-card">
+    <div class="progress-top"><span>Progress</span><span id="pct">0%</span></div>
+    <div class="bar"><span id="bar"></span></div>
+    <div class="progress-meta" id="progMeta">0 of 0 sections complete</div>
+  </div>
+  <nav aria-label="Sections"><ol id="navList"></ol></nav>
+  <div class="side-actions">
+    <button class="btn small" id="themeBtn">◐ Theme</button>
+    <button class="btn small" id="resetBtn">↺ Reset progress</button>
+  </div>
+</aside>
+<main id="main">
+
+<!-- ============ 1. RECAP ============ -->
+<section class="lesson" data-title="Recap: four pills, one promise" data-min="4">
+  <div class="eyebrow">1 · Recap · ~4 min</div>
+  <h2>A Gold table is a product with a promise</h2>
+  <p class="lead">This week's DE pills (DE1–DE4) looked like four separate topics. They are really three parts of one promise to the people who read a Gold table, plus a second tool that can do the same job. Each card is one pill reduced to the rule worth keeping.</p>
+  <div class="grid3">
+    <div class="card b1"><span class="tag t1">DE2 · Boundaries, contracts, idempotent Gold</span>
+      <p class="rule">Correct: the table says what one row means, and re-running a day can't change the answer.</p>
+      <ul>
+        <li>Bronze keeps raw data, Silver cleans and conforms it, Gold holds the business logic and the grain consumers rely on.</li>
+        <li>Contracts are made of schema enforcement, expectations, <code>NOT NULL</code> / <code>CHECK</code> constraints and informational PK/FK.</li>
+        <li>Drop bad rows in Silver. Stop the run in Gold.</li>
+        <li><code>INSERT INTO … REPLACE WHERE</code> with a <code>run_date</code> parameter, <code>MERGE</code> on business keys, or a materialized view.</li>
+      </ul></div>
+    <div class="card b2"><span class="tag t2">DE1 · Skew and file layout</span>
+      <p class="rule">Fast: the layout still works on Black Friday and in three years' time.</p>
+      <ul>
+        <li>Skew shows up in the Spark UI as a few tasks that run far longer than the median.</li>
+        <li>Layered fixes: AQE skew join, broadcasting small dims, salting.</li>
+        <li>Hive-style partitioning on a skewed or high-cardinality key gives you one giant partition and lots of tiny files.</li>
+        <li>Liquid clustering (<code>CLUSTER BY</code>, <code>CLUSTER BY AUTO</code>) plus <code>OPTIMIZE</code> in the Job.</li>
+      </ul></div>
+    <div class="card b3"><span class="tag t3">DE4 · Observability and SLAs</span>
+      <p class="rule">Watched: you find out before finance does.</p>
+      <ul>
+        <li>Tests check what you predicted could break. Observability catches what you didn't predict.</li>
+        <li>The five pillars are freshness, volume, schema, distribution and lineage.</li>
+        <li>SLI = what you measure, SLO = your internal target, SLA = the promise to the consumer.</li>
+        <li>UC data quality monitoring, SQL alerts, Jobs duration warnings, and <code>system.access.table_lineage</code> to see the blast radius.</li>
+      </ul></div>
+    <div class="card b4"><span class="tag t4">DE3 · dbt (sidebar)</span>
+      <p class="rule">The same promise, written in a different tool.</p>
+      <ul>
+        <li>Models plus <code>ref()</code> give you the DAG. Materializations are table, view, incremental and materialized_view.</li>
+        <li>Incremental strategies (<code>merge</code>, <code>replace_where</code>, <code>microbatch</code>) are the idempotent Gold patterns.</li>
+        <li>Tests and model contracts play the role of expectations and constraints.</li>
+        <li>dbt runs as a task inside a Lakeflow Job.</li>
+      </ul></div>
+  </div>
+  <div class="note"><b>What's out of scope today.</b> Silver is assumed clean. SCD2 and AUTO CDC were covered in W44, so here we only <i>use</i> the SCD2 customer dimension. Testing pipelines as code is next week (W47), so tests get only a light touch.</div>
+  <div class="okbox"><b>Tie-in with Gerald's DB pills this week:</b> DB1 tuning knobs → step 3 (fast). DB2 re-runnable Bronze → Gold and DB3 Gold objects → step 2 (idempotent build, MV vs table vs view). DB4 data quality → step 1 (contract) and the quality gate in step 4.</div>
+</section>
+
+<!-- ============ 2. MAP ============ -->
+<section class="lesson" data-title="Connection map" data-min="3">
+  <div class="eyebrow">2 · Connection map · ~3 min</div>
+  <h2>One chain, six links</h2>
+  <p class="lead">Each link only works if the one before it holds. A fast table that isn't idempotent is just wrong faster. Monitors without lineage tell you <i>that</i> something broke but not <i>who</i> it hurt. The rest of the lesson walks the chain left to right on one retail scenario.</p>
+  <div class="svgwrap" id="mapSrc">
+  <svg viewBox="0 0 980 330" role="img" aria-label="Connection map: contract, idempotent build, layout, Lakeflow Job, monitors and alerts, lineage">
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a93a6"/></marker></defs>
+    <rect x="10" y="10" width="960" height="34" rx="8" fill="#ff3621" fill-opacity=".10"/>
+    <text x="490" y="32" text-anchor="middle" font-size="14" font-weight="700">silver.orders · order_items · dim_customer (SCD2) · dim_product  →  gold.fact_daily_revenue · gold.revenue_by_segment  (fresh by 7:00 AM ET)</text>
+    <g font-size="12">
+      <rect x="10" y="70" width="145" height="120" rx="12" fill="#2f6fd6" fill-opacity=".13" stroke="#2f6fd6" stroke-width="2"/>
+      <text x="82" y="94" text-anchor="middle" font-weight="800" font-size="14" fill="#2f6fd6">① Contract</text>
+      <text x="82" y="116" text-anchor="middle">grain + keys</text>
+      <text x="82" y="134" text-anchor="middle">NOT NULL · CHECK</text>
+      <text x="82" y="152" text-anchor="middle">PK … RELY</text>
+      <text x="82" y="170" text-anchor="middle">SLA in writing</text>
+      <line x1="157" y1="130" x2="175" y2="130" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+      <rect x="177" y="70" width="145" height="120" rx="12" fill="#b7791f" fill-opacity=".13" stroke="#b7791f" stroke-width="2"/>
+      <text x="249" y="94" text-anchor="middle" font-weight="800" font-size="14" fill="#b7791f">② Idempotent build</text>
+      <text x="249" y="116" text-anchor="middle">REPLACE WHERE</text>
+      <text x="249" y="134" text-anchor="middle">sale_date = :run_date</text>
+      <text x="249" y="152" text-anchor="middle">MERGE · MV</text>
+      <text x="249" y="170" text-anchor="middle">re-run = same answer</text>
+      <line x1="324" y1="130" x2="342" y2="130" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+      <rect x="344" y="70" width="145" height="120" rx="12" fill="#8a4fd8" fill-opacity=".13" stroke="#8a4fd8" stroke-width="2"/>
+      <text x="416" y="94" text-anchor="middle" font-weight="800" font-size="14" fill="#8a4fd8">③ Layout</text>
+      <text x="416" y="116" text-anchor="middle">CLUSTER BY</text>
+      <text x="416" y="134" text-anchor="middle">(sale_date, store_id)</text>
+      <text x="416" y="152" text-anchor="middle">AQE · broadcast</text>
+      <text x="416" y="170" text-anchor="middle">OPTIMIZE</text>
+      <line x1="491" y1="130" x2="509" y2="130" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+      <rect x="511" y="70" width="145" height="120" rx="12" fill="#0f9d74" fill-opacity=".13" stroke="#0f9d74" stroke-width="2"/>
+      <text x="583" y="94" text-anchor="middle" font-weight="800" font-size="14" fill="#0f9d74">④ Lakeflow Job</text>
+      <text x="583" y="116" text-anchor="middle">task DAG + run_date</text>
+      <text x="583" y="134" text-anchor="middle">retries</text>
+      <text x="583" y="152" text-anchor="middle">quality gate</text>
+      <text x="583" y="170" text-anchor="middle">duration warning</text>
+      <line x1="658" y1="130" x2="676" y2="130" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+      <rect x="678" y="70" width="145" height="120" rx="12" fill="#c2410c" fill-opacity=".13" stroke="#c2410c" stroke-width="2"/>
+      <text x="750" y="94" text-anchor="middle" font-weight="800" font-size="14" fill="#c2410c">⑤ Monitors/alerts</text>
+      <text x="750" y="116" text-anchor="middle">freshness</text>
+      <text x="750" y="134" text-anchor="middle">completeness</text>
+      <text x="750" y="152" text-anchor="middle">SQL alert: volume Δ</text>
+      <text x="750" y="170" text-anchor="middle">before the deadline</text>
+      <line x1="825" y1="130" x2="843" y2="130" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+      <rect x="845" y="70" width="125" height="120" rx="12" fill="#1f5fbf" fill-opacity=".13" stroke="#1f5fbf" stroke-width="2"/>
+      <text x="907" y="94" text-anchor="middle" font-weight="800" font-size="14" fill="#1f5fbf">⑥ Lineage</text>
+      <text x="907" y="116" text-anchor="middle">table_lineage</text>
+      <text x="907" y="134" text-anchor="middle">who reads it?</text>
+      <text x="907" y="152" text-anchor="middle">blast radius</text>
+      <text x="907" y="170" text-anchor="middle">who to tell</text>
+    </g>
+    <path d="M907,192 C907,250 82,250 82,192" fill="none" stroke="#8a93a6" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arr)"/>
+    <text x="490" y="242" text-anchor="middle" font-size="12.5" class="muted">post-mortem feeds back into the contract (new CHECK, tighter SLO, new monitor)</text>
+    <g font-size="12.5" font-weight="700">
+      <rect x="10" y="270" width="312" height="44" rx="8" fill="#2f6fd6" fill-opacity=".08"/><text x="166" y="297" text-anchor="middle">CORRECT (DE2 · DB2 · DB3 · DB4)</text>
+      <rect x="344" y="270" width="145" height="44" rx="8" fill="#8a4fd8" fill-opacity=".08"/><text x="416" y="297" text-anchor="middle">FAST (DE1 · DB1)</text>
+      <rect x="511" y="270" width="459" height="44" rx="8" fill="#c2410c" fill-opacity=".08"/><text x="740" y="297" text-anchor="middle">WATCHED (DE4) · dbt (DE3) can drive ②–④</text>
+    </g>
+  </svg>
+  </div>
+  <div class="kpi">
+    <div><small>SLA: fresh</small><b>07:00 ET</b><small>= 09:00 in São Paulo (EST is UTC−5)</small></div>
+    <div><small>SLA: complete</small><b>±2%</b><small>of the 7-day average</small></div>
+    <div><small>SLA: unique</small><b>0</b><small>duplicate grain rows</small></div>
+    <div><small>Normal runtime</small><b>20 min</b><small>Black Friday: 3 h (step 3)</small></div>
+  </div>
+</section>
+
+<!-- ============ 3. CONTRACT ============ -->
+<section class="lesson" data-title="Step 1 · Declare the contract" data-min="5">
+  <div class="eyebrow">3 · Walkthrough step 1 of 6 · ~5 min</div>
+  <h2>Declare the contract before you write the SELECT</h2>
+  <p class="lead">Finance doesn't care how the table is built. They care what one row means and whether the numbers are right at 7 AM. Write that down first, then turn as much of it as possible into something the platform enforces or checks.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Gold table</th><th>Grain (one row per…)</th><th>Key</th><th>Built from</th></tr>
+    <tr><td><code>gold.fact_daily_revenue</code></td><td>sale_date × store × product</td><td><code>(sale_date, store_id, product_id)</code></td><td>orders ⋈ order_items, COMPLETE orders only</td></tr>
+    <tr><td><code>gold.revenue_by_segment</code></td><td>sale_date × customer segment</td><td><code>(sale_date, segment)</code></td><td>orders ⋈ items ⋈ dim_customer (SCD2, point-in-time)</td></tr>
+  </table></div>
+  <div class="codewrap"><pre><code>CREATE TABLE gold.fact_daily_revenue (
+  sale_date   DATE          NOT NULL,
+  store_id    STRING        NOT NULL,
+  product_id  STRING        NOT NULL,
+  units       BIGINT,
+  revenue     DECIMAL(18,2),
+  order_count BIGINT,
+  CONSTRAINT fact_daily_revenue_pk
+    PRIMARY KEY (sale_date, store_id, product_id) RELY   -- informational: NOT enforced
+)
+CLUSTER BY (sale_date, store_id)                         -- step 3
+COMMENT 'Grain: one row per sale_date x store x product. Fresh by 07:00 ET.';
+
+ALTER TABLE gold.fact_daily_revenue
+  ADD CONSTRAINT revenue_non_negative CHECK (revenue &gt;= 0);  -- enforced on every write</code></pre></div>
+  <h3>What each piece actually does</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Mechanism</th><th>Enforced?</th><th>What happens on a violation</th></tr>
+    <tr><td>Schema enforcement (Delta)</td><td>Yes</td><td>A write with mismatched columns/types is rejected (unless you enable schema evolution).</td></tr>
+    <tr><td><code>NOT NULL</code> / <code>CHECK</code> (Delta constraints)</td><td>Yes</td><td>The whole write transaction fails. Nothing partial lands.</td></tr>
+    <tr><td><code>PRIMARY KEY … RELY</code> (UC informational)</td><td><b>No</b></td><td>Duplicates are accepted. <code>RELY</code> tells the optimizer it may <i>trust</i> the key for rewrites, so a key that's lying can give wrong query results. That's why you still need a duplicate check (the quality gate).</td></tr>
+    <tr><td>LDP expectations</td><td>Your choice</td><td><code>expect</code> = keep and record, <code>expect_or_drop</code> = drop the row, <code>expect_or_fail</code> = fail the update. In SQL: <code>CONSTRAINT c EXPECT (…) ON VIOLATION DROP ROW | FAIL UPDATE</code>.</td></tr>
+  </table></div>
+  <div class="warn"><b>The SLA is part of the contract too:</b> "fresh by 7:00 AM ET, complete within ±2% of the 7-day average, no duplicate grain rows." Each clause becomes an SLI you can measure (step 5). If you can't measure a clause, you can't promise it.</div>
+  <h3>Exercise: drop in Silver, or fail in Gold?</h3>
+  <p>Rule of thumb from DE2: bad <i>rows</i> are a Silver problem (drop or quarantine and count them). A bad <i>table</i> is a Gold problem (stop before you publish). Pick an action for each case.</p>
+  <div id="dropFail"></div>
+  <p class="score" id="dropFailScore"></p>
+</section>
+
+<!-- ============ 4. IDEMPOTENT BUILD ============ -->
+<section class="lesson" data-title="Step 2 · Build it idempotently" data-min="7">
+  <div class="eyebrow">4 · Walkthrough step 2 of 6 · ~7 min</div>
+  <h2>Re-runs are safe by design</h2>
+  <p class="lead">At 05:10 the build task times out halfway through, the retry runs, and finance sees revenue doubled for yesterday. If a daily Gold load is a plain append, every retry, repair run or backfill makes this bug possible.</p>
+  <div class="grid3">
+    <div class="card" style="border-top:4px solid var(--bad)"><span class="tag" style="color:var(--bad)">The bug: plain append</span>
+<div class="codewrap"><pre><code>INSERT INTO gold.fact_daily_revenue
+SELECT … WHERE o.order_date = :run_date;
+-- run twice → every row for that
+-- day exists twice → revenue x2</code></pre></div>
+      <p>The hands-on uses the toy data: 2026-11-12 revenue goes from <span class="count">125.00</span> to <span class="count">250.00</span>.</p></div>
+    <div class="card" style="border-top:4px solid var(--ok)"><span class="tag" style="color:var(--ok)">The fix: REPLACE WHERE</span>
+<div class="codewrap"><pre><code>INSERT INTO gold.fact_daily_revenue
+REPLACE WHERE sale_date = :run_date
+SELECT … WHERE o.order_date = :run_date;
+-- atomic: delete that day + insert
+-- in one Delta commit</code></pre></div>
+      <p>Run it once or five times and you get the same result: <span class="count">125.00</span>.</p></div>
+  </div>
+  <div class="note"><b>Details that matter (from the Delta selective-overwrite docs):</b>
+    <ul>
+      <li>The predicate is an arbitrary expression over the table's columns. The table doesn't need to be partitioned on it, so it works on a liquid-clustered table.</li>
+      <li>By default, if the SELECT produces a row that <b>doesn't</b> match the predicate, the write <b>fails</b>. That's a useful safety net: a missing <code>WHERE</code> in the SELECT can't overwrite other days.</li>
+      <li>If the SELECT returns <b>zero rows</b>, REPLACE WHERE still deletes the matching data. An empty Silver day wipes the Gold day, which is one more reason for a volume gate before publish (step 4).</li>
+      <li>SQL needs DBR 12.2 LTS or above. The Python equivalent is <code>.mode("overwrite").option("replaceWhere", "sale_date = '…'")</code>.</li>
+      <li><code>run_date</code> comes from the Job (step 4). In a notebook task, job parameters arrive as widgets, and SQL cells reference them as <code>:run_date</code>. A backfill is just a re-run with another date.</li>
+    </ul></div>
+  <h3>Three ways to build Gold idempotently</h3>
+  <div class="tablewrap"><table>
+    <tr><th></th><th><code>INSERT … REPLACE WHERE</code></th><th><code>MERGE INTO</code> on business keys</th><th>Materialized view</th></tr>
+    <tr><td>Mental model</td><td>"Recompute this slice and swap it in"</td><td>"Upsert just the changed keys"</td><td>"Declare the query. The engine keeps it fresh"</td></tr>
+    <tr><td>Best when</td><td>Data arrives in clean time slices (a day). Recomputing a whole day is cheap.</td><td>Late corrections touch a few keys across many days. You also need deletes (<code>WHEN NOT MATCHED BY SOURCE</code>).</td><td>Aggregates over other tables where you'd rather not write refresh logic, and freshness is "on refresh/schedule".</td></tr>
+    <tr><td>Idempotent because</td><td>The slice is deleted and rewritten atomically.</td><td>The same source row matches the same target row. Add a guard such as <code>WHEN MATCHED AND s.updated_at &gt; t.updated_at</code>.</td><td>The engine owns the state. Refresh is incremental when it can be, a full recompute otherwise.</td></tr>
+    <tr><td>Watch out</td><td>Late rows for older days need a re-run of those days (or a lookback window in the predicate).</td><td>The source must have ≤1 row per key or MERGE errors. It costs more than an overwrite when the whole day changes.</td><td>Created and refreshed with Databricks SQL / pipelines on serverless. You give up control of the write path.</td></tr>
+  </table></div>
+  <h3>Decision: pick one for each table</h3>
+  <div id="buildPick"></div>
+  <p class="score" id="buildPickScore"></p>
+  <div class="okbox"><b>Late data, in one line:</b> REPLACE WHERE for the daily slice, plus either a short lookback (<code>sale_date BETWEEN date_sub(:run_date, 3) AND :run_date</code>) or a targeted backfill run when a late batch lands. Use MERGE when corrections are scattered and key-level.</div>
+</section>
+
+<!-- ============ 5. FAST ============ -->
+<section class="lesson" data-title="Step 3 · Make it fast" data-min="6">
+  <div class="eyebrow">5 · Walkthrough step 3 of 6 · ~6 min</div>
+  <h2>Black Friday: 20 minutes becomes 3 hours</h2>
+  <p class="lead">The old table was <code>PARTITIONED BY (store_id)</code>, and the build did <code>repartition("store_id")</code> before writing so that each task wrote one store's folder. On Black Friday the flagship store <b>S1 has 40% of the rows</b>. One task now writes 40% of the day while 799 others sit idle.</p>
+  <h3>1 · Spot it (don't guess)</h3>
+  <ul>
+    <li>Spark UI → the slow stage → <b>Summary metrics for tasks</b>: the median task takes seconds and the max takes most of the stage. Shuffle read size per task shows the same skew.</li>
+    <li>Compare with the input size: if every task got slower, the problem is <i>growth</i>, not skew. If one task got slower, it's <i>skew</i>.</li>
+    <li>Look for small-file symptoms too: hundreds of tiny files per store partition and slow listing/scans.</li>
+  </ul>
+  <h3>2 · Fix it in layers (cheapest first)</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Layer</th><th>What it does</th><th>Helps here?</th></tr>
+    <tr><td><b>AQE skew join</b> (<code>spark.sql.adaptive.skewJoin.enabled</code>, on by default)</td><td>Splits oversized partitions of a sort-merge join into smaller tasks at runtime.</td><td>Only for skewed <i>joins</i>. It doesn't touch a skewed <code>repartition</code> before a write.</td></tr>
+    <tr><td><b>Broadcast the dims</b> (<code>/*+ BROADCAST(p) */</code>, or rely on the auto threshold)</td><td>Sends <code>dim_product</code> / <code>dim_customer</code> to every executor, so there's no shuffle on the fact side.</td><td>Yes for the joins. Dims are small.</td></tr>
+    <tr><td><b>Salting</b></td><td>Adds a random suffix to the hot key, works on the pieces, then combines them.</td><td>A last resort for skewed joins or aggregations that AQE can't split. Adds complexity.</td></tr>
+    <tr><td><b>Layout change</b></td><td>Stop shuffling by store to write folders. Use liquid clustering on <code>(sale_date, store_id)</code>.</td><td><b>Yes, this is the root cause.</b></td></tr>
+  </table></div>
+  <h3>3 · The layout fix</h3>
+<div class="codewrap"><pre><code>-- new table: cluster, don't partition (liquid clustering is not compatible with PARTITIONED BY or ZORDER)
+CREATE TABLE gold.fact_daily_revenue (…) CLUSTER BY (sale_date, store_id);
+
+-- existing partitioned table: convert in place (docs: "Use liquid clustering for tables")
+ALTER TABLE gold.fact_daily_revenue REPLACE PARTITIONED BY WITH CLUSTER BY (sale_date, store_id);
+OPTIMIZE gold.fact_daily_revenue;          -- incremental: clusters data written since the last OPTIMIZE
+
+-- query patterns keep changing? let Databricks choose the keys (uses predictive optimization)
+ALTER TABLE gold.fact_daily_revenue CLUSTER BY AUTO;</code></pre></div>
+  <ul>
+    <li>Clustering groups data by key ranges into files of a sensible size, so S1's Black Friday rows simply take more files instead of one giant folder and one giant task.</li>
+    <li>You can use up to <b>four</b> clustering keys. Keys can be changed later without rewriting existing data. After changing them, run <code>OPTIMIZE</code> (or <code>OPTIMIZE FULL</code> to recluster everything).</li>
+    <li>Finance queries filter by date range and store, so <code>(sale_date, store_id)</code> gives data skipping on both. Don't add <code>product_id</code> just in case: on smaller tables, more keys can make single-column filters slower.</li>
+    <li>Make <code>OPTIMIZE</code> a Job task after the build and before publish (step 4). With predictive optimization enabled, Databricks can also run it for you.</li>
+  </ul>
+  <h3>Interactive: partition or cluster?</h3>
+  <div id="layoutPick"></div>
+  <p class="score" id="layoutPickScore"></p>
+</section>
+
+<!-- ============ 6. JOB ============ -->
+<section class="lesson" data-title="Step 4 · Orchestrate it" data-min="4">
+  <div class="eyebrow">6 · Walkthrough step 4 of 6 · ~4 min</div>
+  <h2>The Lakeflow Job is where the promise gets wired together</h2>
+  <p class="lead">Steps 1–3 are code. The Job turns them into a promise kept every day: it orders the work, passes the date, retries transient failures, blocks bad data from reaching finance, and warns you while there's still time.</p>
+  <div class="svgwrap">
+  <svg viewBox="0 0 980 170" role="img" aria-label="Job DAG: silver_refresh, build_gold, quality_gate, optimize, publish">
+    <defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a93a6"/></marker></defs>
+    <g font-size="13" text-anchor="middle">
+      <rect x="10" y="40" width="160" height="64" rx="10" fill="#8a93a6" fill-opacity=".14" stroke="#8a93a6"/><text x="90" y="68" font-weight="800">silver_refresh</text><text x="90" y="88" class="muted" font-size="11.5">retries: 2</text>
+      <line x1="172" y1="72" x2="206" y2="72" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr2)"/>
+      <rect x="208" y="40" width="170" height="64" rx="10" fill="#b7791f" fill-opacity=".14" stroke="#b7791f"/><text x="293" y="68" font-weight="800">build_gold</text><text x="293" y="88" class="muted" font-size="11.5">REPLACE WHERE :run_date</text>
+      <line x1="380" y1="72" x2="414" y2="72" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr2)"/>
+      <rect x="416" y="40" width="170" height="64" rx="10" fill="#c62f3a" fill-opacity=".12" stroke="#c62f3a"/><text x="501" y="68" font-weight="800">quality_gate</text><text x="501" y="88" class="muted" font-size="11.5">dupes · volume ±2% · fail</text>
+      <line x1="588" y1="72" x2="622" y2="72" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr2)"/>
+      <rect x="624" y="40" width="150" height="64" rx="10" fill="#8a4fd8" fill-opacity=".14" stroke="#8a4fd8"/><text x="699" y="68" font-weight="800">optimize</text><text x="699" y="88" class="muted" font-size="11.5">OPTIMIZE (clustering)</text>
+      <line x1="776" y1="72" x2="810" y2="72" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr2)"/>
+      <rect x="812" y="40" width="158" height="64" rx="10" fill="#0f9d74" fill-opacity=".14" stroke="#0f9d74"/><text x="891" y="68" font-weight="800">publish</text><text x="891" y="88" class="muted" font-size="11.5">refresh MV · dashboards</text>
+      <text x="490" y="140" class="muted" font-size="12.5">schedule 05:00 America/New_York · job parameter run_date · duration warning well before 07:00 · email/Slack on failure</text>
+    </g>
+  </svg></div>
+<div class="codewrap"><pre><code>{
+  "name": "gold_daily_revenue",
+  "parameters": [ { "name": "run_date", "default": "{{job.start_time.iso_date}}" } ],
+  "schedule": { "quartz_cron_expression": "0 0 5 * * ?", "timezone_id": "America/New_York" },
+  "health": { "rules": [ { "metric": "RUN_DURATION_SECONDS", "op": "GREATER_THAN", "value": 3600 } ] },
+  "email_notifications": {
+    "on_failure": ["data-oncall@example.com"],
+    "on_duration_warning_threshold_exceeded": ["data-oncall@example.com"]
+  },
+  "tasks": [
+    { "task_key": "silver_refresh", "max_retries": 2, "min_retry_interval_millis": 300000, "...": "..." },
+    { "task_key": "build_gold",   "depends_on": [ { "task_key": "silver_refresh" } ], "max_retries": 2, "...": "..." },
+    { "task_key": "quality_gate", "depends_on": [ { "task_key": "build_gold" } ],   "max_retries": 0, "...": "..." },
+    { "task_key": "optimize",     "depends_on": [ { "task_key": "quality_gate" } ], "...": "..." },
+    { "task_key": "publish",      "depends_on": [ { "task_key": "optimize" } ],     "...": "..." }
+  ]
+}</code></pre></div>
+  <ul>
+    <li><b>Retries are only safe because step 2 is idempotent.</b> Retrying a plain append is exactly how revenue doubles.</li>
+    <li><b>The quality gate has no retries.</b> Duplicate or missing data won't fix itself on a second try. Failing stops <code>publish</code>, so finance keeps yesterday's correct table instead of today's wrong one.</li>
+    <li><b>The duration warning is the SLA alarm.</b> With a 05:00 start and a 07:00 deadline, a warning at 60 minutes leaves about an hour to react. A failure notification alone may come too late.</li>
+    <li><b><code>run_date</code> is a job parameter.</b> <code>{{job.start_time.iso_date}}</code> is the run's start date in UTC. If the run builds <i>yesterday</i>, subtract a day in the SQL. To backfill, use "Run now with different parameters" and pass another date. The code doesn't change.</li>
+  </ul>
+</section>
+
+<!-- ============ 7. WATCH ============ -->
+<section class="lesson" data-title="Step 5 · Watch it" data-min="6">
+  <div class="eyebrow">7 · Walkthrough step 5 of 6 · ~6 min</div>
+  <h2>Know before finance does</h2>
+  <p class="lead">The quality gate catches what you predicted (duplicates, a volume drop). Monitoring catches what you didn't: a table that silently stopped updating, or a slow drift. Lineage tells you who to call.</p>
+  <div class="tablewrap"><table>
+    <tr><th>SLA clause</th><th>SLI (what you measure)</th><th>How on Databricks</th><th>Fires…</th></tr>
+    <tr><td>Fresh by 07:00 ET</td><td>Time of the last successful commit to Gold</td><td>UC data quality monitoring, <b>anomaly detection</b> (freshness: learns the commit pattern and flags a table as stale when a commit is unusually late). Jobs duration warning.</td><td>Before 07:00</td></tr>
+    <tr><td>Complete within ±2%</td><td>Rows and revenue for <code>run_date</code> vs the 7-day average</td><td>Anomaly detection (completeness: flags rows in the last 24 h below the predicted range). A Databricks SQL alert with your exact ±2% rule. The quality_gate task.</td><td>In the run, and again at 06:30</td></tr>
+    <tr><td>No duplicate grain</td><td>Count of keys with <code>count(*) &gt; 1</code></td><td>quality_gate (fails the run)</td><td>In the run</td></tr>
+    <tr><td>Distribution looks normal</td><td>Null %, revenue percentiles, drift</td><td><b>Data profiling</b> (formerly Lakehouse Monitoring) on the Gold table</td><td>On each refresh</td></tr>
+  </table></div>
+<div class="codewrap"><pre><code>-- SQL alert query: % deviation of the latest day vs the previous 7 days (trigger when abs_dev &gt; 0.02)
+WITH d AS (
+  SELECT sale_date, SUM(revenue) AS rev
+  FROM gold.fact_daily_revenue
+  WHERE sale_date &gt;= current_date() - INTERVAL 8 DAYS
+  GROUP BY sale_date
+)
+SELECT abs(l.rev - avg(p.rev)) / avg(p.rev) AS abs_dev
+FROM (SELECT * FROM d ORDER BY sale_date DESC LIMIT 1) l
+JOIN d p ON p.sale_date &lt; l.sale_date
+GROUP BY l.rev;</code></pre></div>
+  <div class="warn"><b>±2% on revenue is strict.</b> Normal weekday/weekend swings may be bigger than that. In real life you'd compare against the same weekday, or agree on the threshold with finance. That's an SLO conversation, not a code problem.</div>
+  <h3>Lineage: the blast radius in one query</h3>
+<div class="codewrap"><pre><code>-- Who reads gold.fact_daily_revenue? (needs the system.access schema enabled)
+SELECT entity_type,               -- NOTEBOOK, JOB, PIPELINE, DASHBOARD_V3, DBSQL_QUERY …
+       entity_id,
+       target_table_full_name,    -- downstream table, NULL for pure reads (e.g. a dashboard)
+       max(event_time) AS last_seen
+FROM system.access.table_lineage
+WHERE source_table_full_name = 'main.gold.fact_daily_revenue'
+  AND event_time &gt;= current_timestamp() - INTERVAL 30 DAYS
+GROUP BY ALL
+ORDER BY last_seen DESC;</code></pre></div>
+  <h3>Interactive: mock incident</h3>
+  <div class="scenario"><b>06:20 ET, Slack from finance:</b> "The revenue dashboard shows about half of yesterday's revenue. Board pack goes out at 07:30." Click the checks in the order you'd do them.</div>
+  <div id="incident"></div>
+</section>
+
+<!-- ============ 8. DBT ============ -->
+<section class="lesson" data-title="Step 6 · Sidebar: the same in dbt" data-min="4">
+  <div class="eyebrow">8 · Walkthrough step 6 of 6 · ~4 min</div>
+  <h2>Same promise, different tool</h2>
+  <p class="lead">Lots of US job posts ask for "dbt + Databricks" or "dbt + Snowflake". The patterns carry over one to one. Only the syntax changes.</p>
+<div class="codewrap"><pre><code>-- models/gold/fct_daily_revenue.sql (dbt-databricks)
+{{ config(
+    materialized = 'incremental',
+    incremental_strategy = 'replace_where',
+    incremental_predicates = ["sale_date = '" ~ var('run_date') ~ "'"],
+    liquid_clustered_by = ['sale_date', 'store_id']
+) }}
+select o.order_date as sale_date, o.store_id, i.product_id,
+       sum(i.qty) as units,
+       cast(sum(i.qty * i.unit_price) as decimal(18,2)) as revenue,
+       count(distinct o.order_id) as order_count
+from {{ ref('orders') }} o
+join {{ ref('order_items') }} i on o.order_id = i.order_id
+where o.status = 'COMPLETE'
+{% if is_incremental() %} and o.order_date = '{{ var("run_date") }}' {% endif %}
+group by all</code></pre></div>
+  <ul>
+    <li><b>Late corrections?</b> Use <code>incremental_strategy='merge'</code> with <code>unique_key=['sale_date','store_id','product_id']</code>. With <code>microbatch</code> (+ <code>lookback</code>), dbt splits the work into time batches for you.</li>
+    <li><b>Contract:</b> <code>not_null</code> / <code>unique</code> tests (or a multi-column uniqueness test for the grain), plus <code>contract: {enforced: true}</code> to pin column names and types. <code>dbt source freshness</code> is a freshness SLI on the inputs.</li>
+    <li><b>Orchestration:</b> a <b>dbt task</b> inside the same Lakeflow Job (e.g. <code>dbt build --select fct_daily_revenue --vars '{run_date: "2026-11-12"}'</code>), followed by the same quality gate and publish tasks.</li>
+  </ul>
+  <h3>Tool gap: Databricks vs dbt vs Snowflake</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Need</th><th>Databricks</th><th>dbt</th><th>Snowflake</th></tr>
+    <tr><td>Idempotent daily slice</td><td><code>INSERT … REPLACE WHERE</code></td><td>incremental <code>replace_where</code> / <code>insert_overwrite</code>, <code>microbatch</code></td><td>Delete + insert in one transaction, or <code>INSERT OVERWRITE</code> (whole table)</td></tr>
+    <tr><td>Key-level upsert</td><td><code>MERGE INTO</code></td><td>incremental <code>merge</code> + <code>unique_key</code></td><td><code>MERGE</code></td></tr>
+    <tr><td>Engine-managed freshness</td><td>Materialized view</td><td><code>materialized='materialized_view'</code> (dbt-databricks)</td><td>Dynamic Table with a target lag</td></tr>
+    <tr><td>Layout</td><td>Liquid clustering, <code>CLUSTER BY AUTO</code></td><td><code>liquid_clustered_by</code> / <code>auto_liquid_cluster</code></td><td>Micro-partitions + clustering keys + automatic clustering (no Hive partitions)</td></tr>
+    <tr><td>Contract / quality</td><td>Constraints, expectations, informational PK/FK</td><td>Tests, model contracts</td><td>Constraints (mostly not enforced), Data Metric Functions</td></tr>
+    <tr><td>Orchestration</td><td>Lakeflow Jobs</td><td>dbt task in a Job (or dbt's own scheduler)</td><td>Tasks (DAGs)</td></tr>
+    <tr><td>Monitoring</td><td>Data quality monitoring, SQL alerts, lineage system tables</td><td><code>dbt source freshness</code>, test results</td><td>Alerts, Data Metric Functions</td></tr>
+  </table></div>
+</section>
+
+<!-- ============ 9. HANDS-ON ============ -->
+<section class="lesson" data-title="Hands-on notebook" data-min="12">
+  <div class="eyebrow">9 · Hands-on · ~12 min · Databricks Free Edition</div>
+  <h2>Double the revenue, then make re-runs safe</h2>
+  <p class="lead">Create a notebook, attach it to <b>serverless</b>, set the default language to <b>SQL</b>, and paste one cell at a time (Python cells start with <code>%python</code>). Everything lands in <code>workspace.dd_w46</code>. Cell 1 recreates the tables, so running from the top always starts clean.</p>
+  <h3>The toy data (what to expect)</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Order</th><th>Date</th><th>Store</th><th>Customer</th><th>Status</th><th>Lines (product × qty × price)</th><th class="n">Revenue</th></tr>
+    <tr><td>o1</td><td>2026-11-11</td><td>S1</td><td>c1</td><td>COMPLETE</td><td>p1×2×10.00, p2×1×25.00</td><td class="n">45.00</td></tr>
+    <tr><td>o2</td><td>2026-11-11</td><td>S2</td><td>c2</td><td>COMPLETE</td><td>p1×1×10.00</td><td class="n">10.00</td></tr>
+    <tr><td>o3</td><td>2026-11-12</td><td>S1</td><td>c1</td><td>COMPLETE</td><td>p1×3×10.00, p2×2×25.00</td><td class="n">80.00</td></tr>
+    <tr><td>o4</td><td>2026-11-12</td><td>S1</td><td>c3</td><td>COMPLETE</td><td>p2×1×25.00</td><td class="n">25.00</td></tr>
+    <tr class="gone"><td>o5</td><td>2026-11-12</td><td>S2</td><td>c2</td><td>CANCELLED</td><td>p1×5×10.00</td><td class="n">(50.00)</td></tr>
+    <tr><td>o6</td><td>2026-11-12</td><td>S3</td><td>c3</td><td>COMPLETE</td><td>p3×4×5.00</td><td class="n">20.00</td></tr>
+  </table></div>
+  <p>Correct Gold: 2026-11-11 = <span class="count">55.00</span> (3 rows) and 2026-11-12 = <span class="count">125.00</span> (3 rows), total <span class="count">180.00</span> across 6 rows. Customer c1 was RETAIL until 2026-11-12 and VIP from then on (SCD2).</p>
+
+  <h3>Cell 1 · Setup (Silver, already clean)</h3>
+<div class="codewrap"><pre><code>CREATE SCHEMA IF NOT EXISTS workspace.dd_w46;
+USE CATALOG workspace;
+USE SCHEMA dd_w46;
+
+CREATE OR REPLACE TABLE silver_orders
+  (order_id STRING, order_date DATE, store_id STRING, customer_id STRING, status STRING);
+INSERT INTO silver_orders VALUES
+  ('o1', DATE'2026-11-11', 'S1', 'c1', 'COMPLETE'),
+  ('o2', DATE'2026-11-11', 'S2', 'c2', 'COMPLETE'),
+  ('o3', DATE'2026-11-12', 'S1', 'c1', 'COMPLETE'),
+  ('o4', DATE'2026-11-12', 'S1', 'c3', 'COMPLETE'),
+  ('o5', DATE'2026-11-12', 'S2', 'c2', 'CANCELLED'),
+  ('o6', DATE'2026-11-12', 'S3', 'c3', 'COMPLETE');
+
+CREATE OR REPLACE TABLE silver_order_items
+  (order_id STRING, line_no INT, product_id STRING, qty INT, unit_price DECIMAL(10,2));
+INSERT INTO silver_order_items VALUES
+  ('o1', 1, 'p1', 2, 10.00), ('o1', 2, 'p2', 1, 25.00),
+  ('o2', 1, 'p1', 1, 10.00),
+  ('o3', 1, 'p1', 3, 10.00), ('o3', 2, 'p2', 2, 25.00),
+  ('o4', 1, 'p2', 1, 25.00),
+  ('o5', 1, 'p1', 5, 10.00),
+  ('o6', 1, 'p3', 4, 5.00);
+
+CREATE OR REPLACE TABLE silver_dim_customer
+  (customer_sk INT, customer_id STRING, segment STRING, valid_from DATE, valid_to DATE, is_current BOOLEAN);
+INSERT INTO silver_dim_customer VALUES
+  (1, 'c1', 'RETAIL',   DATE'2026-01-01', DATE'2026-11-12', false),
+  (2, 'c1', 'VIP',      DATE'2026-11-12', NULL,             true),
+  (3, 'c2', 'RETAIL',   DATE'2026-01-01', NULL,             true),
+  (4, 'c3', 'BUSINESS', DATE'2026-01-01', NULL,             true);
+
+CREATE OR REPLACE TABLE silver_dim_product (product_id STRING, product_name STRING, category STRING);
+INSERT INTO silver_dim_product VALUES
+  ('p1', 'Coffee beans 1kg', 'Grocery'), ('p2', 'Mug', 'Home'), ('p3', 'Paper filters', 'Grocery');</code></pre></div>
+
+  <h3>Cell 2 · The contract as DDL</h3>
+<div class="codewrap"><pre><code>CREATE OR REPLACE TABLE fact_daily_revenue (
+  sale_date DATE NOT NULL, store_id STRING NOT NULL, product_id STRING NOT NULL,
+  units BIGINT, revenue DECIMAL(18,2), order_count BIGINT,
+  CONSTRAINT fact_daily_revenue_pk PRIMARY KEY (sale_date, store_id, product_id) RELY
+) CLUSTER BY (sale_date, store_id);
+
+ALTER TABLE fact_daily_revenue ADD CONSTRAINT revenue_non_negative CHECK (revenue &gt;= 0);
+
+-- the Gold logic in one place, so every load below uses the same SELECT
+CREATE OR REPLACE VIEW v_daily_revenue_src AS
+SELECT o.order_date AS sale_date, o.store_id, i.product_id,
+       SUM(i.qty) AS units,
+       CAST(SUM(i.qty * i.unit_price) AS DECIMAL(18,2)) AS revenue,
+       COUNT(DISTINCT o.order_id) AS order_count
+FROM silver_orders o
+JOIN silver_order_items i ON o.order_id = i.order_id
+WHERE o.status = 'COMPLETE'
+GROUP BY ALL;
+
+DESCRIBE DETAIL fact_daily_revenue;   -- clusteringColumns: ["sale_date","store_id"]</code></pre></div>
+
+  <h3>Cell 3 · Daily loads, the naive way (plain append)</h3>
+<div class="codewrap"><pre><code>INSERT INTO fact_daily_revenue SELECT * FROM v_daily_revenue_src WHERE sale_date = DATE'2026-11-11';
+INSERT INTO fact_daily_revenue SELECT * FROM v_daily_revenue_src WHERE sale_date = DATE'2026-11-12';
+
+SELECT count(*) AS n_rows, sum(revenue) AS revenue FROM fact_daily_revenue;   -- 6 rows · 180.00</code></pre></div>
+
+  <h3>Cell 4 · The retry: re-run 2026-11-12 the same way</h3>
+<div class="codewrap"><pre><code>INSERT INTO fact_daily_revenue SELECT * FROM v_daily_revenue_src WHERE sale_date = DATE'2026-11-12';
+
+SELECT sale_date, count(*) AS n_rows, sum(revenue) AS revenue
+FROM fact_daily_revenue GROUP BY sale_date ORDER BY sale_date;
+-- 2026-11-11 · 3 · 55.00
+-- 2026-11-12 · 6 · 250.00   ← revenue doubled; the RELY primary key did not stop it (informational only)</code></pre></div>
+
+  <h3>Cell 5 · The quality gate (what the Job's quality_gate task would run)</h3>
+<div class="codewrap"><pre><code>SELECT assert_true(n_dupes = 0, 'quality_gate: duplicate grain rows in fact_daily_revenue') AS gate
+FROM (
+  SELECT count(*) AS n_dupes FROM (
+    SELECT sale_date, store_id, product_id
+    FROM fact_daily_revenue
+    GROUP BY ALL
+    HAVING count(*) &gt; 1
+  )
+);
+-- now: fails with the message above (3 duplicate keys). After Cell 6: returns NULL = pass.</code></pre></div>
+
+  <h3>Cell 6 · The fix: REPLACE WHERE (run it twice)</h3>
+<div class="codewrap"><pre><code>INSERT INTO fact_daily_revenue
+REPLACE WHERE sale_date = DATE'2026-11-12'
+SELECT * FROM v_daily_revenue_src WHERE sale_date = DATE'2026-11-12';
+
+SELECT sale_date, count(*) AS n_rows, sum(revenue) AS revenue
+FROM fact_daily_revenue GROUP BY sale_date ORDER BY sale_date;
+-- 2026-11-11 · 3 · 55.00
+-- 2026-11-12 · 3 · 125.00   ← same after the 2nd, 3rd … run. Re-run Cell 5: it passes.</code></pre></div>
+  <div class="note"><b>Break it on purpose (30 s):</b> remove the <code>WHERE</code> from the SELECT and run again. The SELECT now returns 2026-11-11 rows that don't match the predicate, so the write <b>fails</b> and nothing changes. That safety net is on by default.</div>
+
+  <h3>Cell 7 · Late order + backfill with a parameter (PySpark, like a Job notebook task)</h3>
+<div class="codewrap"><pre><code>-- a late order for 2026-11-11 lands in Silver today
+INSERT INTO silver_orders VALUES ('o7', DATE'2026-11-11', 'S2', 'c2', 'COMPLETE');
+INSERT INTO silver_order_items VALUES ('o7', 1, 'p3', 2, 5.00);</code></pre></div>
+<div class="codewrap"><pre><code>%python
+# In a Job, run_date arrives as a job parameter -> notebook widget. Here we create the widget ourselves.
+dbutils.widgets.text("run_date", "2026-11-11")
+run_date = dbutils.widgets.get("run_date")
+pred = f"sale_date = DATE'{run_date}'"
+
+(spark.table("workspace.dd_w46.v_daily_revenue_src")
+      .where(pred)
+      .write.mode("overwrite")
+      .option("replaceWhere", pred)          # same semantics as INSERT ... REPLACE WHERE
+      .saveAsTable("workspace.dd_w46.fact_daily_revenue"))
+
+display(spark.sql("""
+  SELECT sale_date, count(*) AS n_rows, sum(revenue) AS revenue
+  FROM workspace.dd_w46.fact_daily_revenue GROUP BY sale_date ORDER BY sale_date"""))
+# 2026-11-11 · 4 · 65.00   (new row S2/p3 = 10.00)
+# 2026-11-12 · 3 · 125.00  (untouched)</code></pre></div>
+
+  <h3>Cell 8 · Second Gold table: revenue by segment (point-in-time SCD2 join)</h3>
+<div class="codewrap"><pre><code>CREATE OR REPLACE VIEW revenue_by_segment_v AS
+SELECT o.order_date AS sale_date, c.segment,
+       CAST(SUM(i.qty * i.unit_price) AS DECIMAL(18,2)) AS revenue
+FROM silver_orders o
+JOIN silver_order_items i ON o.order_id = i.order_id
+JOIN silver_dim_customer c
+  ON  o.customer_id = c.customer_id
+  AND o.order_date &gt;= c.valid_from
+  AND (c.valid_to IS NULL OR o.order_date &lt; c.valid_to)
+WHERE o.status = 'COMPLETE'
+GROUP BY ALL;
+
+SELECT * FROM revenue_by_segment_v ORDER BY sale_date, segment;
+-- 2026-11-11 · RETAIL   · 65.00
+-- 2026-11-12 · BUSINESS · 45.00
+-- 2026-11-12 · VIP      · 80.00
+-- (joining on is_current = true instead would wrongly give 2026-11-11 VIP 45.00 / RETAIL 20.00)</code></pre></div>
+  <p style="font-size:14px;color:var(--muted)">In production this is a natural <b>materialized view</b> (<code>CREATE MATERIALIZED VIEW gold.revenue_by_segment AS …</code>, refreshed by the publish task). A plain view keeps the hands-on runnable on any compute.</p>
+
+  <h3>Cell 9 · Layout: Black Friday skew, then OPTIMIZE</h3>
+<div class="codewrap"><pre><code>%python
+from pyspark.sql import functions as F
+# 1M synthetic rows: 40% go to the flagship store S1, the rest spread over S2..S800
+bf = (spark.range(1_000_000)
+        .withColumn("store_id", F.when(F.col("id") % 10 &lt; 4, F.lit("S1"))
+                                 .otherwise(F.concat(F.lit("S"), (F.col("id") % 799 + 2).cast("string")))))
+display(bf.groupBy("store_id").count().orderBy(F.desc("count")).limit(3))     # S1 = 400,000; others ~750
+
+# what "repartition by store, then partitionBy(store_id)" does: one task gets S1's 40%
+display(bf.repartition("store_id")
+          .groupBy(F.spark_partition_id().alias("task")).count()
+          .orderBy(F.desc("count")).limit(3))                                  # top task: at least 400,000 rows</code></pre></div>
+<div class="codewrap"><pre><code>OPTIMIZE fact_daily_revenue;          -- incremental clustering on (sale_date, store_id)
+DESCRIBE DETAIL fact_daily_revenue;   -- check clusteringColumns and numFiles
+
+-- optional cleanup when you're done
+-- DROP SCHEMA workspace.dd_w46 CASCADE;</code></pre></div>
+
+  <h3>Checklist</h3>
+  <div id="hoChecks"></div>
+</section>
+
+<!-- ============ 10. INTERVIEW ============ -->
+<section class="lesson" data-title="Interview questions" data-min="5">
+  <div class="eyebrow">10 · US senior DE interviews · ~5 min</div>
+  <h2>Say it out loud, then open the strong answer</h2>
+  <p class="lead">Answer each question out loud in about 90 seconds before you click. Strong senior answers start with the consumer and the contract, and only then get to tools.</p>
+  <details class="qa"><summary>Q1 (system design). "Design the daily revenue Gold layer for finance with a 7 AM SLA. How do you make sure it's correct, on time, and that you know before finance does when it isn't?"</summary>
+    <ol>
+      <li><b>Contract first.</b> State the grain (date × store × product), the keys, NOT NULL/CHECK constraints, and the SLA in measurable terms: fresh by 7, ±X% completeness, zero duplicate keys.</li>
+      <li><b>Correct.</b> Partition-scoped, idempotent writes: <code>REPLACE WHERE sale_date = :run_date</code> for the daily slice, MERGE for scattered late corrections, an MV for the small aggregate. Retries and backfills are then safe by design.</li>
+      <li><b>Fast.</b> Choose the layout from query patterns: liquid clustering on date + store, no over-partitioning, broadcast the dims, OPTIMIZE as a task.</li>
+      <li><b>On time.</b> A Job DAG with retries on transient tasks, a blocking quality gate before publish, and a duration warning set early enough to act before the deadline.</li>
+      <li><b>Watched.</b> SLIs for freshness, volume and duplicates, with alerts that fire <i>before</i> 7 AM. Lineage for blast radius. A runbook and a named on-call owner.</li>
+      <li><b>Trade-offs.</b> MV vs table (convenience vs control). Fail vs publish-with-warning (late-but-right vs on-time-but-flagged, agreed with finance). OPTIMIZE cost vs query speed.</li>
+    </ol></details>
+  <details class="qa"><summary>Q2 (debugging). "The nightly Gold job went from 20 minutes to 3 hours and missed the SLA. Walk me through it."</summary>
+    <ol>
+      <li><b>Protect the consumer first.</b> Tell finance, and decide with them whether to keep yesterday's table or publish partial data with a flag.</li>
+      <li><b>Diagnose with data.</b> Spark UI: which stage, and is the max task time far above the median (skew) or is everything slower (growth)? Check input size vs last week and small-file counts.</li>
+      <li><b>Fix in layers.</b> Confirm AQE skew join and broadcast of the dims → salting if a join or aggregation still has a hot key → fix the root cause in the layout (here, partition-by-store + repartition by store → liquid clustering on <code>(sale_date, store_id)</code> + OPTIMIZE).</li>
+      <li><b>Prevent a repeat.</b> A duration warning tied to the SLA, a volume monitor, a load test before the next peak, and a blameless post-mortem.</li>
+    </ol></details>
+  <details class="qa"><summary>Q3 (trade-off). "MERGE, INSERT OVERWRITE/REPLACE WHERE, or a materialized view for a Gold fact: how do you choose?"</summary>
+    <p>It depends on how the changes arrive. If they arrive as <b>whole time slices</b> (a day is recomputed), REPLACE WHERE is the simplest and cheapest: an atomic swap of one slice, idempotent with no key logic. If they're <b>scattered key-level corrections or deletes</b> across history, MERGE on the business key with a recency guard, and make sure the source has one row per key. If it's an <b>aggregate over other governed tables</b> and the freshness target fits a scheduled refresh, an MV lets the engine handle incremental refresh. What you give up is control of the write path and some debuggability. I'd often combine them: REPLACE WHERE for the fact, an MV for the segment rollup.</p></details>
+  <details class="qa"><summary>Q4 (behavioral, tech lead). "Tell me about a time a data product missed its SLA."</summary>
+    <p><b>STAR:</b> <b>S</b>: the daily revenue table finance uses for the morning report. <b>T</b>: I owned the pipeline and the fix. <b>A</b>: I told finance within minutes and held the stale-but-correct table, found the cause (for example a non-idempotent retry, or skew from a partition key), shipped the fix, and backfilled the affected days with parameterized re-runs. <b>R</b>: back within the SLA the next day. Then the part that makes it a <i>lead</i> answer: the standard I set for the team, which was an SLA per Gold table, idempotent writes as a code-review rule, and alerts that fire before the deadline instead of after it.</p></details>
+  <div class="okbox"><b>Lines to have ready:</b> "We treat every Gold table as a product with a contract and an SLA." · "Re-runs are safe by design." · "We alert before the deadline, not after the consumer notices."</div>
+</section>
+
+<!-- ============ 11. SELF-CHECK ============ -->
+<section class="lesson" data-title="Self-check + the map again" data-min="4">
+  <div class="eyebrow">11 · Self-check · ~4 min</div>
+  <h2>Six questions, then the whole chain on one screen</h2>
+  <div id="selfCheck"></div>
+  <p class="score" id="selfCheckScore"></p>
+  <button class="btn small" id="quizReset">↺ Reset answers</button>
+  <h3>The chain, one more time</h3>
+  <div class="svgwrap" id="mapClone"></div>
+  <p><b>In one sentence:</b> declare the contract, build each slice idempotently, lay the files out for how the table is read, let the Job run, retry and gate it, watch it against the SLA, and use lineage to know who a failure hurts.</p>
+</section>
+
+<!-- ============ 12. GO DEEPER ============ -->
+<section class="lesson" data-title="Go deeper" data-min="1">
+  <div class="eyebrow">12 · Go deeper · official docs</div>
+  <h2>Go deeper</h2>
+  <p class="lead">All links were checked on 2026-11-13 and loaded fine.</p>
+  <ul>
+    <li><a href="https://docs.databricks.com/aws/en/delta/selective-overwrite" target="_blank" rel="noopener">Selectively overwrite data with Delta Lake (REPLACE WHERE)</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/tables/constraints" target="_blank" rel="noopener">Constraints on Databricks (NOT NULL, CHECK, informational PK/FK)</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/ldp/expectations" target="_blank" rel="noopener">Manage data quality with pipeline expectations</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/tables/clustering" target="_blank" rel="noopener">Use liquid clustering for tables</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/optimizations/aqe" target="_blank" rel="noopener">Adaptive query execution</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/jobs/" target="_blank" rel="noopener">Lakeflow Jobs</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/jobs/parameters" target="_blank" rel="noopener">Job parameters</a> and <a href="https://docs.databricks.com/aws/en/jobs/dynamic-value-references" target="_blank" rel="noopener">dynamic value references</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/jobs/notifications" target="_blank" rel="noopener">Job notifications (incl. duration warnings)</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-quality-monitoring" target="_blank" rel="noopener">Unity Catalog data quality monitoring</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/admin/system-tables/lineage" target="_blank" rel="noopener">Lineage system tables</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/jobs/how-to/use-dbt-in-workflows" target="_blank" rel="noopener">Use dbt transformations in Lakeflow Jobs</a></li>
+    <li><a href="https://docs.getdbt.com/docs/build/incremental-models" target="_blank" rel="noopener">dbt incremental models</a> and <a href="https://docs.getdbt.com/reference/resource-configs/databricks-configs" target="_blank" rel="noopener">dbt-databricks configs</a></li>
+  </ul>
+  <div class="note"><b>Next week (W47):</b> CDC end to end, streaming vs batch, and testing pipelines as code. Today's quality gate is where that testing story starts.</div>
+</section>
+
+</main>
+</div>
+<script>
+(function(){
+  "use strict";
+  var KEY = "dd-2026-11-13-de-gold-you-can-trust-v1";
+  var state = {done:{}, current:0, mcq:{}, checks:{}, incident:[], theme:null};
+  function load(){ try{ var s = JSON.parse(localStorage.getItem(KEY) || "null"); if(s && typeof s === "object"){ for(var k in state){ if(s[k] !== undefined) state[k] = s[k]; } } }catch(e){} }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+  load();
+
+  var root = document.documentElement;
+  if(state.theme) root.setAttribute("data-theme", state.theme);
+  document.getElementById("themeBtn").addEventListener("click", function(){
+    var cur = root.getAttribute("data-theme") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    state.theme = cur === "dark" ? "light" : "dark"; root.setAttribute("data-theme", state.theme); save();
+  });
+
+  /* ---------- map clone ---------- */
+  var mapSrc = document.getElementById("mapSrc"), mapClone = document.getElementById("mapClone");
+  if(mapSrc && mapClone){ mapClone.innerHTML = mapSrc.innerHTML.replace(/id="arr"/g, 'id="arrB"').replace(/url\(#arr\)/g, "url(#arrB)"); }
+
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.lesson"));
+  var navList = document.getElementById("navList");
+  var sidebar = document.getElementById("sidebar");
+
+  sections.forEach(function(sec, i){
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = "#s" + (i+1);
+    a.innerHTML = '<span class="dot">✓</span><span>' + (i+1) + ". " + sec.getAttribute("data-title") + ' <small style="color:var(--muted)">· ' + sec.getAttribute("data-min") + "m</small></span>";
+    a.addEventListener("click", function(ev){ ev.preventDefault(); show(i); sidebar.classList.remove("open"); });
+    li.appendChild(a); navList.appendChild(li);
+
+    var foot = document.createElement("div");
+    foot.className = "footer-nav";
+    var lab = document.createElement("label"); lab.className = "done-label";
+    var cb = document.createElement("input"); cb.type = "checkbox"; cb.className = "doneBox"; cb.checked = !!state.done[i];
+    cb.addEventListener("change", function(){ state.done[i] = cb.checked; save(); refresh(); });
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(" Mark section complete"));
+    var btns = document.createElement("div"); btns.style.display = "flex"; btns.style.gap = "8px";
+    if(i > 0){ var p = document.createElement("button"); p.className = "btn"; p.textContent = "← Back"; p.addEventListener("click", function(){ show(i-1); }); btns.appendChild(p); }
+    if(i < sections.length - 1){ var n = document.createElement("button"); n.className = "btn primary"; n.textContent = "Complete & continue →"; n.addEventListener("click", function(){ state.done[i] = true; save(); show(i+1); }); btns.appendChild(n); }
+    else { var f = document.createElement("button"); f.className = "btn primary"; f.textContent = "Finish ✓"; f.addEventListener("click", function(){ state.done[i] = true; save(); refresh(); }); btns.appendChild(f); }
+    foot.appendChild(lab); foot.appendChild(btns); sec.appendChild(foot);
+  });
+
+  function show(i){
+    if(isNaN(i) || i < 0 || i >= sections.length) i = 0;
+    state.current = i; save();
+    sections.forEach(function(s, j){ s.classList.toggle("active", j === i); });
+    refresh();
+    window.scrollTo(0, 0);
+    try{ if(history.replaceState) history.replaceState(null, "", "#s" + (i+1)); }catch(e){}
+  }
+  function refresh(){
+    var links = navList.querySelectorAll("a");
+    var n = 0;
+    sections.forEach(function(s, j){
+      if(state.done[j]) n++;
+      links[j].classList.toggle("done", !!state.done[j]);
+      links[j].classList.toggle("active", j === state.current);
+      var cb = s.querySelector(".doneBox"); if(cb) cb.checked = !!state.done[j];
+    });
+    var pct = Math.round(100 * n / sections.length);
+    document.getElementById("pct").textContent = pct + "%";
+    document.getElementById("pctMobile").textContent = pct + "%";
+    document.getElementById("bar").style.width = pct + "%";
+    document.getElementById("barMobile").style.width = pct + "%";
+    document.getElementById("progMeta").textContent = n + " of " + sections.length + " sections complete";
+  }
+  document.getElementById("menuBtn").addEventListener("click", function(){ sidebar.classList.toggle("open"); });
+
+  /* ---------- generic multiple-choice renderer ---------- */
+  var banks = {
+    dropFail: [
+      {q:"Silver <code>order_items</code>: a line arrives with <code>qty = 0</code> or <code>qty &lt; 0</code>.", o:["expect_or_drop in Silver (quarantine + count)","Fail the Gold job","Keep it, just warn"], a:0,
+       why:"It's one bad <i>row</i>. Drop it (or route it to a quarantine table) in Silver and track the drop rate as a metric. Failing the whole Gold build over one line would miss the SLA for nothing."},
+      {q:"Gold <code>fact_daily_revenue</code>: after the build, 3 keys <code>(sale_date, store_id, product_id)</code> appear twice.", o:["expect_or_drop in Silver","Fail the Gold job (block publish)","Keep it, just warn"], a:1,
+       why:"Duplicate grain means the <i>table</i> is wrong: revenue is overstated. Dropping rows at this point would hide the real bug, which is usually a non-idempotent write or a join fan-out. Fail the quality gate so <code>publish</code> never runs."},
+      {q:"Gold: today's revenue is 45% below the 7-day average and there's no holiday.", o:["expect_or_drop in Silver","Fail the Gold job (block publish)","Keep it, just warn"], a:1,
+       why:"This breaks the completeness clause of the SLA (±2%). Block publish and page someone. Whether to publish anyway with a 'partial' flag is a business call to agree with finance in advance, not something a pipeline should decide silently."},
+      {q:"Silver <code>orders</code>: a row has <code>order_id IS NULL</code>.", o:["expect_or_drop in Silver (quarantine + count)","Fail the Gold job","Keep it, just warn"], a:0,
+       why:"Without a key the row can't be deduplicated or joined. Drop it in Silver (<code>ON VIOLATION DROP ROW</code>), quarantine it if you need to investigate, and alert if the drop rate spikes."},
+      {q:"Silver <code>order_items</code>: a valid line references <code>product_id = 'p99'</code>, which isn't in <code>dim_product</code> yet (the product feed is late).", o:["Drop it in Silver","Fail the Gold job","Keep it and warn (map to an 'unknown' product)"], a:2,
+       why:"The sale really happened, so dropping it loses real revenue and failing everything is too harsh. Keep the row, map it to an unknown/late-arriving dimension member, and use a warn-level expectation (<code>expect</code>) to track how many orphans you have."}
+    ],
+    buildPick: [
+      {q:"<code>gold.fact_daily_revenue</code>: rebuilt once a day for yesterday. Recomputing a day takes minutes.", o:["INSERT … REPLACE WHERE","MERGE INTO","Materialized view"], a:0,
+       why:"Changes arrive as a whole time slice. Swapping the slice atomically is the simplest idempotent write, and backfills are re-runs with another <code>run_date</code>."},
+      {q:"<code>gold.revenue_by_segment</code>: a small rollup of the fact joined to <code>dim_customer</code>. Finance is fine with 'refreshed after the fact is built'.", o:["INSERT … REPLACE WHERE","MERGE INTO","Materialized view"], a:2,
+       why:"It's an aggregate over governed tables with no special write logic. An MV lets the engine refresh it (incrementally when possible), and the Job's publish task triggers the refresh."},
+      {q:"<code>gold.order_corrections</code>: returns and price corrections arrive any day for orders up to 90 days old, about 0.5% of keys.", o:["INSERT … REPLACE WHERE","MERGE INTO","Materialized view"], a:1,
+       why:"The changes are scattered and key-level. Rewriting 90 days to fix 0.5% of keys is wasteful. MERGE on the business key with a recency guard is idempotent, provided the source has one row per key."}
+    ],
+    layoutPick: [
+      {q:"<code>fact_daily_revenue</code>: 3 years (~1,100 dates), 800 stores, S1 has 40% of the rows on peak days. Queries filter by a date range and often a store.", o:["PARTITIONED BY (store_id)","CLUSTER BY (sale_date, store_id)","No layout"], a:1,
+       why:"Partitioning by store gives you a giant S1 folder and many tiny ones. Clustering on the two filter columns gives data skipping on both, and S1's data simply takes more right-sized files."},
+      {q:"Someone suggests <code>PARTITIONED BY (sale_date, store_id)</code>. How many partition folders would that create over 3 years?", o:["About 1,100","About 880,000","About 800"], a:1,
+       why:"1,100 × 800 ≈ 880,000 folders, most of them tiny. That's the classic over-partitioning trap: slow listings, small files, and painful to change later. Liquid clustering avoids it, and you can change the keys later."},
+      {q:"A shared analytics table where analysts keep changing how they filter (week to week: by region, then by category, then by channel).", o:["Pick 4 clustering keys now","CLUSTER BY AUTO","PARTITIONED BY (region)"], a:1,
+       why:"The docs recommend automatic liquid clustering for tables whose query patterns change often. Databricks picks and evolves the keys from the observed workload (it relies on predictive optimization)."},
+      {q:"<code>dim_product</code>: 3,000 rows, a couple of MB, broadcast in every join.", o:["CLUSTER BY (product_id)","PARTITIONED BY (category)","Leave it alone"], a:2,
+       why:"It fits in a file or two and gets broadcast anyway. Layout tuning buys nothing here, and partitioning would only create tiny files. Spend the effort on the big fact."}
+    ],
+    selfCheck: [
+      {q:"A daily Gold load uses plain <code>INSERT INTO … SELECT</code>. The task times out and the Job retries it. What happens?", o:["Delta deduplicates automatically","The day's rows can land twice (revenue ×2)","The PRIMARY KEY … RELY rejects the duplicates"], a:1,
+       why:"Plain append isn't idempotent, and UC primary keys are informational (not enforced). Use REPLACE WHERE (or MERGE) plus a duplicate-grain gate."},
+      {q:"<code>INSERT INTO t REPLACE WHERE sale_date = '2026-11-12' SELECT …</code>, but the SELECT also returns rows for 2026-11-11. By default…", o:["Those rows are inserted too","The write fails with an error","They're silently dropped"], a:1,
+       why:"By default, Delta validates that every written row matches the predicate and fails the operation otherwise. It's a safety net against overwriting the wrong slice."},
+      {q:"What does <code>RELY</code> on a primary key mean on Databricks?", o:["The key is enforced on write","The optimizer may trust the key for query rewrites; it's still not enforced","Rows violating it are quarantined"], a:1,
+       why:"RELY lets the optimizer use the constraint (e.g. to eliminate unnecessary aggregations or joins). If the data violates it, results can be wrong, so you still check duplicates yourself."},
+      {q:"Why are liquid clustering keys <code>(sale_date, store_id)</code> better than <code>PARTITIONED BY (store_id)</code> on Black Friday?", o:["Clustering forces the data to be evenly distributed across stores","Clustering organizes data into right-sized files by key ranges, avoiding one huge partition and many tiny ones","Clustering disables shuffles"], a:1,
+       why:"Clustering doesn't change the data, only how it's laid out. A hot store just occupies more files, and data skipping still works on both keys."},
+      {q:"Which Lakeflow Job setting warns you while there's still time to meet a 7 AM SLA on a 5 AM run?", o:["A failure notification","A run-duration health rule / duration warning notification","max_retries = 5"], a:1,
+       why:"A duration threshold (<code>RUN_DURATION_SECONDS GREATER_THAN …</code>) fires while the run is still going. A failure notification may arrive after the deadline, and more retries only make a slow run slower."},
+      {q:"Finance reports half the revenue is missing. Which system table tells you which dashboards and jobs read <code>gold.fact_daily_revenue</code>?", o:["system.access.audit","system.access.table_lineage","system.billing.usage"], a:1,
+       why:"<code>table_lineage</code> records source/target tables with the entity (NOTEBOOK, JOB, PIPELINE, DASHBOARD_V3, DBSQL_QUERY …) that read or wrote them. That's your blast radius and your list of people to notify."}
+    ]
+  };
+  var scoreIds = {dropFail:"dropFailScore", buildPick:"buildPickScore", layoutPick:"layoutPickScore", selfCheck:"selfCheckScore"};
+
+  function renderBank(name){
+    var el = document.getElementById(name); if(!el) return;
+    var items = banks[name];
+    if(!state.mcq[name]) state.mcq[name] = {};
+    var picks = state.mcq[name];
+    el.innerHTML = "";
+    items.forEach(function(s, i){
+      var box = document.createElement("div"); box.className = "scenario";
+      box.innerHTML = "<b>Q" + (i+1) + ".</b> " + s.q;
+      var ch = document.createElement("div"); ch.className = "choices";
+      var fb = document.createElement("div"); fb.className = "feedback";
+      s.o.forEach(function(t, k){
+        var b = document.createElement("button"); b.innerHTML = t;
+        b.addEventListener("click", function(){ picks[i] = k; save(); paint(); });
+        ch.appendChild(b);
+      });
+      function paint(){
+        var pick = picks[i];
+        if(pick === undefined){ fb.className = "feedback"; return; }
+        Array.prototype.forEach.call(ch.children, function(b, k){
+          b.disabled = true;
+          b.classList.toggle("right", k === s.a);
+          b.classList.toggle("wrong", k === pick && k !== s.a);
+        });
+        fb.className = "feedback show " + (pick === s.a ? "good" : "bad");
+        fb.innerHTML = (pick === s.a ? "✅ <b>Right.</b> " : "❌ <b>Better answer: " + s.o[s.a] + ".</b> ") + s.why;
+        score(name);
+      }
+      box.appendChild(ch); box.appendChild(fb); el.appendChild(box);
+      paint();
+    });
+    score(name);
+  }
+  function score(name){
+    var items = banks[name], picks = state.mcq[name] || {}, got = 0, answered = 0;
+    items.forEach(function(s, i){ if(picks[i] !== undefined){ answered++; if(picks[i] === s.a) got++; } });
+    var el = document.getElementById(scoreIds[name]);
+    if(el) el.textContent = answered ? ("Score: " + got + " / " + items.length + (answered < items.length ? " (" + (items.length - answered) + " to go)" : "")) : "";
+  }
+  function renderAllBanks(){ Object.keys(banks).forEach(renderBank); }
+  document.getElementById("quizReset").addEventListener("click", function(){ state.mcq.selfCheck = {}; save(); renderBank("selfCheck"); });
+
+  /* ---------- incident ordering ---------- */
+  var incidentSteps = [
+    {t:"Acknowledge in Slack, tell finance the number is under investigation, and flag or hold the dashboard", why:"Protect the consumer first. The board pack is due at 07:30, so a wrong number must not go out while you debug."},
+    {t:"Check the Job run for run_date: which tasks ran, did build_gold or the gate fail, retry or get skipped?", why:"The run page is the cheapest signal: in seconds you know whether the pipeline failed, partially ran, or 'succeeded' with bad input."},
+    {t:"Compare volume: Gold rows/revenue for run_date vs the 7-day average, and Silver row counts for the same date", why:"This locates the break. If Silver is also half, the problem is upstream (late or partial ingestion). If Silver is complete, the Gold logic or write is at fault."},
+    {t:"Query system.access.table_lineage to list every dashboard, job and table that reads the fact", why:"Blast radius: who else is consuming the wrong number (revenue_by_segment, other dashboards) and needs a heads-up or a re-refresh."},
+    {t:"Fix the cause and re-run build_gold for that run_date (idempotent REPLACE WHERE), then let the gate and publish run", why:"Because the build is idempotent, the re-run can't double-count anything. The gate re-checks before finance sees the result."},
+    {t:"Post-mortem: add or tighten the volume gate and alert so this fires before 07:00 next time", why:"Close the loop back to the contract: the incident becomes a new check, not a repeat."}
+  ];
+  var incEl = document.getElementById("incident");
+  var shuffled = [3, 1, 5, 0, 4, 2];
+  function renderIncident(){
+    incEl.innerHTML = "";
+    var picked = state.incident || [];
+    var pick = document.createElement("div"); pick.className = "order-pick";
+    shuffled.forEach(function(idx){
+      var b = document.createElement("button"); b.textContent = incidentSteps[idx].t;
+      if(picked.indexOf(idx) !== -1) b.disabled = true;
+      b.addEventListener("click", function(){ if(state.incident.indexOf(idx) === -1){ state.incident.push(idx); save(); renderIncident(); } });
+      pick.appendChild(b);
+    });
+    incEl.appendChild(pick);
+    if(picked.length){
+      var h = document.createElement("p"); h.innerHTML = "<b>Your order:</b>"; incEl.appendChild(h);
+      var ol = document.createElement("ol"); ol.className = "picked";
+      picked.forEach(function(idx, pos){
+        var li = document.createElement("li"); li.textContent = incidentSteps[idx].t;
+        if(picked.length === incidentSteps.length) li.className = idx === pos ? "ok" : "off";
+        ol.appendChild(li);
+      });
+      incEl.appendChild(ol);
+    }
+    if(picked.length === incidentSteps.length){
+      var right = 0; picked.forEach(function(idx, pos){ if(idx === pos) right++; });
+      var fb = document.createElement("div"); fb.className = "feedback show " + (right >= 5 ? "good" : "bad");
+      var html = "<b>" + right + " / 6 in the recommended position.</b> Recommended order:<ol>";
+      incidentSteps.forEach(function(s){ html += "<li><b>" + s.t + ".</b> " + s.why + "</li>"; });
+      html += "</ol>Swapping steps 3 and 4 is fine. Fixing before you have communicated or located the break is the mistake interviewers listen for.";
+      fb.innerHTML = html; incEl.appendChild(fb);
+    }
+    var r = document.createElement("button"); r.className = "btn small"; r.textContent = "↺ Start over"; r.style.marginTop = "8px";
+    r.addEventListener("click", function(){ state.incident = []; save(); renderIncident(); });
+    incEl.appendChild(r);
+  }
+
+  /* ---------- hands-on checklist ---------- */
+  var checks = [
+    "Cell 2: DESCRIBE DETAIL shows clusteringColumns [sale_date, store_id]",
+    "Cell 3: 6 rows · 180.00",
+    "Cell 4: 2026-11-12 shows 6 rows · 250.00 (the doubled-revenue bug)",
+    "Cell 5: the quality gate failed with the duplicate-grain message",
+    "Cell 6: REPLACE WHERE run twice → 2026-11-12 back to 3 rows · 125.00; gate passes",
+    "Broke it on purpose: REPLACE WHERE without the WHERE in the SELECT failed",
+    "Cell 7: late order backfilled via replaceWhere → 2026-11-11 = 4 rows · 65.00",
+    "Cell 8: segments RETAIL 65.00 / BUSINESS 45.00 / VIP 80.00",
+    "Cell 9: S1 = 400,000 rows; one task got at least 400,000 after repartition(store_id); OPTIMIZE ran"
+  ];
+  var hc = document.getElementById("hoChecks");
+  function renderChecks(){
+    hc.innerHTML = "";
+    checks.forEach(function(c, i){
+      var l = document.createElement("label"); l.className = "check";
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!state.checks[i];
+      cb.addEventListener("change", function(){ state.checks[i] = cb.checked; save(); });
+      l.appendChild(cb); l.appendChild(document.createTextNode(c)); hc.appendChild(l);
+    });
+  }
+
+  document.getElementById("resetBtn").addEventListener("click", function(){
+    if(!window.confirm("Reset progress, answers and checklist for this lesson?")) return;
+    state.done = {}; state.mcq = {}; state.checks = {}; state.incident = []; save();
+    renderAllBanks(); renderIncident(); renderChecks(); show(0);
+  });
+
+  /* ---------- copy buttons ---------- */
+  Array.prototype.forEach.call(document.querySelectorAll(".codewrap"), function(w){
+    var b = document.createElement("button"); b.className = "copy"; b.textContent = "Copy";
+    b.addEventListener("click", function(){
+      var txt = w.querySelector("pre").innerText;
+      var done = function(){ b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy"; }, 1200); };
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done, function(){ b.textContent = "Select & copy"; }); }
+      else { b.textContent = "Select & copy"; }
+    });
+    w.appendChild(b);
+  });
+
+  if(!Array.isArray(state.incident)) state.incident = [];
+  renderAllBanks(); renderIncident(); renderChecks();
+  var m = /^#s(\d+)$/.exec(location.hash || "");
+  show(m ? parseInt(m[1], 10) - 1 : (state.current || 0));
+})();
+</script>
+</body>
+</html>
