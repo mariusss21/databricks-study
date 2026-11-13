@@ -25,3 +25,7 @@ Pill files get linked here as they land.
 - **Data engineering, Fri 2026-11-13:** [Connection Deep Dive: A Gold table you can trust: idempotent, fast, and watched, from model to Lakeflow Job](deepdive-de-gold-you-can-trust.html) ([brief from NJ in Dollar](deepdive-de-gold-you-can-trust-brief.md)). It connects this week's DE pills DE1–DE4 (skew and liquid clustering, contracts and idempotent Gold, dbt, observability and SLAs) into one retail revenue Gold layer with a 7 AM ET SLA, wired together in a Lakeflow Job.
 
 The deep dives are self-contained HTML files. Download one and open it in a browser; GitHub's file view shows the source, not the rendered page.
+
+## Weekly review
+
+- **Weekly review, Fri 2026-11-13:** [Cheat sheet](cheatsheet.html) (one A4 landscape page; open it in a browser and print, or use the PDF sent in chat) · [Definitions quiz](definitions-quiz.html) (24 multiple-choice definitions across Databricks, AI Engineering and Data Engineering).

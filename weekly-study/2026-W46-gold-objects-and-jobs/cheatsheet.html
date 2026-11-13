@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Weekly Cheat Sheet · 2026-W46 · Gold objects and Lakeflow Jobs</title>
+<style>
+  @page { size: A4 landscape; margin: 0; }
+  :root{
+    --db:#d9480f; --db-bg:#fff4ec;
+    --ai:#6741d9; --ai-bg:#f4f0ff;
+    --de:#0b7285; --de-bg:#e9f8fb;
+    --trap:#c92a2a; --trap-bg:#fff0f0;
+    --ink:#1b1f24; --mut:#5c6670; --line:#d0d5db;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#fff}
+  body{font-family:Inter,"Helvetica Neue",Arial,sans-serif;color:var(--ink);font-size:7.6pt;line-height:1.25;
+       -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  code,.m{font-family:"Geist Mono","DejaVu Sans Mono",monospace;font-size:6.8pt;background:#eef1f4;padding:0 1.5px;border-radius:2px;white-space:nowrap}
+  .page{width:297mm;height:210mm;padding:4.5mm 6mm 3.5mm;display:grid;grid-template-rows:auto minmax(0,1fr) 61mm auto;gap:2mm;overflow:hidden}
+  /* header */
+  .hd{display:flex;align-items:center;gap:3mm;border-bottom:1.2pt solid var(--ink);padding-bottom:1.4mm}
+  .hd h1{font-size:14pt;letter-spacing:-.2pt;white-space:nowrap}
+  .hd .wk{font-size:8.5pt;color:var(--mut);white-space:nowrap}
+  .theme{flex:1;font-size:8.2pt;background:#f1f3f5;border-left:2.5pt solid var(--ink);padding:1mm 2mm;border-radius:0 2px 2px 0}
+  .theme b{font-size:8.4pt}
+  .legend{display:flex;gap:1.5mm;font-size:7pt;white-space:nowrap}
+  .chip{padding:.3mm 1.6mm;border-radius:8px;color:#fff;font-weight:700}
+  .chip.db{background:var(--db)}.chip.ai{background:var(--ai)}.chip.de{background:var(--de)}
+  /* three tracks */
+  .tracks{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:minmax(0,1fr);gap:2.2mm;min-height:0}
+  .card{border:1.1pt solid;border-radius:3px;padding:1.4mm 1.9mm 1.2mm;display:flex;flex-direction:column;gap:1mm;min-height:0;overflow:hidden}
+  .card.db{border-color:var(--db);background:linear-gradient(var(--db-bg),#fff 14mm)}
+  .card.ai{border-color:var(--ai);background:linear-gradient(var(--ai-bg),#fff 14mm)}
+  .card.de{border-color:var(--de);background:linear-gradient(var(--de-bg),#fff 14mm)}
+  .ch{display:flex;align-items:baseline;justify-content:space-between;gap:2mm}
+  .ch h2{font-size:10.5pt;letter-spacing:-.1pt}
+  .db .ch h2{color:var(--db)}.ai .ch h2{color:var(--ai)}.de .ch h2{color:var(--de)}
+  .ch .src{font-size:6.8pt;color:var(--mut);white-space:nowrap}
+  .one{font-weight:700;font-size:8.2pt}
+  .h{font-size:6.8pt;font-weight:800;letter-spacing:.6pt;text-transform:uppercase;color:var(--mut);margin-top:.3mm}
+  ul{list-style:none}
+  ul.d li{padding-left:2.2mm;position:relative;margin-bottom:.45mm}
+  ul.d li:before{content:"▸";position:absolute;left:0;font-size:5.5pt;top:.5pt}
+  .db ul.d li:before{color:var(--db)}.ai ul.d li:before{color:var(--ai)}.de ul.d li:before{color:var(--de)}
+  b.t{font-weight:800}
+  svg{display:block;width:100%;height:auto;flex:none}
+  .trap{background:var(--trap-bg);border-left:2pt solid var(--trap);padding:.8mm 1.6mm;border-radius:0 2px 2px 0}
+  .trap li{padding-left:2.4mm;position:relative;margin-bottom:.4mm}
+  .trap li:before{content:"✖";position:absolute;left:0;color:var(--trap);font-size:5.5pt;top:.4pt}
+  .trap .h{color:var(--trap);margin:0 0 .4mm}
+  .recall{margin-top:auto;font-size:7.2pt;color:var(--mut);border-top:.6pt dashed var(--line);padding-top:.6mm}
+  .recall b{color:var(--ink)}
+  table{border-collapse:collapse;width:100%}
+  th,td{padding:.25mm 1mm;text-align:left;vertical-align:top;border:.5pt solid var(--line)}
+  th{background:#f1f3f5;font-size:6.8pt;letter-spacing:.3pt}
+  .tbl-db th{background:var(--db-bg)}.tbl-ai th{background:var(--ai-bg)}
+  /* bottom row */
+  .bottom{display:grid;grid-template-columns:2.15fr 1fr;gap:2.2mm}
+  .box{border:1.1pt solid var(--ink);border-radius:3px;padding:1.1mm 1.9mm;overflow:hidden;min-height:0}
+  .box h2{font-size:10pt;margin-bottom:.8mm;display:flex;justify-content:space-between;align-items:baseline}
+  .box h2 small{font-size:7pt;font-weight:500;color:var(--mut)}
+  .dc td:first-child{font-weight:800;width:31mm}
+  .dc td:nth-child(2),.dc td:nth-child(3){width:40%}
+  .tg{display:inline-block;font-size:6pt;font-weight:800;color:#fff;border-radius:6px;padding:0 1.2mm;margin-right:.6mm;vertical-align:1px}
+  .tg.db{background:var(--db)}.tg.ai{background:var(--ai)}.tg.de{background:var(--de)}.tg.x{background:#495057}
+  ol.q{padding-left:3.2mm}
+  ol.q li{margin-bottom:.8mm}
+  .foot{display:flex;justify-content:space-between;gap:4mm;font-size:6.5pt;color:var(--mut);border-top:.6pt solid var(--line);padding-top:.7mm}
+  .key{background:#fff8db;border:.6pt solid #f0c36d;border-radius:2px;padding:.5mm 1.5mm;margin-top:.8mm;font-size:7.2pt}
+  .key b{color:#7a5300}
+  .key span{display:inline-block;transform:none}
+</style>
+</head>
+<body>
+<div class="page" id="page">
+
+  <div class="hd">
+    <div><h1>Weekly Cheat Sheet</h1><div class="wk">2026-W46 · 9 – 15 Nov</div></div>
+    <div class="theme"><b>Theme: Gold objects and Lakeflow Jobs.</b> A Gold table is a product with a promise. Ask of every Gold table:
+      <b>① what does one row mean? ② is a re-run safe? ③ who finds out first when it breaks?</b>
+      AI track (fallback) = the same questions for a <b>batch of LLM calls</b>: retries, input caps, a raw record.</div>
+    <div class="legend"><span class="chip db">DATABRICKS · Gerald</span><span class="chip ai">AI ENG · Jack</span><span class="chip de">DATA ENG · NJ</span></div>
+  </div>
+
+  <div class="tracks">
+
+    <!-- DATABRICKS -->
+    <section class="card db">
+      <div class="ch"><h2>Databricks · Associate cert</h2><span class="src">Mon 9 Nov deep dive * + docs</span></div>
+      <div class="one">Declare the grain, write idempotently, let Delta enforce what it can.</div>
+      <svg viewBox="0 0 330 64" role="img" aria-label="Flow: Silver, write, enforce, layout"><defs><marker id="ar1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0L8,4L0,8z" fill="#495057"/></marker></defs><g font-family="Inter,Arial,sans-serif" text-anchor="middle"><rect x="1" y="2" width="70" height="44" rx="4" fill="#f1f3f5" stroke="#868e96"/><text x="36.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">SILVER</text><text x="36.0" y="23.0" font-size="7.6">1 row / key</text><text x="36.0" y="32.4" font-size="7.6">QUALIFY dedup</text><rect x="87" y="2" width="70" height="44" rx="4" fill="#fff4ec" stroke="#d9480f"/><text x="122.0" y="13" font-weight="700" font-size="8.8" fill="#d9480f">① WRITE</text><text x="122.0" y="23.0" font-size="7.6">REPLACE WHERE</text><text x="122.0" y="32.4" font-size="7.6">MERGE · MV</text><rect x="173" y="2" width="70" height="44" rx="4" fill="#fff4ec" stroke="#d9480f"/><text x="208.0" y="13" font-weight="700" font-size="8.8" fill="#d9480f">② ENFORCE</text><text x="208.0" y="23.0" font-size="7.6">NOT NULL</text><text x="208.0" y="32.4" font-size="7.6">CHECK</text><text x="208.0" y="41.8" font-size="7.6">expectations</text><rect x="259" y="2" width="70" height="44" rx="4" fill="#fff4ec" stroke="#d9480f"/><text x="294.0" y="13" font-weight="700" font-size="8.8" fill="#d9480f">③ LAYOUT</text><text x="294.0" y="23.0" font-size="7.6">CLUSTER BY</text><text x="294.0" y="32.4" font-size="7.6">OPTIMIZE</text><path d="M72,24H85" stroke="#495057" stroke-width="1.3" marker-end="url(#ar1)"/><path d="M158,24H171" stroke="#495057" stroke-width="1.3" marker-end="url(#ar1)"/><path d="M244,24H257" stroke="#495057" stroke-width="1.3" marker-end="url(#ar1)"/><text x="165" y="60" font-size="8" fill="#c92a2a" font-weight="700">PK / FK / UNIQUE = informational → duplicates still land</text></g></svg>
+      <ul class="d">
+        <li><b class="t"><code>INSERT … REPLACE WHERE</code></b>: atomically overwrites rows matching a predicate ✓</li>
+        <li><b class="t">NOT NULL / CHECK</b>: enforced; a violation fails the whole transaction ✓</li>
+        <li><b class="t">PK / FK</b>: informational, not enforced; can help the optimizer ✓</li>
+        <li><b class="t">Liquid clustering</b> (<code>CLUSTER BY</code>): replaces partitioning + <code>ZORDER</code>; keys changeable ✓</li>
+      </ul>
+      <div class="h">Expectations — action on a bad record ✓</div>
+      <table class="tbl-db">
+        <tr><td><code>EXPECT</code> (warn, default)</td><td>row written, metric logged</td></tr>
+        <tr><td><code>… ON VIOLATION DROP ROW</code></td><td>row dropped, count logged</td></tr>
+        <tr><td><code>… ON VIOLATION FAIL UPDATE</code></td><td>update fails, rolled back</td></tr>
+      </table>
+      <div class="trap"><div class="h">Exam traps</div><ul>
+        <li>Empty SELECT + <code>REPLACE WHERE</code> → matching rows <b>may be deleted</b> ✓</li>
+        <li>Clustering is <b>not compatible</b> with <code>PARTITIONED BY</code> or <code>ZORDER</code>; max 4 keys ✓</li>
+        <li><code>count(col)</code> skips NULLs; <code>approx_count_distinct</code> = HLL++, ~5 % default ✓</li>
+      </ul></div>
+      <div class="recall"><b>Recall:</b> 3 expectation actions · enforced vs informational.</div>
+    </section>
+
+    <!-- AI -->
+    <section class="card ai">
+      <div class="ch"><h2>AI Engineering</h2><span class="src">Wed 28 Oct deep dive *</span></div>
+      <div class="one">A nightly LLM step: cap the input, batch it, retry by error class, log raw.</div>
+      <svg viewBox="0 0 330 64" role="img" aria-label="Flow of one row through the LLM batch step"><defs><marker id="ar2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0L8,4L0,8z" fill="#495057"/></marker></defs><g font-family="Inter,Arial,sans-serif" text-anchor="middle"><rect x="1" y="2" width="56" height="32" rx="4" fill="#f1f3f5" stroke="#868e96"/><text x="29.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">row</text><text x="29.0" y="23.0" font-size="7.6">request_hash</text><rect x="69" y="2" width="56" height="32" rx="4" fill="#f4f0ff" stroke="#6741d9"/><text x="97.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">cap input</text><text x="97.0" y="23.0" font-size="7.6">eval-measured</text><rect x="137" y="2" width="56" height="32" rx="4" fill="#f4f0ff" stroke="#6741d9"/><text x="165.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">batch call</text><text x="165.0" y="23.0" font-size="7.6">custom_id</text><rect x="205" y="2" width="56" height="32" rx="4" fill="#f4f0ff" stroke="#6741d9"/><text x="233.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">error class</text><text x="233.0" y="23.0" font-size="7.6">400 · 429 · 5xx</text><rect x="273" y="2" width="56" height="32" rx="4" fill="#f4f0ff" stroke="#6741d9"/><text x="301.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">raw log</text><text x="301.0" y="23.0" font-size="7.6">→ validate</text><path d="M58,18H67" stroke="#495057" stroke-width="1.3" marker-end="url(#ar2)"/><path d="M126,18H135" stroke="#495057" stroke-width="1.3" marker-end="url(#ar2)"/><path d="M194,18H203" stroke="#495057" stroke-width="1.3" marker-end="url(#ar2)"/><path d="M262,18H271" stroke="#495057" stroke-width="1.3" marker-end="url(#ar2)"/><path d="M233,34 V44 H165 V36" fill="none" stroke="#2f9e44" stroke-width="1.3" stroke-dasharray="3 2" marker-end="url(#ar2)"/><text x="120" y="47" font-size="8" fill="#2b8a3e" font-weight="700">429/5xx/529 → backoff, retry-after</text><text x="165" y="61" font-size="8" fill="#c92a2a" font-weight="700">spend-cap 429 (no retry-after) → stop + page</text></g></svg>
+      <ul class="d">
+        <li><b class="t"><code>request_hash</code></b>: one key = idempotency, cache, batch <code>custom_id</code>, replay ◦</li>
+        <li><b class="t">Effective length</b>: longest input where <i>your eval</i> still passes, not the window ◦</li>
+        <li><b class="t">Lost in the middle</b>: accuracy dips for evidence mid-context (U-curve) ◦</li>
+        <li><b class="t">Context rot</b>: quality falls as input grows; focused input wins ◦</li>
+        <li><b class="t">Raw response log</b>: append-only params + raw output + usage, by hash + run ◦</li>
+      </ul>
+      <div class="h">Error class → action (Anthropic) ✓</div>
+      <table class="tbl-ai">
+        <tr><td><b>400</b> invalid_request</td><td>fix request; no retry → quarantine</td></tr>
+        <tr><td><b>429</b> rate_limit</td><td>backoff, honour <code>retry-after</code></td></tr>
+        <tr><td><b>500 / 529</b></td><td>transient → exponential backoff</td></tr>
+      </table>
+      <div class="trap"><div class="h">Traps</div><ul>
+        <li>Batch results come back <b>unordered</b> → join on <code>custom_id</code> ◦</li>
+        <li>Tier spend-cap 429 has <b>no retry-after</b> and keeps failing ✓</li>
+        <li>Your own spend limit returns a <b>400</b>, not a 429 ✓</li>
+        <li>SDK already retries transient errors twice by default ✓</li>
+      </ul></div>
+      <div class="recall"><b>Recall:</b> the 5 stations · which errors retry.</div>
+    </section>
+
+    <!-- DE -->
+    <section class="card de">
+      <div class="ch"><h2>Data Eng · US senior interviews</h2><span class="src">Fri 13 Nov deep dive</span></div>
+      <div class="one">Correct · fast · watched: three parts of one Gold promise.</div>
+      <svg viewBox="0 0 330 64" role="img" aria-label="Lakeflow Job task DAG for the Gold table"><defs><marker id="ar3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0L8,4L0,8z" fill="#495057"/></marker></defs><g font-family="Inter,Arial,sans-serif" text-anchor="middle"><rect x="1" y="2" width="58" height="32" rx="4" fill="#f1f3f5" stroke="#868e96"/><text x="30.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">silver</text><text x="30.0" y="23.0" font-size="7.6">retries ×2</text><rect x="68" y="2" width="58" height="32" rx="4" fill="#e9f8fb" stroke="#0b7285"/><text x="97.0" y="13" font-weight="700" font-size="8.4" fill="#1b1f24">build_gold</text><text x="97.0" y="23.0" font-size="7.6">replace day</text><rect x="135" y="2" width="60" height="32" rx="4" fill="#e9f8fb" stroke="#0b7285"/><text x="165.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">gate</text><text x="165.0" y="23.0" font-size="7.6">0 retries</text><rect x="204" y="2" width="58" height="32" rx="4" fill="#e9f8fb" stroke="#0b7285"/><text x="233.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">optimize</text><text x="233.0" y="23.0" font-size="7.6">clustering</text><rect x="271" y="2" width="58" height="32" rx="4" fill="#ebfbee" stroke="#2f9e44"/><text x="300.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">publish</text><text x="300.0" y="23.0" font-size="7.6">MV · BI</text><path d="M60,18H66" stroke="#495057" stroke-width="1.3" marker-end="url(#ar3)"/><path d="M127,18H133" stroke="#495057" stroke-width="1.3" marker-end="url(#ar3)"/><path d="M196,18H202" stroke="#495057" stroke-width="1.3" marker-end="url(#ar3)"/><path d="M263,18H269" stroke="#495057" stroke-width="1.3" marker-end="url(#ar3)"/><path d="M97,34 V44 H30 V36" fill="none" stroke="#0b7285" stroke-width="1.3" stroke-dasharray="3 2" marker-end="url(#ar3)"/><text x="104" y="47" text-anchor="start" font-size="8" fill="#0b7285" font-weight="700">backfill = re-run with another :run_date</text><text x="165" y="61" font-size="8" fill="#c92a2a" font-weight="700">plain append + retry = revenue ×2</text></g></svg>
+      <ul class="d">
+        <li><b class="t">Data contract</b>: grain, keys, constraints, SLA in measurable terms ◦</li>
+        <li><b class="t">SLI / SLO / SLA</b>: what you measure / internal target / promise to the consumer ◦</li>
+        <li><b class="t">5 pillars</b>: freshness · volume · schema · distribution · lineage ◦</li>
+        <li><b class="t">Skew</b>: max task ≫ median in Spark UI; all slower = growth ◦</li>
+        <li><b class="t">Salting</b>: random suffix on a hot key; last resort after AQE + broadcast ◦</li>
+        <li><b class="t">Blast radius</b>: <code>system.access.table_lineage</code> → who reads the table ◦</li>
+      </ul>
+      <div class="trap"><div class="h">Gotchas</div><ul>
+        <li>Drop bad <b>rows</b> in Silver; stop on a bad <b>table</b> in Gold ◦</li>
+        <li>AQE skew join splits joins only, not a skewed <code>repartition</code> before a write ◦</li>
+        <li>Partition by a skewed key → one giant partition + tiny files ◦</li>
+        <li>Quality gate gets <b>0 retries</b>: bad data won't fix itself ◦</li>
+        <li>Duration warning, not failure alert, is the SLA alarm ◦</li>
+      </ul></div>
+      <div class="recall"><b>Recall:</b> the 6-link chain · REPLACE WHERE vs MERGE vs MV.</div>
+    </section>
+  </div>
+
+  <div class="bottom">
+    <section class="box">
+      <h2>Don’t confuse <small>across the three tracks</small></h2>
+      <table class="dc">
+        <tr><td><span class="tg db">DB</span><span class="tg de">DE</span>REPLACE WHERE / MERGE</td><td><b>REPLACE WHERE</b>: swap a whole slice (a day) atomically ✓</td><td><b>MERGE</b>: upsert scattered keys; needs ≤1 source row per key ◦</td></tr>
+        <tr><td><span class="tg db">DB</span>Enforced / informational</td><td><b>NOT NULL, CHECK</b>: violation fails the write ✓</td><td><b>PK, FK, UNIQUE</b>: declared, never checked ✓</td></tr>
+        <tr><td><span class="tg db">DB</span>Drop / fail</td><td><code>expect_or_drop</code>: bad row removed, run goes on ✓</td><td><code>expect_or_fail</code>: run stops, update rolled back ✓</td></tr>
+        <tr><td><span class="tg db">DB</span><span class="tg de">DE</span>Partition / cluster</td><td><b>Partitioning</b>: fixed folders; skew → giant partition ◦</td><td><b>Liquid clustering</b>: key ranges, keys changeable, no rewrite ✓</td></tr>
+        <tr><td><span class="tg x">ALL</span>"Re-run is safe" key</td><td><code>:run_date</code> slice <span class="tg de">DE</span> · business key in MERGE <span class="tg db">DB</span></td><td><code>request_hash</code> <span class="tg ai">AI</span>: one stored response per request</td></tr>
+        <tr><td><span class="tg x">ALL</span>Retry or stop?</td><td>retry: transient task <span class="tg de">DE</span> · 429/5xx <span class="tg ai">AI</span></td><td>stop: quality gate <span class="tg de">DE</span> · 400 / spend cap <span class="tg ai">AI</span></td></tr>
+        <tr><td><span class="tg de">DE</span>Tests / observability</td><td><b>Tests</b>: check what you predicted could break ◦</td><td><b>Observability</b>: catches what you didn’t predict ◦</td></tr>
+        <tr><td><span class="tg de">DE</span>SLO / SLA</td><td><b>SLO</b>: your internal target ◦</td><td><b>SLA</b>: the promise to the consumer ◦</td></tr>
+      </table>
+    </section>
+    <section class="box">
+      <h2>Self-test <small>answer aloud, then check</small></h2>
+      <ol class="q">
+        <li><span class="tg de">DE</span>Gold load retried after a timeout; revenue doubled. Fix?</li>
+        <li><span class="tg db">DB</span>PK declared on Gold; a duplicate key is inserted. Result?</li>
+        <li><span class="tg db">DB</span>Bad row must never reach the table, job keeps going?</li>
+        <li><span class="tg ai">AI</span>429 with no <code>retry-after</code>, keeps failing: do what?</li>
+        <li><span class="tg de">DE</span>Black Friday: 1 task runs 3 h, others idle. Root fix?</li>
+      </ol>
+      <div class="key"><b>Check:</b> 1 <code>INSERT … REPLACE WHERE sale_date = :run_date</code> · 2 accepted (informational) → gate catches it · 3 <code>ON VIOLATION DROP ROW</code> · 4 spend cap → stop + page · 5 liquid clustering, not partition by store</div>
+    </section>
+  </div>
+
+  <div class="foot">
+    <span>Sources: deep dives 2026-11-13 (DE), 2026-11-09 (DB), 2026-10-28 (AI) + briefs. ✓ = re-checked on official docs 2026-11-13 (Databricks, Anthropic). ◦ = from the lesson, not re-checked.</span>
+    <span>* No W46 DB or AI deep dive yet (Mon 16 Nov DB; Wed AI skipped): DB = Mon 9 Nov recap + docs; AI = Wed 28 Oct.</span>
+  </div>
+</div>
+<script>
+  window.addEventListener('load', function () {
+    var bad = [];
+    document.querySelectorAll('.card,.box,.page').forEach(function (e, i) {
+      if (e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1) bad.push((e.className || 'el') + '#' + i + ':' + e.scrollHeight + '>' + e.clientHeight);
+    });
+    document.documentElement.setAttribute('data-overflow', bad.length ? bad.join(' | ') : 'none');
+  });
+</script>
+</body>
+</html>

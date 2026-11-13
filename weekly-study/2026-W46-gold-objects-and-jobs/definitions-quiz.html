@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Definitions Quiz · 2026-W46 · Gold objects and Lakeflow Jobs</title>
+<style>
+  :root{--db:#d9480f;--db-bg:#fff4ec;--ai:#6741d9;--ai-bg:#f4f0ff;--de:#0b7285;--de-bg:#e9f8fb;
+        --ok:#2b8a3e;--ok-bg:#ebfbee;--bad:#c92a2a;--bad-bg:#fff0f0;--ink:#1b1f24;--mut:#5c6670;--line:#d0d5db}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,"Helvetica Neue",Arial,sans-serif;color:var(--ink);background:#f6f7f9;line-height:1.45}
+  header{position:sticky;top:0;z-index:2;background:#fff;border-bottom:1px solid var(--line);padding:12px 20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+  header h1{font-size:18px;margin:0}
+  header .wk{color:var(--mut);font-size:13px}
+  .score{margin-left:auto;font-weight:700;font-size:15px}
+  .bar{height:6px;background:#e9ecef;border-radius:3px;width:180px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--ok);width:0;transition:width .2s}
+  main{max-width:820px;margin:0 auto;padding:18px 16px 60px}
+  .intro{background:#fff;border:1px solid var(--line);border-radius:8px;padding:12px 16px;font-size:14px;margin-bottom:14px}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .filters button{border:1px solid var(--line);background:#fff;border-radius:16px;padding:4px 12px;cursor:pointer;font-size:13px}
+  .filters button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .q{background:#fff;border:1px solid var(--line);border-left:5px solid var(--line);border-radius:8px;padding:12px 16px;margin-bottom:12px}
+  .q.DB{border-left-color:var(--db)}.q.AI{border-left-color:var(--ai)}.q.DE{border-left-color:var(--de)}
+  .tag{display:inline-block;font-size:11px;font-weight:800;color:#fff;border-radius:10px;padding:1px 8px;margin-right:6px;vertical-align:2px}
+  .tag.DB{background:var(--db)}.tag.AI{background:var(--ai)}.tag.DE{background:var(--de)}
+  .q h3{font-size:15px;margin:0 0 8px}
+  .q .n{color:var(--mut);font-weight:600;margin-right:4px}
+  .opt{display:block;width:100%;text-align:left;border:1px solid var(--line);background:#fff;border-radius:6px;padding:8px 10px;margin:6px 0;cursor:pointer;font-size:14px;color:var(--ink)}
+  .opt:hover:not(:disabled){background:#f1f3f5}
+  .opt:disabled{cursor:default}
+  .opt.right{background:var(--ok-bg);border-color:var(--ok);font-weight:600}
+  .opt.wrong{background:var(--bad-bg);border-color:var(--bad)}
+  .fb{font-size:13px;margin-top:6px;padding:6px 10px;border-radius:6px;display:none}
+  .fb.show{display:block}
+  .fb.ok{background:var(--ok-bg);color:#1e5c2a}.fb.no{background:var(--bad-bg);color:#8a1c1c}
+  code{font-family:"DejaVu Sans Mono",monospace;font-size:12.5px;background:#eef1f4;padding:0 3px;border-radius:3px}
+  #final{display:none;background:#fff;border:2px solid var(--ink);border-radius:8px;padding:14px 18px;margin-top:16px}
+  #final.show{display:block}
+  #final h2{margin:0 0 6px;font-size:18px}
+  .btn{border:0;background:var(--ink);color:#fff;border-radius:6px;padding:8px 14px;font-size:14px;cursor:pointer;margin-right:8px}
+  .btn.sec{background:#fff;color:var(--ink);border:1px solid var(--ink)}
+  footer{max-width:820px;margin:0 auto;padding:0 16px 30px;color:var(--mut);font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Definitions Quiz</h1><div class="wk">2026-W46 · 9–15 Nov · Gold objects and Lakeflow Jobs</div></div>
+  <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+  <div class="score" id="score" aria-live="polite">0 / 0 answered · 0 correct</div>
+</header>
+<main>
+  <div class="intro">
+    Definitions only, across the three tracks. Pick an answer for instant feedback. Your progress is saved in this browser.
+    <span class="tag DB">DB</span>Databricks <span class="tag AI">AI</span>AI Engineering <span class="tag DE">DE</span>Data Engineering
+    <div class="filters" id="filters">
+      <button data-f="ALL" class="on">All</button><button data-f="DB">DB only</button><button data-f="AI">AI only</button><button data-f="DE">DE only</button>
+    </div>
+  </div>
+  <div id="quiz"></div>
+  <div id="final" role="status">
+    <h2 id="finalTitle"></h2>
+    <p id="finalText"></p>
+    <button class="btn" id="retry">Retry all</button><button class="btn sec" id="retryWrong">Retry only the ones I missed</button>
+  </div>
+  <p style="margin-top:16px"><button class="btn sec" id="reset">Reset quiz</button></p>
+</main>
+<footer>
+  Sources: deep dives Fri 2026-11-13 (DE, "A Gold table you can trust"), Mon 2026-11-09 (DB, "Bronze → Silver → Gold") and Wed 2026-10-28 (AI, "LLM as a production component"; no AI deep dive this week, so this is the closest previous one), their briefs, and official docs opened on 2026-11-13: Databricks (selective overwrite, constraints, liquid clustering, pipeline expectations, explode_outer, approx_count_distinct) and Anthropic (API errors).
+</footer>
+<script>
+var QUESTIONS = [
+  {t:"DB", q:"What does <code>INSERT INTO … REPLACE WHERE &lt;predicate&gt;</code> do on a Delta table?",
+   o:["Atomically overwrites only the rows that match the predicate with the query result","Upserts rows by matching a business key, like MERGE","Appends the query result and then deletes duplicates","Rewrites the whole table, ignoring the predicate"],
+   a:0, e:"REPLACE WHERE atomically overwrites rows matching a predicate (Delta selective overwrite). MERGE is the key-based upsert."},
+  {t:"AI", q:"What is a <code>request_hash</code> in an LLM pipeline step?",
+   o:["A hash of the response text, used to detect duplicate outputs","A hash of model snapshot, sampling params, prompt and schema version plus the input: the idempotency key","The provider's prompt-cache key for the shared prefix","An ID the provider assigns to each batch job"],
+   a:1, e:"Pin everything that shapes the output and hash it with the input; the same key serves as idempotency, response-cache, batch custom_id and replay key."},
+  {t:"DE", q:"What is an SLO?",
+   o:["The promise made to the consumer of the data","The metric you actually measure, e.g. time of last commit","Your internal target for a measured indicator","A Spark-level setting for job timeouts"],
+   a:2, e:"SLI = what you measure, SLO = your internal target, SLA = the promise to the consumer."},
+  {t:"DB", q:"Which constraints does Databricks actually enforce on write?",
+   o:["PRIMARY KEY and FOREIGN KEY","NOT NULL and CHECK","UNIQUE and PRIMARY KEY","All four: NOT NULL, CHECK, PRIMARY KEY, FOREIGN KEY"],
+   a:1, e:"NOT NULL and CHECK are enforced (a violation fails the transaction). PK, FK and UNIQUE are informational only."},
+  {t:"AI", q:"What does \"effective length\" mean for an LLM input?",
+   o:["The model's advertised context window","The number of tokens after prompt caching","The longest input at which your own eval still passes","The max_tokens value set for the output"],
+   a:2, e:"Cap inputs at a measured effective length, the longest input where your eval still passes, not the advertised window."},
+  {t:"DE", q:"What is an SLA?",
+   o:["The promise to the consumer, e.g. \"fresh by 7:00 AM ET, no duplicate grain rows\"","An internal stretch goal the team tracks privately","A dashboard of job run durations","The retry policy of a Lakeflow Job task"],
+   a:0, e:"The SLA is the promise to the consumer. Each clause should become an SLI you can measure."},
+  {t:"DB", q:"What is an informational PRIMARY KEY constraint on Databricks?",
+   o:["A key that rejects duplicate inserts","A key that is declared but not enforced; it can help query optimization","A key that only works in Lakeflow pipelines","A key that automatically deduplicates on OPTIMIZE"],
+   a:1, e:"PK/FK are informational: not enforced, but they may improve performance through query optimizations. Duplicates still land, so you still need a duplicate check."},
+  {t:"AI", q:"What is \"lost in the middle\"?",
+   o:["Quality drops steadily as total input grows, wherever the evidence is","Accuracy follows a U-curve: evidence in the middle of a long context is used less than at the edges","Batch results come back in a different order than they were sent","The cache misses because a value changed in the middle of the prompt"],
+   a:1, e:"Lost in the middle (Liu et al.) is about position: mid-context evidence is used worst. \"Quality falls as input grows\" is context rot."},
+  {t:"DE", q:"What are the five pillars of data observability (as taught this week)?",
+   o:["Freshness, volume, schema, distribution, lineage","Bronze, Silver, Gold, Platinum, Serving","Accuracy, completeness, timeliness, validity, uniqueness","Logs, metrics, traces, alerts, dashboards"],
+   a:0, e:"Freshness, volume, schema, distribution and lineage (DE4)."},
+  {t:"DB", q:"In a pipeline expectation, what does <code>ON VIOLATION DROP ROW</code> (<code>expect_or_drop</code>) do?",
+   o:["Writes the invalid row and logs a metric","Fails the update and rolls back","Drops invalid records before they are written; the dropped count is logged","Moves invalid rows to a quarantine table automatically"],
+   a:2, e:"drop = invalid records dropped before the write, count logged. Plain EXPECT warns (row written); FAIL UPDATE stops the update. Quarantine is a pattern you build yourself."},
+  {t:"AI", q:"What is \"context rot\"?",
+   o:["Model quality degrades as the input grows; a focused input beats the full long one","Cached prefixes expire after their TTL","The model forgets earlier turns once the window is full","Schema drift between prompt versions"],
+   a:0, e:"Context rot: quality falls as input length grows (the lesson cites a focused ~300-token input beating a ~113k-token one). Position effects are \"lost in the middle\"."},
+  {t:"DE", q:"What is data skew, as seen in the Spark UI?",
+   o:["Every task in a stage got slower because input doubled","A few tasks run far longer than the median because a hot key holds most rows","Columns with mismatched types between Silver and Gold","Clock difference between driver and executors"],
+   a:1, e:"Skew = max task time far above the median. If every task got slower, the cause is growth, not skew."},
+  {t:"DB", q:"What does <code>EXPECT</code> with no ON VIOLATION clause do (the default action)?",
+   o:["Fails the pipeline update","Drops the invalid row","Warns: invalid records are still written to the target and counted","Ignores the expectation completely"],
+   a:2, e:"warn is the default: invalid records are written to the target, with metrics recorded."},
+  {t:"AI", q:"In a provider batch API, what is <code>custom_id</code> for?",
+   o:["It selects which model snapshot runs the request","It's your own ID per request, used to join results that come back out of order; set it to request_hash","It's the provider's billing reference for the batch","It turns on prompt caching for that request"],
+   a:1, e:"Batch results are unordered, so you join on custom_id, and setting custom_id = request_hash ties it to your idempotency key."},
+  {t:"DE", q:"What is salting?",
+   o:["Adding a random suffix to a hot key so its rows spread over many tasks, then combining the pieces","Hashing PII columns before they reach Gold","Adding a checksum column to detect corrupted files","Randomly sampling rows for a quality check"],
+   a:0, e:"Salting splits a hot key into pieces. It's a last resort after AQE skew join and broadcasting the dims, because it adds complexity."},
+  {t:"DB", q:"What is liquid clustering?",
+   o:["Hive-style partitioning by a column into folders","Z-ORDER on top of partitions","A layout technique that replaces partitioning and ZORDER; data is organized by clustering keys you can change without rewriting","Compacting small files without any data ordering"],
+   a:2, e:"Liquid clustering (CLUSTER BY) replaces partitioning and ZORDER, isn't compatible with them, and its keys can be redefined without rewriting existing data."},
+  {t:"AI", q:"What does an HTTP 429 <code>rate_limit_error</code> from the Anthropic API mean?",
+   o:["The request was malformed; fix it before retrying","The API is temporarily overloaded across all users","Your organization hit a rate limit or a spend cap; back off, honouring retry-after when present","Your API key is invalid"],
+   a:2, e:"429 = rate limit (or a tier spend cap, which has no retry-after and keeps failing). 400 = invalid request, 529 = overloaded, 401 = authentication."},
+  {t:"DE", q:"What does the \"blast radius\" of a broken Gold table mean, and where do you look it up on Databricks?",
+   o:["How many files OPTIMIZE rewrote; in DESCRIBE HISTORY","Which downstream tables, jobs and dashboards read it; in system.access.table_lineage","How many rows were dropped by expectations; in the pipeline event log","How much compute the job used; in system.billing.usage"],
+   a:1, e:"Lineage tells you who reads the table, so who a failure hurts and who to tell: system.access.table_lineage."},
+  {t:"DB", q:"What does <code>explode_outer</code> return for a NULL array?",
+   o:["No rows, so the parent row disappears","One row with NULL for the element","An error","One row with an empty array"],
+   a:1, e:"explode_outer produces a single row of NULLs for a NULL collection; explode returns no rows for it."},
+  {t:"AI", q:"What does HTTP 529 <code>overloaded_error</code> mean?",
+   o:["The API is temporarily overloaded; treat it as transient and back off","The request exceeded the maximum size","Your spend limit was reached","A tool definition in the request is invalid"],
+   a:0, e:"529 = the API is temporarily overloaded (high traffic across users): retry with backoff. 413 is request too large."},
+  {t:"DE", q:"What separates tests from observability?",
+   o:["Tests run in production, observability runs in CI","Tests check what you predicted could break; observability catches what you didn't predict","They are two names for the same thing","Observability only covers job failures, tests cover data"],
+   a:1, e:"Tests check predicted failures (duplicates, a volume drop); monitoring catches the unpredicted ones, like a table that silently stopped updating."},
+  {t:"DB", q:"What is <code>approx_count_distinct</code>?",
+   o:["An exact distinct count that skips NULLs","An estimated distinct count using HyperLogLog++, cheaper on huge high-cardinality columns","A count of all rows including NULLs","A sample-based row count"],
+   a:1, e:"approx_count_distinct estimates distinct values with HLL++ (about 5% by default, tunable via relativeSD). count(DISTINCT col) is exact."},
+  {t:"AI", q:"What is a raw response log in an LLM pipeline?",
+   o:["The provider's server logs, downloadable after a batch","An append-only record of request params, the untouched response, usage, stop reason and model id, keyed by request_hash + run_id","A table of only the validated, parsed outputs","A debug print of the prompt template"],
+   a:1, e:"The raw log is the source for replays, audits and cost attribution; validation happens after it."},
+  {t:"DE", q:"In a Gold layer, what is a materialized view?",
+   o:["A saved query that recomputes every time it's read","A Gold object where you declare the query and the engine keeps the result fresh, incrementally when it can","A table you write with REPLACE WHERE","A cached DataFrame in the notebook session"],
+   a:1, e:"MV: declare the query, the engine owns the state and refreshes it (incremental when possible). You give up control of the write path. A plain view recomputes on read."}
+];
+
+// Stable per-question option shuffle (same order on every load, so saved answers still match)
+QUESTIONS.forEach(function(q, i){
+  var seed = 7919 * (i + 3), idx = q.o.map(function(_, j){ return j; });
+  for (var k = idx.length - 1; k > 0; k--){ seed = (seed * 16807) % 2147483647; var r = seed % (k + 1); var t = idx[k]; idx[k] = idx[r]; idx[r] = t; }
+  q.o = idx.map(function(j){ return q.o[j]; }); q.a = idx.indexOf(q.a);
+});
+
+var KEY = "w46-definitions-quiz-v1";
+var state = load();
+var filter = "ALL";
+
+function load(){ try { return JSON.parse(localStorage.getItem(KEY)) || {answers:{}}; } catch(e){ return {answers:{}}; } }
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+
+function visible(){ return QUESTIONS.map(function(q,i){return i;}).filter(function(i){ return filter==="ALL" || QUESTIONS[i].t===filter; }); }
+
+function render(){
+  var root = document.getElementById("quiz");
+  root.innerHTML = "";
+  visible().forEach(function(i, k){
+    var q = QUESTIONS[i];
+    var div = document.createElement("div");
+    div.className = "q " + q.t;
+    div.id = "q" + i;
+    div.innerHTML = '<h3><span class="n">' + (k+1) + '.</span><span class="tag ' + q.t + '">' + q.t + '</span>' + q.q + '</h3>';
+    q.o.forEach(function(opt, j){
+      var b = document.createElement("button");
+      b.className = "opt"; b.innerHTML = opt; b.setAttribute("data-q", i); b.setAttribute("data-o", j);
+      b.addEventListener("click", function(){ answer(i, j); });
+      div.appendChild(b);
+    });
+    var fb = document.createElement("div"); fb.className = "fb"; div.appendChild(fb);
+    root.appendChild(div);
+    if (state.answers[i] !== undefined) paint(i);
+  });
+  update();
+}
+
+function paint(i){
+  var q = QUESTIONS[i], chosen = state.answers[i];
+  var div = document.getElementById("q" + i); if (!div) return;
+  var opts = div.querySelectorAll(".opt");
+  opts.forEach(function(b, j){
+    b.disabled = true;
+    if (j === q.a) b.classList.add("right");
+    if (j === chosen && chosen !== q.a) b.classList.add("wrong");
+  });
+  var fb = div.querySelector(".fb");
+  var ok = chosen === q.a;
+  fb.className = "fb show " + (ok ? "ok" : "no");
+  fb.innerHTML = (ok ? "✔ Correct. " : "✖ Not quite. ") + q.e;
+}
+
+function answer(i, j){
+  if (state.answers[i] !== undefined) return;
+  state.answers[i] = j; save(); paint(i); update();
+}
+
+function counts(){
+  var ids = visible(), answered = 0, correct = 0;
+  ids.forEach(function(i){ if (state.answers[i] !== undefined){ answered++; if (state.answers[i] === QUESTIONS[i].a) correct++; } });
+  return {total: ids.length, answered: answered, correct: correct};
+}
+
+function update(){
+  var c = counts();
+  document.getElementById("score").textContent = c.answered + " / " + c.total + " answered · " + c.correct + " correct";
+  document.getElementById("bar").style.width = (c.total ? Math.round(100 * c.answered / c.total) : 0) + "%";
+  var fin = document.getElementById("final");
+  if (c.total && c.answered === c.total){
+    var pct = Math.round(100 * c.correct / c.total);
+    document.getElementById("finalTitle").textContent = "Final score: " + c.correct + " / " + c.total + " (" + pct + "%)";
+    var byTrack = {DB:[0,0], AI:[0,0], DE:[0,0]};
+    visible().forEach(function(i){ var t = QUESTIONS[i].t; byTrack[t][1]++; if (state.answers[i] === QUESTIONS[i].a) byTrack[t][0]++; });
+    document.getElementById("finalText").textContent = ["DB","AI","DE"].filter(function(t){return byTrack[t][1];}).map(function(t){ return t + " " + byTrack[t][0] + "/" + byTrack[t][1]; }).join(" · ") + (pct >= 80 ? " · Solid. Review the misses on the cheat sheet." : " · Re-read the cheat sheet, then retry the misses.");
+    fin.className = "show";
+  } else { fin.className = ""; }
+}
+
+function retry(onlyWrong){
+  visible().forEach(function(i){ if (!onlyWrong || state.answers[i] !== QUESTIONS[i].a) delete state.answers[i]; });
+  save(); render(); window.scrollTo(0, 0);
+}
+
+document.getElementById("retry").addEventListener("click", function(){ retry(false); });
+document.getElementById("retryWrong").addEventListener("click", function(){ retry(true); });
+document.getElementById("reset").addEventListener("click", function(){ state = {answers:{}}; save(); render(); });
+document.querySelectorAll("#filters button").forEach(function(b){
+  b.addEventListener("click", function(){
+    filter = b.getAttribute("data-f");
+    document.querySelectorAll("#filters button").forEach(function(x){ x.classList.toggle("on", x === b); });
+    render();
+  });
+});
+render();
+</script>
+</body>
+</html>
