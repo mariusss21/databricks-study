@@ -17,7 +17,7 @@ Pill files get linked here as they land.
 | Wed 2026-11-11 | [DB3: Gold layer objects](DB3-gold-layer-objects.md) | [DE3: dbt for a Databricks engineer: models, ref, materializations, and snapshots](DE3-dbt-tech-gap-models-materializations-snapshots.md) |
 | Thu 2026-11-12 | [DB4: Data quality in Silver and Gold](DB4-data-quality-expectations-quarantine.md) | [DE4: Data observability and SLAs: freshness, volume, schema, distribution, and lineage](DE4-data-observability-and-slas.md) |
 | Fri 2026-11-13 | [DB5: Lakeflow Jobs basics](DB5-lakeflow-jobs-basics.md) | [DE5: Orchestration in interviews: Airflow vs Lakeflow Jobs (DAGs, retries, backfills, data-aware triggers)](DE5-orchestration-airflow-vs-lakeflow-jobs.md) · [Deep dive: A Gold table you can trust: idempotent, fast, and watched, from model to Lakeflow Job](deepdive-de-gold-you-can-trust.html) |
-| Sat 2026-11-14 |  |  |
+| Sat 2026-11-14 |  | [DE6: One definition of "revenue": semantic layers and Unity Catalog metric views](DE6-semantic-layer-metric-views.md) |
 | Sun 2026-11-15 |  |  |
 
 ## Deep dives (Zé Carlos)
