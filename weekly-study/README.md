@@ -8,6 +8,7 @@ Newest first.
 
 | Week | Theme | Dates |
 |---|---|---|
+| [2026-W47](2026-W47-lakeflow-pipelines-and-jobs/README.md) | Lakeflow pipelines and Jobs in depth | Mon 2026-11-16 to Sun 2026-11-22 |
 | [2026-W46](2026-W46-gold-objects-and-jobs/README.md) | Gold objects and Lakeflow Jobs | Mon 2026-11-09 to Sun 2026-11-15 |
 | [2026-W44](2026-W44-bronze-to-silver-transforms/README.md) | Bronze to Silver transforms | Mon 2026-10-26 to Sun 2026-11-01 |
 | [2026-W43](2026-W43-ingestion-into-bronze/README.md) | Ingestion into Bronze | Mon 2026-10-19 to Sun 2026-10-25 |
