@@ -23,6 +23,7 @@ Pill files get linked here as they land.
 ## Deep dives (Zé Carlos)
 
 - **Data engineering, Fri 2026-11-13:** [Connection Deep Dive: A Gold table you can trust: idempotent, fast, and watched, from model to Lakeflow Job](deepdive-de-gold-you-can-trust.html) ([brief from NJ in Dollar](deepdive-de-gold-you-can-trust-brief.md)). It connects this week's DE pills DE1–DE4 (skew and liquid clustering, contracts and idempotent Gold, dbt, observability and SLAs) into one retail revenue Gold layer with a 7 AM ET SLA, wired together in a Lakeflow Job.
+- **Databricks, Mon 2026-11-16 (extra, closes this week):** [Connection Deep Dive: Gated, orchestrated, debugged: one Gold table through W46](deepdive-db-gated-gold-orchestrated-debugged.html) ([brief from Gerald](deepdive-db-gated-gold-orchestrated-debugged-brief.md)). It recaps DB3–DB7 plus the week's exam pills and follows one daily revenue Gold table end to end: built behind a quality gate, run by a Lakeflow Job on a table update trigger, diagnosed from run history and the Spark UI when it goes red or slow, and fixed with salting, clustering or a repair run instead of more hardware. It ends with a bridge into W47's Lakeflow Declarative Pipelines.
 
 The deep dives are self-contained HTML files. Download one and open it in a browser; GitHub's file view shows the source, not the rendered page.
 
