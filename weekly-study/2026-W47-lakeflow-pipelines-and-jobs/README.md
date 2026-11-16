@@ -12,7 +12,7 @@ Pill files get linked here as they land.
 
 | Day | Databricks pill (Gerald) | DE pill (NJ in Dollar) |
 |---|---|---|
-| Mon 2026-11-16 | Lakeflow Spark Declarative Pipelines: streaming tables vs materialized views, flows, triggered vs continuous | [DE1: Streaming vs batch as a design decision (and when NOT to stream)](DE1-streaming-vs-batch-design-decision.md) |
+| Mon 2026-11-16 | [DB1: Lakeflow Spark Declarative Pipelines: streaming tables vs materialized views, flows, triggered vs continuous](DB1-sdp-streaming-tables-vs-mvs.md) | [DE1: Streaming vs batch as a design decision (and when NOT to stream)](DE1-streaming-vs-batch-design-decision.md) |
 | Tue 2026-11-17 | Pipeline expectations in practice plus the pipeline event log | Testing data pipelines as code |
 | Wed 2026-11-18 | AUTO CDC for SCD Type 1 and Type 2 inside pipelines | CDC end to end (with a Snowflake Streams and Tasks sidebar) |
 | Thu 2026-11-19 | Lakeflow Jobs deeper: parameters, task values, for-each and if/else, pipeline task | Metadata-driven pipelines |
