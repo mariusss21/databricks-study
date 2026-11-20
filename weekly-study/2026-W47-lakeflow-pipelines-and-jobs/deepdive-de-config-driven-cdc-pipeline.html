@@ -1,0 +1,1450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connection Deep Dive: 40 Postgres tables, one config: CDC to SCD2 Silver with a config-driven Lakeflow pipeline, tested and orchestrated (W47)</title>
+<meta name="description" content="Data Engineering connection deep dive for Mario Carvalho, Fri 2026-11-20: CDC end to end, metadata-driven pipelines, testing pipelines as code, and streaming vs batch, connected in one Debezium to Lakeflow Declarative Pipeline (AUTO CDC SCD2) to Lakeflow Job to CDF Gold system, with Snowflake and dbt sidebars.">
+<style>
+:root{
+  --bg:#f6f7fb;--panel:#fff;--panel2:#f0f2f8;--text:#1b1f2a;--muted:#5b6476;--border:#dde1ea;
+  --accent:#ff3621;--accent-soft:#fff0ed;--ok:#11845b;--ok-soft:#e5f6ee;--bad:#c62f3a;--bad-soft:#fdecee;
+  --warn:#9a6700;--warn-soft:#fff6dd;--info:#1f5fbf;--info-soft:#e9f1ff;
+  --code-bg:#0f1420;--code-text:#e6e9f0;
+  --t1:#2f6fd6;--t2:#b7791f;--t3:#8a4fd8;--t4:#0f9d74;--t5:#c2410c;--br:#0f9d74;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+  --radius:12px;--sidebar:290px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:#0d1117;--panel:#151b24;--panel2:#1b2330;--text:#e6e9ef;--muted:#9aa4b6;--border:#2a3342;
+  --accent:#ff6a55;--accent-soft:#2a1814;--ok:#3ccf91;--ok-soft:#10261d;--bad:#ff6b77;--bad-soft:#2b1418;
+  --warn:#f0c04a;--warn-soft:#2a230f;--info:#7fb2ff;--info-soft:#121f36;--code-bg:#0a0e16;
+  --t1:#6fa3ff;--t2:#f0c04a;--t3:#b48cff;--t4:#3ccf91;--t5:#fb923c;--br:#3ccf91;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;font-size:16px}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel2);border:1px solid var(--border);padding:.05em .35em;border-radius:5px;overflow-wrap:anywhere}
+pre{background:var(--code-bg);color:var(--code-text);padding:14px 16px;border-radius:10px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.5;margin:0}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+.codewrap{position:relative;margin:12px 0}
+.copy{position:absolute;top:8px;right:8px;font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid #3a4456;background:#1d2533;color:#e6e9f0;cursor:pointer}
+.layout{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--panel);border-right:1px solid var(--border);padding:18px 14px 24px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;gap:10px;align-items:center}
+.logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#ff9a3c);display:grid;place-items:center;color:#fff;font-weight:800;font-size:15px;flex:none}
+.brand h1{font-size:15px;line-height:1.25;margin:0}
+.brand small{color:var(--muted);font-size:12px}
+.progress-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.progress-top{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+.bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin:6px 0}
+.bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),#ff9a3c);transition:width .3s}
+.progress-meta{font-size:12px;color:var(--muted)}
+nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+nav a{display:flex;gap:8px;align-items:flex-start;padding:7px 8px;border-radius:8px;text-decoration:none;color:var(--text);font-size:14px}
+nav a:hover{background:var(--panel2)}
+nav a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+nav .dot{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--border);margin-top:2px;display:grid;place-items:center;font-size:11px;color:#fff}
+nav a.done .dot{background:var(--ok);border-color:var(--ok)}
+.side-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+.btn{font:inherit;font-size:14px;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.small{font-size:12px;padding:5px 10px}
+main{padding:28px clamp(16px,4vw,48px) 80px;max-width:980px}
+section.lesson{display:none}
+section.lesson.active{display:block;animation:fade .25s}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;color:var(--accent)}
+h2{font-size:26px;line-height:1.25;margin:4px 0 6px}
+h3{font-size:18px;margin:22px 0 6px}
+.lead{color:var(--muted);font-size:17px;margin-top:0}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);margin:14px 0}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;margin-bottom:4px}
+.t1{color:var(--t1)}.t2{color:var(--t2)}.t3{color:var(--t3)}
+.b1{border-top:4px solid var(--t1)}.b2{border-top:4px solid var(--t2)}.b3{border-top:4px solid var(--t3)}
+.note{border-left:4px solid var(--info);background:var(--info-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.warn{border-left:4px solid var(--warn);background:var(--warn-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.okbox{border-left:4px solid var(--ok);background:var(--ok-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--panel2)}
+.tablewrap{overflow-x:auto}
+.footer-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:28px;padding-top:16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.done-label{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted)}
+.svgwrap{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:10px;overflow-x:auto}
+.svgwrap svg{width:100%;min-width:720px;height:auto;display:block}
+.svgwrap text{font-family:var(--sans);fill:var(--text)}
+.svgwrap .muted{fill:var(--muted)}
+.stepper{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.stepper button{font:inherit;font-size:13px;padding:6px 10px;border-radius:99px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.stepper button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.step-body{min-height:190px}
+.scenario{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin:14px 0;box-shadow:var(--shadow)}
+.choices{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.choices button{font:inherit;font-size:14px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);cursor:pointer}
+.choices button.right{background:var(--ok-soft);border-color:var(--ok);color:var(--ok);font-weight:700}
+.choices button.wrong{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+.choices button:disabled{cursor:default}
+.feedback{display:none;padding:10px 12px;border-radius:8px;font-size:15px}
+.feedback.show{display:block}
+.feedback.good{background:var(--ok-soft);border-left:4px solid var(--ok)}
+.feedback.bad{background:var(--bad-soft);border-left:4px solid var(--bad)}
+.score{font-weight:700}
+details.qa{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin:12px 0;box-shadow:var(--shadow)}
+details.qa summary{cursor:pointer;font-weight:650}
+details.qa[open] summary{margin-bottom:8px}
+.check{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.check input{margin-top:5px}
+.mobilebar{display:none}
+@media (max-width:860px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:fixed;inset:0 auto 0 0;width:min(86vw,320px);transform:translateX(-105%);transition:transform .25s;z-index:20;box-shadow:var(--shadow)}
+  .sidebar.open{transform:none}
+  .mobilebar{display:flex;gap:10px;align-items:center;position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--border);padding:8px 12px}
+  .mobilebar .bar{flex:1;margin:0}
+}
+
+.t4{color:var(--t4)}.t5{color:var(--t5)}
+.b4{border-top:4px solid var(--t4)}.b5{border-top:4px solid var(--t5)}
+.rule{font-weight:700;margin:6px 0}
+.count{display:inline-block;font-family:var(--mono);font-weight:800;font-size:15px;background:var(--accent-soft);color:var(--accent);border-radius:8px;padding:2px 10px;margin:2px 0}
+.grain{display:inline-block;font-size:12px;font-weight:700;background:var(--info-soft);color:var(--info);border-radius:99px;padding:2px 9px}
+td.n,th.n{text-align:right;font-family:var(--mono)}
+tr.gone td{text-decoration:line-through;color:var(--muted)}
+tr.hl td{background:var(--warn-soft)}
+.counts-strip{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.counts-strip span{font-family:var(--mono);font-size:12px;border:1px solid var(--border);border-radius:99px;padding:2px 9px;background:var(--panel2)}
+.counts-strip span.on{background:var(--accent);border-color:var(--accent);color:#fff}
+</style>
+<style>
+.pill{display:inline-block;font-family:var(--mono);font-size:12px;border:1px solid var(--border);border-radius:99px;padding:2px 9px;background:var(--panel2);margin:2px}
+.order-pick{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.order-pick button{font:inherit;font-size:14px;padding:7px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);cursor:pointer;text-align:left}
+.order-pick button:disabled{opacity:.4;cursor:default}
+ol.picked{margin:8px 0;padding-left:22px}
+ol.picked li{margin:4px 0}
+ol.picked li.ok{color:var(--ok)}
+ol.picked li.off{color:var(--bad)}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:10px 0}
+.kpi div{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.kpi b{display:block;font-family:var(--mono);font-size:18px}
+.kpi small{color:var(--muted)}
+</style>
+<style>
+.editor-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin:12px 0}
+@media (max-width:980px){.editor-grid{grid-template-columns:1fr}}
+textarea.yaml{width:100%;min-height:380px;font-family:var(--mono);font-size:13px;line-height:1.5;background:var(--code-bg);color:var(--code-text);border:1px solid var(--border);border-radius:10px;padding:12px;resize:vertical;tab-size:2}
+.issues{list-style:none;margin:8px 0;padding:0}
+.issues li{padding:7px 10px;border-radius:8px;margin:5px 0;font-size:14px}
+.issues li.err{background:var(--bad-soft);border-left:4px solid var(--bad)}
+.issues li.wrn{background:var(--warn-soft);border-left:4px solid var(--warn)}
+.issues li.ok{background:var(--ok-soft);border-left:4px solid var(--ok)}
+.gen pre{max-height:420px;overflow:auto}
+.srcschema{font-size:13px}
+.srcschema td,.srcschema th{padding:5px 8px}
+.evt{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.evt span{font-family:var(--mono);font-size:13px;border:1px solid var(--border);border-radius:8px;padding:6px 10px;background:var(--panel2)}
+.evt span.late{border-color:var(--warn);background:var(--warn-soft)}
+.evt span.dup{border-color:var(--info);background:var(--info-soft)}
+.evt span.del{border-color:var(--bad);background:var(--bad-soft)}
+.cand td{cursor:pointer}
+.cand tr.sel td{background:var(--info-soft)}
+.cand tr.right td{background:var(--ok-soft)}
+.cand tr.missed td{background:var(--warn-soft)}
+.cand tr.wrongpick td{background:var(--bad-soft);text-decoration:line-through}
+.phrase{border-left:4px solid var(--t3);background:var(--panel2);padding:10px 14px;border-radius:8px;margin:12px 0}
+.star{display:grid;grid-template-columns:110px 1fr;gap:6px 12px;font-size:15px}
+.star b{color:var(--accent)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:13px;color:var(--muted);margin:6px 0}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<div class="mobilebar">
+  <button class="btn small" id="menuBtn" aria-label="Open navigation">☰ Sections</button>
+  <div class="bar" aria-hidden="true"><span id="barMobile"></span></div>
+  <span id="pctMobile" style="font-size:13px;color:var(--muted)">0%</span>
+</div>
+<div class="layout">
+<aside class="sidebar" id="sidebar">
+  <div class="brand">
+    <div class="logo">DE</div>
+    <div><h1>40 tables, one config: CDC you can trust</h1><small>Connection deep dive · Fri 2026-11-20 · Data Engineering · W47 · ~75 min</small></div>
+  </div>
+  <div class="progress-card">
+    <div class="progress-top"><span>Progress</span><span id="pct">0%</span></div>
+    <div class="bar"><span id="bar"></span></div>
+    <div class="progress-meta" id="progMeta">0 of 0 sections complete</div>
+  </div>
+  <nav aria-label="Sections"><ol id="navList"></ol></nav>
+  <div class="side-actions">
+    <button class="btn small" id="themeBtn">◐ Theme</button>
+    <button class="btn small" id="resetBtn">↺ Reset progress</button>
+  </div>
+</aside>
+<main id="main">
+
+<!-- ============ 1. RECAP ============ -->
+<section class="lesson" data-title="Recap: four pills, one system" data-min="4">
+  <div class="eyebrow">1 · Recap · ~4 min</div>
+  <h2>"We have 40 Postgres tables to land as SCD2 Silver"</h2>
+  <p class="lead">This week's DE pills (DE1–DE4) answer four questions about that one sentence. Is the data correct? Can we do it for 40 tables without writing 40 pipelines? How do we know a change won't break all 40 at once? How fresh does it need to be, and what does that cost? Each card is one pill reduced to the rule worth keeping. The rest of the lesson is about how they fit together.</p>
+  <div class="grid3">
+    <div class="card b1"><span class="tag t1">DE3 · CDC end to end</span>
+      <p class="rule">Correct: order by the source's sequence (LSN), never by arrival time, and make the apply replay-safe.</p>
+      <ul>
+        <li>Log-based capture (Debezium reads the Postgres WAL) sees deletes and every intermediate state. Query-based capture (<code>updated_at &gt; :hwm</code>) misses hard deletes.</li>
+        <li>The four hard problems are ordering, duplicates (at-least-once transport), deletes/tombstones, and late events.</li>
+        <li>On Databricks: <code>AUTO CDC</code> / <code>create_auto_cdc_flow</code>, or <code>MERGE</code> with an <code>s.lsn &gt; t.lsn</code> guard.</li>
+      </ul></div>
+    <div class="card b2"><span class="tag t2">DE4 · Metadata-driven pipelines</span>
+      <p class="rule">Scale: write the pattern once and describe each table in config. Table #41 should be a one-file PR.</p>
+      <ul>
+        <li>Config lives in YAML in Git (reviewed) or a Unity Catalog control table. A good rule: definitions in Git, runtime state (watermarks, last run) in tables.</li>
+        <li>Two fan-out styles: a Python loop inside a Declarative Pipeline, or a Job <b>For each</b> task.</li>
+        <li>Keep the framework thin (the 80%), with escape hatches for the 20%.</li>
+      </ul></div>
+    <div class="card b3"><span class="tag t3">DE2 · Testing pipelines as code</span>
+      <p class="rule">Safe: test the code before deploy and the data at runtime. You need both.</p>
+      <ul>
+        <li>Pure DataFrame functions in a module, with pytest and <code>assertDataFrameEqual</code> on 3–10 rows.</li>
+        <li>Contract/schema tests, a few integration runs in a dev workspace (bundles), and expectations in prod.</li>
+        <li>In a config-driven system, <b>the config itself needs a contract test</b>.</li>
+      </ul></div>
+    <div class="card b4"><span class="tag t4">DE1 · Streaming vs batch (light thread)</span>
+      <p class="rule">Right-sized: the same code can run triggered on a schedule or continuously. Pick the cheapest mode that meets the SLA.</p>
+      <ul>
+        <li>Triggered mode processes what's available and stops (the <code>availableNow</code> idea). Continuous mode keeps the tables fresh as data arrives.</li>
+        <li>A 15-minute SLA rarely justifies 24/7 compute.</li>
+      </ul></div>
+  </div>
+  <div class="note"><b>Why together:</b> CDC is the <i>correctness</i> problem, metadata is how you solve it <i>at scale</i>, tests make it <i>safe</i> (a config bug breaks 40 tables at once), and streaming vs batch picks the <i>latency and cost</i>. It's one system, and a senior interview answer walks through all four in that order.</div>
+  <h3>Quick check</h3>
+  <div id="recapQ"></div>
+  <p class="score" id="recapQScore"></p>
+</section>
+
+<!-- ============ 2. MAP ============ -->
+<section class="lesson" data-title="Connection map" data-min="3">
+  <div class="eyebrow">2 · Connection map · ~3 min</div>
+  <h2>One flow, three things that wrap it</h2>
+  <p class="lead">Data flows left to right (blue: CDC). The config (amber) generates the Bronze and Silver code. Tests and CI (purple) guard the config and the code before they ship. The Lakeflow Job (orange) decides when it all runs, and that's where the streaming vs batch choice (green) lives.</p>
+  <div class="svgwrap" id="mapSrc">
+  <svg viewBox="0 0 980 430" role="img" aria-label="Connection map: Postgres WAL, Debezium, Bronze, Silver AUTO CDC SCD2, Gold via CDF; config generates Bronze and Silver; tests and CI guard config and code; Lakeflow Job runs the pipeline triggered and fans out Gold">
+    <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a93a6"/></marker></defs>
+    <rect x="10" y="8" width="960" height="32" rx="8" fill="#ff3621" fill-opacity=".10"/>
+    <text x="490" y="29" text-anchor="middle" font-size="14" font-weight="700">Postgres OLTP (~40 tables) → SCD2 Silver with full history and deletes → incremental Gold · 15-minute freshness SLA</text>
+    <g font-size="12">
+      <!-- config -->
+      <rect x="300" y="56" width="350" height="70" rx="12" fill="#b7791f" fill-opacity=".13" stroke="#b7791f" stroke-width="2"/>
+      <text x="475" y="78" text-anchor="middle" font-weight="800" font-size="14" fill="#b7791f">② sources.yml (one entry per table)</text>
+      <text x="475" y="97" text-anchor="middle">name · keys · sequence_by · scd_type · delete_marker</text>
+      <text x="475" y="114" text-anchor="middle">exclude · expectations · freshness_sla_min</text>
+      <line x1="370" y1="128" x2="370" y2="160" stroke="#b7791f" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+      <line x1="560" y1="128" x2="560" y2="160" stroke="#b7791f" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+      <text x="465" y="146" text-anchor="middle" class="muted" font-size="11">loop: one flow per entry</text>
+      <!-- flow -->
+      <rect x="10" y="162" width="120" height="96" rx="12" fill="#2f6fd6" fill-opacity=".10" stroke="#2f6fd6" stroke-width="2"/>
+      <text x="70" y="186" text-anchor="middle" font-weight="800" font-size="13" fill="#2f6fd6">Postgres</text>
+      <text x="70" y="206" text-anchor="middle">WAL (log)</text>
+      <text x="70" y="224" text-anchor="middle">LSN = order</text>
+      <text x="70" y="242" text-anchor="middle" class="muted">~40 tables</text>
+      <line x1="132" y1="210" x2="148" y2="210" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+      <rect x="150" y="162" width="135" height="96" rx="12" fill="#2f6fd6" fill-opacity=".10" stroke="#2f6fd6" stroke-width="2"/>
+      <text x="217" y="186" text-anchor="middle" font-weight="800" font-size="13" fill="#2f6fd6">① Debezium</text>
+      <text x="217" y="206" text-anchor="middle">→ Kafka / files</text>
+      <text x="217" y="224" text-anchor="middle">op c/u/d/r + lsn</text>
+      <text x="217" y="242" text-anchor="middle" class="muted">at-least-once</text>
+      <line x1="287" y1="210" x2="303" y2="210" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+      <rect x="305" y="162" width="140" height="96" rx="12" fill="#2f6fd6" fill-opacity=".13" stroke="#2f6fd6" stroke-width="2"/>
+      <text x="375" y="186" text-anchor="middle" font-weight="800" font-size="13" fill="#2f6fd6">Bronze</text>
+      <text x="375" y="206" text-anchor="middle">append-only events</text>
+      <text x="375" y="224" text-anchor="middle">expectations:</text>
+      <text x="375" y="242" text-anchor="middle">key, op, lsn not null</text>
+      <line x1="447" y1="210" x2="463" y2="210" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+      <rect x="465" y="162" width="190" height="96" rx="12" fill="#2f6fd6" fill-opacity=".18" stroke="#2f6fd6" stroke-width="2.5"/>
+      <text x="560" y="186" text-anchor="middle" font-weight="800" font-size="13" fill="#2f6fd6">③ Silver (SCD2)</text>
+      <text x="560" y="206" text-anchor="middle">create_auto_cdc_flow</text>
+      <text x="560" y="224" text-anchor="middle">keys · sequence_by=lsn</text>
+      <text x="560" y="242" text-anchor="middle">apply_as_deletes op='d'</text>
+      <line x1="657" y1="210" x2="673" y2="210" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+      <rect x="675" y="162" width="140" height="96" rx="12" fill="#2f6fd6" fill-opacity=".10" stroke="#2f6fd6" stroke-width="2"/>
+      <text x="745" y="186" text-anchor="middle" font-weight="800" font-size="13" fill="#2f6fd6">⑥ Gold</text>
+      <text x="745" y="206" text-anchor="middle">reads Silver's CDF</text>
+      <text x="745" y="224" text-anchor="middle">readChangeFeed</text>
+      <text x="745" y="242" text-anchor="middle">only changed rows</text>
+      <line x1="817" y1="210" x2="833" y2="210" stroke="#8a93a6" stroke-width="2.5" marker-end="url(#arr)"/>
+      <rect x="835" y="162" width="135" height="96" rx="12" fill="#8a93a6" fill-opacity=".10" stroke="#8a93a6" stroke-width="2"/>
+      <text x="902" y="190" text-anchor="middle" font-weight="800" font-size="13">Consumers</text>
+      <text x="902" y="212" text-anchor="middle">dashboards</text>
+      <text x="902" y="230" text-anchor="middle">ML features</text>
+      <text x="902" y="248" text-anchor="middle">reverse ETL</text>
+      <!-- tests -->
+      <rect x="10" y="290" width="420" height="120" rx="12" fill="#8a4fd8" fill-opacity=".12" stroke="#8a4fd8" stroke-width="2"/>
+      <text x="220" y="313" text-anchor="middle" font-weight="800" font-size="14" fill="#8a4fd8">⑤ Tests + CI (before deploy)</text>
+      <text x="220" y="334" text-anchor="middle">contract test on sources.yml: keys exist, sequence is monotonic</text>
+      <text x="220" y="353" text-anchor="middle">pytest + assertDataFrameEqual on pure transforms</text>
+      <text x="220" y="372" text-anchor="middle">bundle validate → deploy -t dev → integration run</text>
+      <text x="220" y="394" text-anchor="middle" class="muted">expectations + event log = the same idea at runtime</text>
+      <line x1="300" y1="288" x2="380" y2="262" stroke="#8a4fd8" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+      <line x1="200" y1="288" x2="230" y2="262" stroke="#8a4fd8" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+      <text x="150" y="278" class="muted" font-size="11">fixture events</text>
+      <!-- job -->
+      <rect x="450" y="290" width="520" height="120" rx="12" fill="#c2410c" fill-opacity=".10" stroke="#c2410c" stroke-width="2"/>
+      <text x="710" y="313" text-anchor="middle" font-weight="800" font-size="14" fill="#c2410c">④ Lakeflow Job (every 15 min)</text>
+      <text x="710" y="334" text-anchor="middle">pipeline task → check_freshness (sets task values) → if/else fresh?</text>
+      <text x="710" y="353" text-anchor="middle">true → For each Gold model (concurrency 4) · false → alert</text>
+      <rect x="520" y="366" width="380" height="32" rx="8" fill="#0f9d74" fill-opacity=".14" stroke="#0f9d74" stroke-width="1.5"/>
+      <text x="710" y="387" text-anchor="middle" font-weight="700" fill="#0f9d74">⑦ triggered (process what's there, stop) vs continuous</text>
+      <line x1="560" y1="288" x2="560" y2="262" stroke="#c2410c" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+      <line x1="745" y1="288" x2="745" y2="262" stroke="#c2410c" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#arr)"/>
+    </g>
+  </svg>
+  </div>
+  <div class="legend"><span><i style="background:#2f6fd6"></i>DE3 CDC</span><span><i style="background:#b7791f"></i>DE4 metadata</span><span><i style="background:#8a4fd8"></i>DE2 testing</span><span><i style="background:#c2410c"></i>DB4 Jobs</span><span><i style="background:#0f9d74"></i>DE1 streaming vs batch</span></div>
+  <h3>Read the map as cause and effect</h3>
+  <div class="tablewrap"><table>
+    <tr><th>If this link is weak…</th><th>…this is what breaks</th></tr>
+    <tr><td>① Ordering by arrival time instead of LSN</td><td>Silver is wrong on 40 tables at once, and every Gold table built from it inherits the error.</td></tr>
+    <tr><td>② Config isn't validated</td><td>One typo (<code>sequence_by: updated</code>) fails or silently corrupts a table. Remove an entry and the pipeline <b>drops that table</b> on the next update (see step 3).</td></tr>
+    <tr><td>③ Apply isn't idempotent</td><td>Kafka redelivers a batch and history gets duplicate versions. A late update brings a deleted customer back.</td></tr>
+    <tr><td>④/⑦ Wrong run mode</td><td>Continuous compute burns money around the clock for a 15-minute SLA, or a daily batch misses it.</td></tr>
+    <tr><td>⑥ Gold rescans Silver</td><td>Cost grows with table size instead of with the number of changes.</td></tr>
+  </table></div>
+</section>
+<!-- ============ 3. STEP 1 CAPTURE + BRONZE ============ -->
+<section class="lesson" data-title="Step 1 · Capture and land raw" data-min="5">
+  <div class="eyebrow">3 · Walkthrough step 1 of 7 · ~5 min</div>
+  <h2>Capture from the log, land it untouched</h2>
+  <p class="lead">The scenario is a mid-size US e-commerce company with Postgres for orders, customers, products and about 37 more tables. Debezium reads the WAL and publishes one change event per row change. Our job starts where those events land.</p>
+  <h3>What one change event looks like (flattened)</h3>
+  <p>Debezium's envelope has <code>before</code>, <code>after</code>, <code>op</code> and <code>source</code> metadata. Most teams flatten it in Bronze into the row's columns plus a few control columns:</p>
+  <div class="tablewrap"><table>
+    <tr><th>customer_id</th><th>email</th><th>city</th><th>op</th><th>lsn</th><th>_ingested_at</th></tr>
+    <tr><td>42</td><td>ana@x.com</td><td>Austin</td><td><code>c</code> (create)</td><td class="n">100</td><td>09:00:03</td></tr>
+    <tr><td>42</td><td>ana@x.com</td><td>Denver</td><td><code>u</code> (update)</td><td class="n">200</td><td>09:00:04</td></tr>
+    <tr><td>42</td><td><i>null</i></td><td><i>null</i></td><td><code>d</code> (delete, key from <code>before</code>)</td><td class="n">400</td><td>09:00:05</td></tr>
+  </table></div>
+  <p><code>op = 'r'</code> marks rows read during Debezium's initial snapshot. <code>lsn</code> is the Postgres log position, which is the source's own order of events. <code>_ingested_at</code> is when <i>we</i> received it, so it's useful for freshness and debugging but useless for ordering.</p>
+  <h3>The four hard problems, and where this system solves each one</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Problem (DE3)</th><th>Where it's handled here</th></tr>
+    <tr><td><b>Ordering</b>: Kafka orders only within a partition, and files and retries reorder events</td><td>Silver: <code>sequence_by = lsn</code> in <code>create_auto_cdc_flow</code>. Validated in the config contract test.</td></tr>
+    <tr><td><b>Duplicates</b>: transport is at-least-once</td><td>Silver: AUTO CDC is idempotent on <code>keys</code> + <code>sequence_by</code>. Bronze stays append-only and keeps them, which is fine because Bronze is the replay log.</td></tr>
+    <tr><td><b>Deletes</b>: <code>op='d'</code>, then a Kafka tombstone (null value)</td><td>Bronze drops null-value tombstones (they carry no row). Silver uses <code>apply_as_deletes = "op = 'd'"</code>. In SCD2 the current version gets closed instead of erased.</td></tr>
+    <tr><td><b>Late events</b>: an older change arrives after a newer one</td><td>Silver: sequencing puts it in the right slot in history. AUTO CDC keeps delete tombstones for a while (default two days, set with <code>pipelines.cdc.tombstoneGCThresholdInSeconds</code>) so a late update can't bring a deleted row back.</td></tr>
+  </table></div>
+  <h3>Bronze: append-only, with cheap structural expectations</h3>
+<div class="codewrap"><pre><code>@dp.table(name=f"bronze_{name}", comment=f"Raw Debezium change events for {name}. Append-only.")
+@dp.expect_all_or_drop({
+    "key_not_null": " AND ".join(f"{k} IS NOT NULL" for k in keys),
+    "valid_op":     "op IN ('c', 'u', 'd', 'r')",
+    "seq_not_null": f"{seq} IS NOT NULL",       # AUTO CDC does not support NULL sequence values
+})
+def bronze():
+    return spark.readStream.table(raw_source)      # Kafka or Auto Loader in production</code></pre></div>
+  <div class="note"><b>Why drop here and not fail?</b> A row with a null key or a null LSN can't be applied correctly anyway, so dropping it keeps the other 39 tables flowing. The drop counts show up in the pipeline <b>event log</b> (<code>flow_progress.data_quality</code>), and that's where you alert (Gerald's DB2). If a whole table starts dropping, that's an incident, not a data-quality metric.</div>
+  <h3>Check: where does it get solved?</h3>
+  <div id="whereQ"></div>
+  <p class="score" id="whereQScore"></p>
+</section>
+
+<!-- ============ 4. STEP 2 CONFIG ============ -->
+<section class="lesson" data-title="Step 2 · The config is the contract" data-min="5">
+  <div class="eyebrow">4 · Walkthrough step 2 of 7 · ~5 min</div>
+  <h2>One YAML entry per table, validated like code</h2>
+  <p class="lead">Forty tables share one shape: a key, an LSN, an op code, SCD1 or SCD2. That's exactly when a metadata-driven pipeline pays off (DE4). The config becomes the most important file in the repo, because one bad line now affects the whole pipeline.</p>
+<div class="codewrap"><pre><code># config/sources.yml  (in the bundle, reviewed by PR)
+defaults:
+  sequence_by: lsn
+  delete_marker: "op = 'd'"
+  exclude: [op, lsn, _ingested_at]
+  freshness_sla_min: 15
+
+tables:
+  - name: customers
+    keys: [customer_id]
+    scd_type: 2                 # history needed (address/tier changes)
+  - name: orders
+    keys: [order_id]
+    scd_type: 1                 # latest state is enough
+  - name: order_items
+    keys: [order_id, line_no]   # composite key
+    scd_type: 1
+  - name: products
+    keys: [product_id]
+    scd_type: 2
+    track_history: [price, name]   # per-table override</code></pre></div>
+  <div class="grid3">
+    <div class="card b2"><span class="tag t2">Where the config lives</span>
+      <ul>
+        <li><b>YAML in Git</b>: reviewed, versioned, deployed with the bundle. The best home for <i>definitions</i>.</li>
+        <li><b>UC control table</b>: queryable and editable without a deploy, but it needs its own change control. The best home for <i>runtime state</i> (watermarks, last success).</li>
+      </ul></div>
+    <div class="card b3"><span class="tag t3">Contract test on the config (CI)</span>
+      <ul>
+        <li>Every entry has <code>name</code>, a non-empty <code>keys</code>, and a <code>scd_type</code> of 1 or 2.</li>
+        <li>Keys and <code>sequence_by</code> exist in the source schema.</li>
+        <li><code>sequence_by</code> is on an allow-list of monotonic columns (<code>lsn</code>, or <code>struct(ts, lsn)</code>).</li>
+        <li>No entry was removed without an explicit <code>retired: true</code> (step 3 explains why).</li>
+      </ul></div>
+    <div class="card b4"><span class="tag t4">Fan-out: loop or For each?</span>
+      <ul>
+        <li><b>Loop inside the pipeline</b>: same-shaped tables, one dependency graph, lineage and expectations for free. Our Silver layer.</li>
+        <li><b>Job For each</b>: heterogeneous sources, per-item retries, a concurrency cap. Our Gold models.</li>
+      </ul></div>
+  </div>
+<div class="codewrap"><pre><code># tests/test_config_contract.py  (runs in CI, no Spark needed)
+import yaml
+
+MONOTONIC = {"lsn"}                 # allow-list; tie-breakers go in struct(...)
+SCHEMAS = load_source_schemas()     # e.g. exported from information_schema
+
+def test_every_entry_is_valid():
+    cfg = yaml.safe_load(open("config/sources.yml"))
+    for t in cfg["tables"]:
+        e = {**cfg["defaults"], **t}
+        cols = SCHEMAS[e["name"]]
+        assert e.get("keys"), f"{e['name']}: keys missing"
+        assert set(e["keys"]) &lt;= cols, f"{e['name']}: unknown key column"
+        assert e["scd_type"] in (1, 2), f"{e['name']}: scd_type must be 1 or 2"
+        assert e.get("sequence_by") in MONOTONIC, f"{e['name']}: sequence_by must be monotonic"</code></pre></div>
+  <div class="warn"><b>The over-engineering line (DE4):</b> once the YAML starts growing <code>if</code>s, custom SQL and per-table hacks, you're building an inner platform. Keep it thin: the standard CDC tables go through config, and the odd ones (a table without a PK, a JSON blob that needs parsing) get a hand-written flow in the same pipeline.</div>
+</section>
+
+<!-- ============ 5. STEP 3 SILVER ============ -->
+<section class="lesson" data-title="Step 3 · Silver: one loop, N AUTO CDC flows" data-min="7">
+  <div class="eyebrow">5 · Walkthrough step 3 of 7 · ~7 min</div>
+  <h2>The heart of it: a factory function per config entry</h2>
+  <p class="lead">This is where CDC (DE3), metadata (DE4) and Gerald's AUTO CDC (DB3) become one file. The pipeline reads the config once, then calls <code>build(entry)</code> for each table.</p>
+<div class="codewrap"><pre><code>from pyspark import pipelines as dp
+from pyspark.sql import functions as F
+
+def build(e):                                   # factory: every value is a parameter
+    name, keys, seq = e["name"], list(e["keys"]), e["sequence_by"]
+
+    @dp.table(name=f"bronze_{name}")
+    @dp.expect_all_or_drop({"key_not_null": " AND ".join(f"{k} IS NOT NULL" for k in keys),
+                            "valid_op": "op IN ('c','u','d','r')",
+                            "seq_not_null": f"{seq} IS NOT NULL"})
+    def bronze():
+        return spark.readStream.table(e["raw_table"])
+
+    dp.create_streaming_table(name=f"silver_{name}",
+                              comment=f"{name}: SCD{e['scd_type']} from Debezium via AUTO CDC")
+    dp.create_auto_cdc_flow(
+        target=f"silver_{name}",
+        source=f"bronze_{name}",
+        keys=keys,
+        sequence_by=F.col(seq),
+        apply_as_deletes=F.expr(e["delete_marker"]),
+        except_column_list=list(e["exclude"]),
+        stored_as_scd_type=int(e["scd_type"]),
+    )
+
+for entry in load_config():                       # outside dataset functions: OK to read files/tables here
+    build(entry)</code></pre></div>
+  <h3>Gotcha 1: the closure bug</h3>
+  <div class="grid3">
+    <div class="card" style="border-top:4px solid var(--bad)"><span class="tag" style="color:var(--bad)">Bug</span>
+<div class="codewrap"><pre><code>for e in entries:
+    @dp.table(name=f"bronze_{e['name']}")
+    def bronze():
+        # e is looked up when the pipeline
+        # evaluates the function, not now:
+        return spark.readStream.table(e["raw_table"])
+# 40 tables with different names,
+# all reading the LAST table's raw data</code></pre></div></div>
+    <div class="card" style="border-top:4px solid var(--ok)"><span class="tag" style="color:var(--ok)">Fix A: factory function</span>
+<div class="codewrap"><pre><code>def build(e):
+    @dp.table(name=f"bronze_{e['name']}")
+    def bronze():
+        return spark.readStream.table(e["raw_table"])
+
+for e in entries:
+    build(e)        # each call has its own e</code></pre></div></div>
+    <div class="card" style="border-top:4px solid var(--ok)"><span class="tag" style="color:var(--ok)">Fix B: default argument</span>
+<div class="codewrap"><pre><code>for e in entries:
+    @dp.table(name=f"bronze_{e['name']}")
+    def bronze(src=e["raw_table"]):
+        return spark.readStream.table(src)</code></pre></div></div>
+  </div>
+  <p>Pipeline functions are registered lazily and evaluated during planning, so a loop variable captured by reference resolves to its final value. Both fixes come from the Databricks docs ("Create tables in a <code>for</code> loop" and the metaprogramming tutorial). The factory is cleaner once you have more than one dataset per entry.</p>
+  <h3>Gotcha 2: the list must be additive</h3>
+  <div class="warn">The docs warn that if a dataset defined in an earlier run is missing from a later run, <b>the pipeline drops it from the target schema automatically</b>. In a config-driven pipeline, deleting a YAML entry (or a config read that silently returns an empty list) means the Silver table disappears. That's why the contract test refuses removals without <code>retired: true</code>, and why <code>load_config()</code> should fail loudly when it finds zero entries.</div>
+  <h3>What AUTO CDC gives you (and what it asks of you)</h3>
+  <div class="tablewrap"><table>
+    <tr><th>Concern</th><th>What happens</th></tr>
+    <tr><td>Out-of-order events</td><td>Ordered by <code>sequence_by</code>. In SCD2 the sequence values become <code>__START_AT</code> / <code>__END_AT</code>, and the current version has <code>__END_AT = NULL</code>.</td></tr>
+    <tr><td>Replays / duplicates</td><td>Documented as idempotent with respect to <code>keys</code> and <code>sequence_by</code>: applying the same change twice gives the same final state.</td></tr>
+    <tr><td>Ties</td><td>The sequence must give "one distinct update per key at each sequencing value". If commit timestamps can tie, use <code>sequence_by=F.struct("source_ts_ms", "lsn")</code>. The first field is compared first and the second breaks ties.</td></tr>
+    <tr><td>Deletes in SCD2</td><td>The current version is closed (<code>__END_AT</code> = the delete's sequence). History stays.</td></tr>
+    <tr><td>Track only some columns</td><td><code>track_history_column_list=[...]</code>. Changes to other columns update the current version in place (the <code>track_history</code> override in the YAML).</td></tr>
+    <tr><td>Initial snapshot</td><td>Debezium's <code>op='r'</code> rows flow through as upserts. For a backfill from a separate snapshot table there's a <code>once=True</code> flow (see the docs on replicating an RDBMS table).</td></tr>
+    <tr><td>Requirements</td><td>Serverless pipelines or the Pro/Advanced edition. NULL sequence values aren't supported, which is why the Bronze expectation exists.</td></tr>
+  </table></div>
+  <details class="qa"><summary>The hand-rolled alternative: MERGE with an LSN guard (when you're outside a pipeline)</summary>
+<div class="codewrap"><pre><code>MERGE INTO silver.customers AS t
+USING (SELECT * FROM batch
+       QUALIFY ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY lsn DESC) = 1) AS s
+ON t.customer_id = s.customer_id
+WHEN MATCHED AND s.lsn &gt; t.lsn AND s.op = 'd' THEN DELETE
+WHEN MATCHED AND s.lsn &gt; t.lsn THEN UPDATE SET *
+WHEN NOT MATCHED AND s.op != 'd' THEN INSERT *;</code></pre></div>
+  <p>This is SCD1 only. Once a row is hard-deleted, a late update has nothing to compare against and gets <b>re-inserted</b> (a "zombie row"). AUTO CDC's tombstones exist for exactly this case, and it's also why teams soft-delete when they roll their own. SCD2 written by hand is a lot more code. Say this in interviews: "I'd use the platform's CDC apply and keep MERGE for the edge cases."</p></details>
+  <h3>Check</h3>
+  <div id="silverQ"></div>
+  <p class="score" id="silverQScore"></p>
+</section>
+
+<!-- ============ 6. STEP 4 ORCHESTRATE ============ -->
+<section class="lesson" data-title="Step 4 · Orchestrate + streaming vs batch" data-min="5">
+  <div class="eyebrow">6 · Walkthrough step 4 of 7 · ~5 min</div>
+  <h2>A Lakeflow Job runs the pipeline, then fans out Gold</h2>
+  <p class="lead">The pipeline handles the 40 same-shaped Silver tables. The Job handles everything around it: when to run, whether the data is fresh enough to build Gold, and running the different Gold models in parallel (Gerald's DB4).</p>
+<div class="codewrap"><pre><code># resources/cdc_job.yml  (Declarative Automation Bundle)
+resources:
+  jobs:
+    cdc_silver_and_gold:
+      name: cdc_silver_and_gold
+      schedule:
+        quartz_cron_expression: "0 0/15 * * * ?"   # every 15 min
+        timezone_id: America/New_York
+      tasks:
+        - task_key: run_cdc_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.cdc_silver.id}   # triggered pipeline
+
+        - task_key: check_freshness             # sets task values: lag_min, gold_models
+          depends_on: [{task_key: run_cdc_pipeline}]
+          notebook_task: {notebook_path: ../src/check_freshness.py}
+
+        - task_key: is_fresh
+          depends_on: [{task_key: check_freshness}]
+          condition_task:
+            op: LESS_THAN_OR_EQUAL
+            left: "{{tasks.check_freshness.values.lag_min}}"
+            right: "15"
+
+        - task_key: build_gold
+          depends_on: [{task_key: is_fresh, outcome: "true"}]
+          for_each_task:
+            inputs: "{{tasks.check_freshness.values.gold_models}}"
+            concurrency: 4
+            task:
+              task_key: build_gold_model
+              notebook_task:
+                notebook_path: ../src/build_gold.py
+                base_parameters: {model: "{{input}}"}
+
+        - task_key: alert_stale
+          depends_on: [{task_key: is_fresh, outcome: "false"}]
+          notebook_task: {notebook_path: ../src/alert_stale.py}</code></pre></div>
+<div class="codewrap"><pre><code># src/check_freshness.py (a few lines)
+lag_min = spark.sql("""SELECT timestampdiff(MINUTE, max(_ingested_at), current_timestamp())
+                       FROM prod.cdc.bronze_orders""").first()[0]   # ingestion lag
+dbutils.jobs.taskValues.set(key="lag_min", value=int(lag_min))
+dbutils.jobs.taskValues.set(key="gold_models", value=["fct_orders", "dim_customer_current", "daily_revenue"])</code></pre></div>
+  <p>The If/else operators <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code> and <code>&lt;=</code> compare numerically, while <code>==</code> and <code>!=</code> compare strings (so <code>12.0 == 12</code> is false). That's one more reason to set <code>lag_min</code> as an int.</p>
+  <h3>Streaming vs batch, applied (DE1)</h3>
+  <div class="grid3">
+    <div class="card b4"><span class="tag t4">Triggered pipeline on a schedule</span>
+      <p>Each update processes everything that has arrived since the last checkpoint and then stops. It's still streaming tables and still incremental, but you pay only while it runs. With a 15-minute SLA, a 10–15 minute schedule (plus monitoring the run duration) is the default answer.</p></div>
+    <div class="card b4"><span class="tag t4">Continuous pipeline</span>
+      <p>Always on, so latency is seconds to minutes. Worth it when the business acts on the data within minutes (fraud, inventory) or when start-up overhead makes 15-minute runs impractical. You don't rewrite the code, you change the pipeline mode. In a continuous setup, the Job's Gold fan-out usually moves to table-update triggers.</p></div>
+  </div>
+  <div class="phrase"><b>The trade-off here is…</b> "the code is the same. Triggered versus continuous is a deployment setting, so I'd start triggered every 10–15 minutes, measure the end-to-end lag, and only move to continuous if the SLA tightens or the run overhead eats the window."</div>
+  <h3>Check: which mode?</h3>
+  <div id="modeQ"></div>
+  <p class="score" id="modeQScore"></p>
+</section>
+<!-- ============ 7. STEP 5 TESTS ============ -->
+<section class="lesson" data-title="Step 5 · Test it as code (CI)" data-min="5">
+  <div class="eyebrow">7 · Walkthrough step 5 of 7 · ~5 min</div>
+  <h2>Config bugs are multiplied by 40, so test before deploy</h2>
+  <p class="lead">DE2's pyramid maps neatly onto this system. AUTO CDC is platform code you don't unit test. What you test is <i>your</i> code: the config, the small transforms around the flow, and the wiring.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Layer</th><th>What it checks in this system</th><th>When</th></tr>
+    <tr><td><b>Config contract</b></td><td>keys exist, sequence is monotonic, SCD2 has a sequence, no silent removals</td><td>every PR, milliseconds</td></tr>
+    <tr><td><b>Unit (pytest)</b></td><td>pure functions: flatten the Debezium envelope, "latest change per key by max LSN" for the hand-rolled MERGE path, delete marking</td><td>every PR, seconds (local Spark or Databricks Connect)</td></tr>
+    <tr><td><b>Integration</b></td><td><code>bundle deploy -t dev</code>, run the pipeline on fixture events (insert, update, late, duplicate, delete), and assert on Silver</td><td>every PR or nightly, minutes</td></tr>
+    <tr><td><b>Runtime</b></td><td>Bronze expectations, drop counts and flow metrics in the event log, the freshness check in the Job</td><td>every run, in prod</td></tr>
+  </table></div>
+<div class="codewrap"><pre><code># src/cdc_transforms.py: pure logic, no reads or writes
+from pyspark.sql import DataFrame, Window, functions as F
+
+def latest_change_per_key(df: DataFrame, keys: list[str], seq: str = "lsn") -> DataFrame:
+    """Keep one change per key: the one with the highest sequence. Exact replays collapse."""
+    w = Window.partitionBy(*keys).orderBy(F.col(seq).desc())
+    return df.withColumn("_rn", F.row_number().over(w)).filter("_rn = 1").drop("_rn")</code></pre></div>
+<div class="codewrap"><pre><code># tests/test_cdc_transforms.py
+from pyspark.testing import assertDataFrameEqual
+from src.cdc_transforms import latest_change_per_key
+
+SCHEMA = "customer_id INT, city STRING, op STRING, lsn BIGINT"
+
+def test_latest_wins_even_if_it_arrives_first(spark):
+    events = spark.createDataFrame([(42, "Seattle", "u", 300),   # arrives first
+                                    (42, "Austin",  "c", 100),
+                                    (42, "Denver",  "u", 200),
+                                    (42, "Denver",  "u", 200)],  # duplicate
+                                   SCHEMA)
+    expected = spark.createDataFrame([(42, "Seattle", "u", 300)], SCHEMA)
+    assertDataFrameEqual(latest_change_per_key(events, ["customer_id"]), expected)
+
+def test_delete_is_the_latest_change(spark):
+    events = spark.createDataFrame([(7, "Boston", "c", 150), (7, None, "d", 500)], SCHEMA)
+    out = latest_change_per_key(events, ["customer_id"])
+    assert [r.op for r in out.collect()] == ["d"]      # the MERGE then deletes</code></pre></div>
+  <h3>CI on every pull request</h3>
+<div class="codewrap"><pre><code>pytest tests/                                     # config contract + unit tests
+databricks bundle validate -t dev
+databricks bundle deploy   -t dev
+databricks bundle run cdc_integration_test -t dev   # fixture events → assert Silver</code></pre></div>
+  <div class="okbox"><b>The connection to say out loud:</b> "Expectations catch bad <i>data</i>, unit tests catch bad <i>logic</i>, and in a metadata-driven system the contract test catches bad <i>config</i>, which is the bug with the biggest blast radius."</div>
+</section>
+
+<!-- ============ 8. STEP 6 CDF TO GOLD ============ -->
+<section class="lesson" data-title="Step 6 · Downstream: CDF to Gold" data-min="3">
+  <div class="eyebrow">8 · Walkthrough step 6 of 7 · ~3 min</div>
+  <h2>CDC again, this time inside the lakehouse</h2>
+  <p class="lead">Silver is now a CDC <i>target</i>. Gold shouldn't rescan 40 tables every 15 minutes, so it reads Silver's <b>Change Data Feed</b>: just the rows that changed. It's the same idea as Debezium, one layer later.</p>
+<div class="codewrap"><pre><code># a separate Gold pipeline (or a For-each Gold task) reading Silver's changes
+@dp.table(name="gold_customer_current_changes")
+def gold_customer_current_changes():
+    return (spark.readStream
+              .option("readChangeFeed", "true")
+              .table("prod.cdc.silver_customers")
+              .filter("_change_type IN ('insert', 'update_postimage')")
+              .filter("__END_AT IS NULL"))          # only versions that are current now</code></pre></div>
+  <div class="tablewrap"><table>
+    <tr><th>Fact (from the docs)</th><th>Why it matters here</th></tr>
+    <tr><td>CDF rows carry <code>_change_type</code> (<code>insert</code>, <code>update_preimage</code>, <code>update_postimage</code>, <code>delete</code>), <code>_commit_version</code> and <code>_commit_timestamp</code>.</td><td>Filter out the preimages unless you need "before" values.</td></tr>
+    <tr><td>You can read the CDF of an AUTO CDC target like any Delta table (DBR 15.2+), as long as it's published to Unity Catalog.</td><td>The SCD2 Silver tables can feed Gold incrementally.</td></tr>
+    <tr><td>For SCD2 targets, the CDF primary key is <code>keys</code> plus <code>coalesce(__START_AT, __END_AT)</code>, and a late event that moves <code>__START_AT</code> shows up as <code>delete</code> + <code>insert</code>.</td><td>A late event can rewrite history rows. Gold logic has to handle deletes, not just appends.</td></tr>
+    <tr><td>To <i>stream</i> from an AUTO CDC target you read its change feed (a documented limitation).</td><td>A plain <code>readStream</code> of Silver isn't the pattern here.</td></tr>
+  </table></div>
+  <p>For simple Gold aggregates, a <b>materialized view</b> over <code>silver_x WHERE __END_AT IS NULL</code> is often simpler. The engine refreshes it incrementally when it can. Use CDF when Gold needs the change events themselves (reverse ETL, audit feeds, downstream MERGEs).</p>
+</section>
+
+<!-- ============ 9. SIDEBARS ============ -->
+<section class="lesson" data-title="Step 7 · Sidebars: Snowflake and dbt" data-min="3">
+  <div class="eyebrow">9 · Walkthrough step 7 of 7 · ~3 min</div>
+  <h2>The same system in the other stacks US teams use</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Piece</th><th>Databricks (this lesson)</th><th>Snowflake</th><th>dbt</th></tr>
+    <tr><td>Change tracking on a table</td><td>Delta Change Data Feed (<code>readChangeFeed</code>)</td><td><b>Streams</b>: an offset on a table that returns the rows changed since you last consumed it (<code>METADATA$ACTION</code>, <code>METADATA$ISUPDATE</code>)</td><td>n/a (it reads tables)</td></tr>
+    <tr><td>Apply changes / SCD</td><td>AUTO CDC, SCD1/SCD2</td><td>A <b>Task</b> running a hand-written <code>MERGE</code> on a schedule or when the stream has data</td><td>Incremental model with <code>unique_key</code> (merge) ≈ SCD1. <b>Snapshots</b> (<code>strategy: timestamp</code> or <code>check</code>) ≈ SCD2.</td></tr>
+    <tr><td>Declarative, freshness-driven</td><td>Pipelines, triggered or continuous</td><td><b>Dynamic Tables</b> with a target lag</td><td>Models + <code>dbt build</code> on a schedule</td></tr>
+    <tr><td>Metadata-driven</td><td>Python loop over YAML / a control table</td><td>Stored procedures / Snowpark reading a config table</td><td>It <i>is</i> one: YAML sources/models, Jinja macros, packages</td></tr>
+    <tr><td>Tests in CI</td><td>pytest + bundles (<code>validate</code>, <code>deploy -t dev</code>)</td><td>Whatever the team builds around SQL</td><td><code>dbt test</code>, unit tests, contracts; slim CI with <code>state:modified+</code></td></tr>
+  </table></div>
+  <div class="note"><b>Interview use:</b> "Don't build your own framework if the platform already is one." dbt is a metadata-driven framework for SQL transforms. Lakeflow pipelines with AUTO CDC give you the CDC apply. Your config layer should only cover what neither gives you: which tables, keys, and SLAs.</div>
+  <div class="warn"><b>One honest contrast:</b> dbt snapshots compare the table's current state each time they run, so several changes between two runs collapse into one, and hard deletes are ignored unless you set <code>hard_deletes: invalidate</code> (or <code>new_record</code>; it replaces the legacy <code>invalidate_hard_deletes</code>). Log-based CDC with AUTO CDC sees every change in the log. If an interviewer pushes on "full history", this is the difference.</div>
+</section>
+<!-- ============ 10. HANDS-ON A: CONFIG EDITOR ============ -->
+<section class="lesson" data-title="Hands-on A · Config → pipeline generator" data-min="8">
+  <div class="eyebrow">10 · Hands-on A · ~8 min · in the browser</div>
+  <h2>Edit the YAML, watch the pipeline (and the contract test) react</h2>
+  <p class="lead">This is a toy version of the system: a contract test plus a code generator over a fake Postgres catalog. The starter config has bugs that a real CI run should catch. Fix them, then add a table.</p>
+  <div class="card">
+    <b>Missions</b> (they tick automatically and are saved):
+    <ol id="missions" style="margin:6px 0 0"></ol>
+  </div>
+  <details class="qa"><summary>Source catalog (what Debezium delivers per table)</summary>
+    <div class="tablewrap"><table class="srcschema" id="srcSchema"></table></div>
+    <p style="font-size:14px;color:var(--muted)">Every table also carries <code>op</code> (c/u/d/r), <code>lsn</code> (WAL position, strictly increasing), <code>source_ts_ms</code> (commit time, can tie), <code>updated_at</code> (set by the app, where present) and <code>_ingested_at</code> (arrival time in the lakehouse). Allowed fields: <code>name, keys, sequence_by, scd_type, delete_marker, exclude, track_history, freshness_sla_min</code>. <code>sequence_by</code> can be one column or a list like <code>[source_ts_ms, lsn]</code>, which becomes a <code>struct</code>.</p>
+  </details>
+  <div class="editor-grid">
+    <div>
+      <label for="yamlBox"><b>config/sources.yml</b></label>
+      <textarea id="yamlBox" class="yaml" spellcheck="false" aria-label="YAML config editor"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        <button class="btn primary small" id="yamlRun">▶ Validate &amp; generate</button>
+        <button class="btn small" id="yamlReset">↺ Starter config</button>
+      </div>
+    </div>
+    <div>
+      <b>Contract test (CI)</b>
+      <ul class="issues" id="yamlIssues"></ul>
+      <div class="note" id="yamlMode" style="font-size:14px"></div>
+    </div>
+  </div>
+  <div class="gen"><b>Generated pipeline code</b> (what the loop registers, unrolled so you can read it)
+    <div class="codewrap"><pre><code id="yamlCode"></code></pre></div>
+  </div>
+  <div class="note"><b>Notice:</b> one bad entry gets skipped and the rest still generate. In a real pipeline, a failing entry should fail the <i>CI run</i>, not be silently skipped at runtime, because skipping an entry that existed yesterday drops its table.</div>
+</section>
+
+<!-- ============ 11. HANDS-ON B: ORDERING PUZZLE ============ -->
+<section class="lesson" data-title="Hands-on B · CDC ordering puzzle" data-min="6">
+  <div class="eyebrow">11 · Hands-on B · ~6 min · in the browser</div>
+  <h2>Seven events, out of order: predict the SCD2 table</h2>
+  <p class="lead">These are the events in the order they <b>arrived</b>. One is a duplicate (at-least-once redelivery) and one is late. Silver is <code>create_auto_cdc_flow(keys=["customer_id"], sequence_by="lsn", apply_as_deletes="op = 'd'", stored_as_scd_type=2)</code>.</p>
+  <div class="evt" id="evtList"></div>
+  <div class="legend"><span><i style="background:var(--info-soft);border:1px solid var(--info)"></i>duplicate</span><span><i style="background:var(--warn-soft);border:1px solid var(--warn)"></i>late (older LSN, arrives last)</span><span><i style="background:var(--bad-soft);border:1px solid var(--bad)"></i>delete</span></div>
+  <h3>Part 1 · Click every row that ends up in <code>silver_customers</code></h3>
+  <div class="tablewrap"><table class="cand" id="candTable"></table></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn primary small" id="candCheck">Check my table</button>
+    <button class="btn small" id="candReset">↺ Clear</button>
+    <button class="btn small" id="stepBtn">Step through in LSN order ▸</button>
+  </div>
+  <div class="feedback" id="candFb" style="margin-top:10px"></div>
+  <div id="stepOut" style="margin-top:10px"></div>
+  <h3>Part 2 · Same events, other apply strategies (what happens to customer 42?)</h3>
+  <div id="puzzleQ"></div>
+  <p class="score" id="puzzleQScore"></p>
+</section>
+<!-- ============ 12. HANDS-ON C: FREE EDITION ============ -->
+<section class="lesson" data-title="Hands-on C · Build it in Free Edition" data-min="10">
+  <div class="eyebrow">12 · Hands-on C · ~10 min of typing + pipeline runs · Databricks Free Edition</div>
+  <h2>The real thing: control table → loop → AUTO CDC SCD2, in two pipeline updates</h2>
+  <p class="lead">Free Edition is serverless only, which AUTO CDC supports. It doesn't run Lakeflow Connect's CDC database connectors (their ingestion gateway needs classic compute), so we simulate Debezium with a Delta table of change events. The config lives in a <b>Unity Catalog control table</b> this time, to show the other option from step 2.</p>
+  <h3>Cell 1 · Notebook (serverless, Python): config + first batch of events</h3>
+<div class="codewrap"><pre><code>from pyspark.sql import functions as F
+
+spark.sql("CREATE SCHEMA IF NOT EXISTS workspace.cdc_lab")
+
+# 1) The control table = our sources.yml
+cfg = [
+    ("customers", "workspace.cdc_lab.customers_cdc_raw", ["customer_id"], "lsn", 2, "op = 'd'", ["op", "lsn", "_ingested_at"], 15),
+    ("orders",    "workspace.cdc_lab.orders_cdc_raw",    ["order_id"],    "lsn", 1, "op = 'd'", ["op", "_ingested_at"],        15),
+]
+(spark.createDataFrame(cfg, "name STRING, raw_table STRING, keys ARRAY&lt;STRING&gt;, sequence_by STRING, "
+                            "scd_type INT, delete_marker STRING, exclude ARRAY&lt;STRING&gt;, freshness_sla_min INT")
+      .write.mode("overwrite").saveAsTable("workspace.cdc_lab.cdc_sources"))
+
+# 2) Batch 1 of "Debezium" events, in ARRIVAL order (note the duplicate and the delete)
+CUST = "customer_id BIGINT, email STRING, city STRING, op STRING, lsn BIGINT"
+batch1 = [
+    (42, "ana@x.com", "Austin", "c", 100),
+    (7,  "ben@x.com", "Boston", "c", 150),
+    (42, "ana@x.com", "Denver", "u", 200),
+    (42, "ana@x.com", "Denver", "u", 200),   # duplicate (at-least-once redelivery)
+    (42, None,        None,     "d", 400),   # delete
+]
+(spark.createDataFrame(batch1, CUST).withColumn("_ingested_at", F.current_timestamp())
+      .write.mode("overwrite").saveAsTable("workspace.cdc_lab.customers_cdc_raw"))
+
+ORD = "order_id BIGINT, customer_id BIGINT, status STRING, total DOUBLE, op STRING, lsn BIGINT"
+orders1 = [(1001, 42, "PLACED", 50.0, "c", 110), (1002, 7, "PLACED", 20.0, "c", 170),
+           (1001, 42, "SHIPPED", 50.0, "u", 260)]
+(spark.createDataFrame(orders1, ORD).withColumn("_ingested_at", F.current_timestamp())
+      .write.mode("overwrite").saveAsTable("workspace.cdc_lab.orders_cdc_raw"))</code></pre></div>
+  <h3>Pipeline · New ETL pipeline (Python), default catalog <code>workspace</code>, schema <code>cdc_lab</code>, one source file</h3>
+<div class="codewrap"><pre><code>from pyspark import pipelines as dp
+from pyspark.sql import functions as F
+
+CONFIG_TABLE = "workspace.cdc_lab.cdc_sources"
+
+def load_config():
+    # Runs outside dataset functions, so collect() is allowed here.
+    rows = [r.asDict() for r in spark.read.table(CONFIG_TABLE).collect()]
+    if not rows:  # an empty config would make the pipeline drop every Silver table
+        raise ValueError(f"{CONFIG_TABLE} is empty: refusing to plan")
+    return rows
+
+def build(e):  # factory function: avoids the loop-closure bug
+    name, keys, seq = e["name"], list(e["keys"]), e["sequence_by"]
+
+    @dp.table(name=f"bronze_{name}", comment=f"Raw CDC events for {name} (append-only)")
+    @dp.expect_all_or_drop({
+        "key_not_null": " AND ".join(f"{k} IS NOT NULL" for k in keys),
+        "valid_op": "op IN ('c', 'u', 'd', 'r')",
+        "seq_not_null": f"{seq} IS NOT NULL",
+    })
+    def bronze():
+        return spark.readStream.table(e["raw_table"])
+
+    dp.create_streaming_table(name=f"silver_{name}",
+                              comment=f"{name}: SCD{e['scd_type']} via AUTO CDC")
+    dp.create_auto_cdc_flow(
+        target=f"silver_{name}",
+        source=f"bronze_{name}",
+        keys=keys,
+        sequence_by=F.col(seq),
+        apply_as_deletes=F.expr(e["delete_marker"]),
+        except_column_list=list(e["exclude"]),
+        stored_as_scd_type=int(e["scd_type"]),
+    )
+
+for entry in load_config():
+    build(entry)</code></pre></div>
+  <p>Click <b>Run pipeline</b> (a triggered update). The graph should show 4 datasets: <code>bronze_customers → silver_customers</code> and <code>bronze_orders → silver_orders</code>.</p>
+  <h3>Cell 2 · Notebook (SQL): check update 1</h3>
+<div class="codewrap"><pre><code>SELECT customer_id, email, city, __START_AT, __END_AT
+FROM workspace.cdc_lab.silver_customers
+ORDER BY customer_id, __START_AT;
+-- expected: 7 Boston 150→NULL · 42 Austin 100→200 · 42 Denver 200→400
+-- (one Denver row even though it arrived twice; 42 has no current row: deleted at 400)
+
+SELECT * FROM workspace.cdc_lab.silver_orders ORDER BY order_id;
+-- expected (SCD1): 1001 SHIPPED · 1002 PLACED</code></pre></div>
+  <h3>Cell 3 · Notebook (Python): batch 2: a late event, a normal update, a bad row</h3>
+<div class="codewrap"><pre><code>batch2 = [
+    (42,   "ana@x.com", "Seattle", "u", 300),   # LATE: older than the delete at 400
+    (7,    "ben@x.com", "Miami",   "u", 250),
+    (None, "x@x.com",   "Nowhere", "u", 500),   # null key, so the Bronze expectation drops it
+]
+(spark.createDataFrame(batch2, CUST).withColumn("_ingested_at", F.current_timestamp())
+      .write.mode("append").saveAsTable("workspace.cdc_lab.customers_cdc_raw"))   # append only!</code></pre></div>
+  <p>Run the pipeline again, then re-run Cell 2. Following the documented out-of-order semantics, you should see <b>5 rows</b>: <code>7 Boston 150→250</code>, <code>7 Miami 250→NULL</code>, <code>42 Austin 100→200</code>, <code>42 Denver 200→300</code>, <code>42 Seattle 300→400</code>. The late update slots in before the delete, and 42 stays deleted. In the pipeline UI, click <code>bronze_customers</code>: the data quality panel should show <b>1 dropped</b> record for <code>key_not_null</code>.</p>
+  <div class="warn"><b>Why "append only":</b> the Bronze streaming read expects an append-only source. If you re-run Cell 1 (which <i>overwrites</i>), the next update fails on the non-append change. Start over with <b>Full refresh all</b> on the pipeline after re-running Cell 1.</div>
+  <h3>Cell 4 · Notebook (Python): the unit test, no pytest needed here</h3>
+<div class="codewrap"><pre><code>from pyspark.sql import DataFrame, Window, functions as F
+from pyspark.testing import assertDataFrameEqual
+
+def latest_change_per_key(df: DataFrame, keys, seq="lsn") -&gt; DataFrame:
+    w = Window.partitionBy(*keys).orderBy(F.col(seq).desc())
+    return df.withColumn("_rn", F.row_number().over(w)).filter("_rn = 1").drop("_rn")
+
+def test_latest_wins_even_if_it_arrives_first():
+    s = "customer_id INT, city STRING, op STRING, lsn BIGINT"
+    ev = spark.createDataFrame([(42, "Seattle", "u", 300), (42, "Austin", "c", 100),
+                                (42, "Denver", "u", 200), (42, "Denver", "u", 200)], s)
+    assertDataFrameEqual(latest_change_per_key(ev, ["customer_id"]),
+                         spark.createDataFrame([(42, "Seattle", "u", 300)], s))
+
+test_latest_wins_even_if_it_arrives_first()
+print("passed")   # in CI the same function runs under pytest with a spark fixture</code></pre></div>
+  <h3>Cell 5 (optional) · Peek at Silver's change feed, which is what Gold would read</h3>
+<div class="codewrap"><pre><code>display(spark.read.option("readChangeFeed", "true").option("startingVersion", 0)
+        .table("workspace.cdc_lab.silver_customers")
+        .select("customer_id", "city", "__START_AT", "__END_AT", "_change_type", "_commit_version")
+        .orderBy("_commit_version", "customer_id"))
+# If this errors because the version range isn't readable, raise startingVersion
+# (see DESCRIBE HISTORY) and move on. The point is to see _change_type rows.</code></pre></div>
+  <p style="font-size:14px;color:var(--muted)">Clean-up when you're done: delete the pipeline (Free Edition allows one active pipeline per pipeline type), then <code>DROP SCHEMA workspace.cdc_lab CASCADE</code>.</p>
+  <h3>Checklist</h3>
+  <div id="hoChecks"></div>
+</section>
+
+<!-- ============ 13. INTERVIEW ============ -->
+<section class="lesson" data-title="Interview questions + tech-lead framing" data-min="7">
+  <div class="eyebrow">13 · Interview · ~7 min</div>
+  <h2>Five questions this system answers</h2>
+  <p class="lead">Try each one out loud first (60–90 seconds), then open the strong answer. Sunday's capstone pill takes Q1 all the way to Gold.</p>
+  <details class="qa"><summary>Q1 (system design) · "Design ingestion of 50 OLTP tables into a lakehouse with full history, deletes, and a 15-minute freshness SLA."</summary>
+    <p><b>Strong answer.</b> "I'd clarify three things first: do we need history for every table or just a few, can we read the database log, and what does '15 minutes' mean, end to end or to Silver? Assuming we can read the log, I'd use <b>log-based CDC</b> with Debezium or a managed connector. Query-based capture misses hard deletes and puts load on the source. Raw change events land in an <b>append-only Bronze</b> so we can always replay. Silver is <b>AUTO CDC</b>, keyed on the primary key and <b>sequenced by the LSN, not arrival time</b>, so duplicates and out-of-order events are harmless. I'd use SCD2 only where the business needs history and SCD1 elsewhere, because SCD2 everywhere costs storage and confuses consumers. Fifty same-shaped tables means <b>one config-driven pipeline</b>: a YAML entry per table with keys, SCD type and overrides, validated by a contract test in CI. For the SLA I'd run it <b>triggered every 10–15 minutes</b> rather than continuous, and alert on freshness and on expectation drop rates. I'd also plan the boring parts up front: a re-snapshot/backfill runbook for when the replication slot breaks, a schema-evolution policy, and a daily reconciliation of counts against the source."</p></details>
+  <details class="qa"><summary>Q2 (trade-off) · "When is a metadata-driven framework a bad idea?"</summary>
+    <p><b>Strong answer.</b> "When the sources don't share a shape. With eight tables that each have unique logic, config just hides <code>if source == 'x'</code> branches, and you've built an <b>inner platform</b> that's harder to debug than plain code. It's also a bad idea when nobody owns it. I'd keep it <b>thin</b>: standard CDC ingestion and Silver go through config, and Gold business logic stays hand-written. I'd add explicit escape hatches for odd tables, contract-test the config, and lean on platform features like AUTO CDC or dbt instead of writing my own merge engine. The success metric is that a new standard table is a one-file PR, and the failure signal is a YAML file that's started to look like a programming language."</p></details>
+  <details class="qa"><summary>Q3 (testing) · "How do you test a CDC pipeline before it reaches production?"</summary>
+    <p><b>Strong answer.</b> "In layers. A <b>contract test on the config</b> runs in milliseconds: keys exist, the sequence column is monotonic, SCD2 has a sequence, and no table disappears by accident. That one has the biggest blast radius. <b>Unit tests</b> with pytest and <code>assertDataFrameEqual</code> cover my own transforms, like envelope flattening and latest-per-key. Then an <b>integration run</b>: CI deploys the bundle to a dev target and runs the pipeline on fixture events I design to hurt, meaning an insert, updates, a duplicate, a late update and a delete, and asserts the exact SCD2 rows. In production, <b>expectations</b> on Bronze and freshness checks in the Job catch what tests can't: today's data."</p></details>
+  <details class="qa"><summary>Q4 (streaming vs batch) · "Your PM asks for 'real-time' CDC. Do you go continuous?"</summary>
+    <p><b>Strong answer.</b> "I'd ask what decision the data drives and how fast someone acts on it. If a dashboard is checked hourly, 'real-time' really means 'not stale', and a <b>triggered pipeline every 10–15 minutes</b> gives the same tables at a fraction of the cost, since compute only runs while there's work. The code doesn't change, because triggered versus continuous is a pipeline setting. So I'd ship triggered, measure end-to-end lag against the SLA, and switch to continuous only if a use case like fraud or inventory needs minutes or seconds and the cost is justified. I'd write that trade-off down so it's a decision, not a default."</p></details>
+  <details class="qa"><summary>Q5 (debugging) · "A customer deleted in Postgres reappeared in Silver. What happened, and how do you fix it?"</summary>
+    <p><b>Strong answer.</b> "Classic zombie row: a <b>late or duplicate update</b> arrived after the delete had been applied. With a hand-rolled <code>MERGE</code> and hard deletes there's no row left to compare the LSN against, so <code>WHEN NOT MATCHED … INSERT</code> brings it back. I'd confirm it from Bronze: the update's LSN is lower than the delete's, but it arrived later. Fixes, from best to least: switch to AUTO CDC, which keeps delete tombstones for a configurable window (<code>pipelines.cdc.tombstoneGCThresholdInSeconds</code>) longer than the maximum expected lateness; or soft-delete in Silver with an <code>is_deleted</code> flag and keep the LSN guard; and add a regression test with exactly that event order. Then I'd backfill the affected keys and check whether any Gold tables need a re-run."</p></details>
+  <h3>Tech-lead framing: a short STAR from your own work</h3>
+  <div class="card">
+    <div class="star">
+      <b>Situation</b><span>Pick one: your Python/AWS pipelines at Stack Tecnologias, or your code factory (an AI agent that maintains web scrapers, running on Airflow and Kubernetes in Azure). Choose whichever really had "many similar sources, one engine". Describe the real starting point in one sentence.</span>
+      <b>Task</b><span>What you were responsible for as tech lead, e.g. "make adding a source cheap without turning the platform into a black box."</span>
+      <b>Action</b><span>Your real decisions, in the vocabulary from today: one engine plus a config per source, explicit custom code for the odd ones, validation in CI, failures that name the source that broke. <i>(Only claim what you actually did.)</i></span>
+      <b>Result</b><span>One or two real figures (time to add a source, number of sources per engine, incidents avoided). If you don't have a number, say what changed qualitatively.</span>
+    </div>
+    <p style="margin-bottom:0">Then bridge: <i>"It's the same pattern I'd use for CDC on Databricks: config for the 80% of tables that share a shape, AUTO CDC for correctness, and hand-written code for the rest."</i> That turns your own story into a lakehouse answer. It also fits today's DE pill on incident and on-call stories: the zombie-row case in Q5 makes a good STAR.</p>
+  </div>
+  <div class="phrase"><b>English phrasing box</b>
+    <ul style="margin:6px 0 0">
+      <li>"<b>The trade-off here is</b> latency versus cost. Continuous buys us seconds we don't need."</li>
+      <li>"<b>I'd start with</b> a triggered pipeline every 15 minutes <b>and only move to</b> continuous <b>if</b> the SLA tightens."</li>
+      <li>"<b>The source of truth for ordering is</b> the LSN, <b>not</b> arrival time."</li>
+      <li>"The apply is <b>replay-safe</b>: we can reprocess a day of events and land on the same state."</li>
+      <li>"<b>I'd be careful not to over-engineer this.</b> For eight tables, plain code is easier to own."</li>
+    </ul></div>
+</section>
+
+<!-- ============ 14. SELF-CHECK ============ -->
+<section class="lesson" data-title="Self-check + the map again" data-min="4">
+  <div class="eyebrow">14 · Self-check · ~4 min</div>
+  <h2>Six questions, then the whole system on one screen</h2>
+  <div id="selfCheck"></div>
+  <p class="score" id="selfCheckScore"></p>
+  <button class="btn small" id="quizReset">↺ Reset answers</button>
+  <h3>The system, one more time</h3>
+  <div class="svgwrap" id="mapClone"></div>
+  <p><b>In one sentence:</b> capture from the log and land raw events, describe each table once in a validated config, let a loop generate AUTO CDC flows sequenced by LSN, test the config and code before deploy, run it triggered at the cadence the SLA needs, and feed Gold from Silver's change feed.</p>
+</section>
+
+<!-- ============ 15. GO DEEPER ============ -->
+<section class="lesson" data-title="Go deeper + what's next" data-min="1">
+  <div class="eyebrow">15 · Go deeper · official docs (all checked to load on 2026-11-20)</div>
+  <h2>Go deeper</h2>
+  <ul>
+    <li><a href="https://docs.databricks.com/aws/en/ldp/cdc" target="_blank" rel="noopener">The AUTO CDC APIs: simplify change data capture with pipelines</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/ldp/developer/ldp-python-ref-apply-changes" target="_blank" rel="noopener">create_auto_cdc_flow (Python reference)</a> and <a href="https://docs.databricks.com/aws/en/ldp/developer/ldp-python-ref-streaming-table" target="_blank" rel="noopener">create_streaming_table</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/data-engineering/what-is-cdc" target="_blank" rel="noopener">Change data capture and snapshots (concepts, SCD1/SCD2 semantics)</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/ldp/cdc-advanced" target="_blank" rel="noopener">Advanced AUTO CDC topics (reading the CDF of an AUTO CDC target)</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/ldp/best-practices/processing-guarantees" target="_blank" rel="noopener">Processing guarantees in Lakeflow pipelines (idempotency, duplicates)</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/ldp/developer/python-dev" target="_blank" rel="noopener">Develop pipeline code with Python (tables in a for loop)</a> and <a href="https://docs.databricks.com/aws/en/ldp/developer/ldp-metaprogramming" target="_blank" rel="noopener">metaprogramming tutorial</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/ldp/expectations" target="_blank" rel="noopener">Pipeline expectations</a> and <a href="https://docs.databricks.com/aws/en/ldp/monitor-event-logs" target="_blank" rel="noopener">the pipeline event log</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/ldp/concepts/pipeline-mode" target="_blank" rel="noopener">Triggered vs. continuous pipeline mode</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/jobs/tasks/for-each" target="_blank" rel="noopener">Jobs: For each task</a>, <a href="https://docs.databricks.com/aws/en/jobs/tasks/if-else" target="_blank" rel="noopener">If/else task</a>, <a href="https://docs.databricks.com/aws/en/jobs/task-values" target="_blank" rel="noopener">task values</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/tables/features/change-data-feed" target="_blank" rel="noopener">Use Delta change data feed</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/dev-tools/bundles/" target="_blank" rel="noopener">Declarative Automation Bundles</a> and <a href="https://docs.databricks.com/aws/en/dev-tools/bundles/resources" target="_blank" rel="noopener">bundle resources</a></li>
+    <li><a href="https://spark.apache.org/docs/latest/api/python/getting_started/testing_pyspark.html" target="_blank" rel="noopener">Testing PySpark (assertDataFrameEqual)</a> and <a href="https://docs.databricks.com/aws/en/dev-tools/databricks-connect/python/testing" target="_blank" rel="noopener">pytest with Databricks Connect</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/getting-started/free-edition-limitations" target="_blank" rel="noopener">Databricks Free Edition limitations</a></li>
+    <li><a href="https://debezium.io/documentation/reference/stable/connectors/postgresql.html" target="_blank" rel="noopener">Debezium connector for PostgreSQL</a></li>
+    <li><a href="https://docs.snowflake.com/en/user-guide/streams-intro" target="_blank" rel="noopener">Snowflake: introduction to streams</a> and <a href="https://docs.snowflake.com/en/user-guide/dynamic-tables/overview" target="_blank" rel="noopener">dynamic tables</a></li>
+    <li><a href="https://docs.getdbt.com/docs/build/snapshots" target="_blank" rel="noopener">dbt snapshots</a> and <a href="https://docs.getdbt.com/docs/build/incremental-models" target="_blank" rel="noopener">dbt incremental models</a></li>
+  </ul>
+  <div class="note"><b>What's next this weekend:</b> <b>Sat 11-21</b>, NJ's pill on <i>ingestion patterns</i> (full vs incremental, Fivetran/Airbyte vs Lakeflow Connect) zooms in on the box we simulated today, the "Debezium" on the far left of the map. <b>Sun 11-22</b> is the <i>system design capstone: near-real-time CDC from Postgres to Gold</i>. Q1 above is its warm-up, so try to deliver it in 5 minutes with the map in your head and no notes.</div>
+</section>
+
+</main>
+</div>
+<script>
+(function(){
+  "use strict";
+  var KEY = "dd-2026-11-20-de-config-driven-cdc-v1";
+  var state = {done:{}, current:0, mcq:{}, checks:{}, theme:null, yaml:null, cand:[], candChecked:false, step:-1};
+  function load(){ try{ var s = JSON.parse(localStorage.getItem(KEY) || "null"); if(s && typeof s === "object"){ for(var k in state){ if(s[k] !== undefined) state[k] = s[k]; } } }catch(e){} }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+  load();
+  if(!state.mcq || typeof state.mcq !== "object") state.mcq = {};
+  if(!Array.isArray(state.cand)) state.cand = [];
+
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+  var root = document.documentElement;
+  if(state.theme) root.setAttribute("data-theme", state.theme);
+  document.getElementById("themeBtn").addEventListener("click", function(){
+    var cur = root.getAttribute("data-theme") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    state.theme = cur === "dark" ? "light" : "dark"; root.setAttribute("data-theme", state.theme); save();
+  });
+
+  /* ---------- map clone ---------- */
+  var mapSrc = document.getElementById("mapSrc"), mapClone = document.getElementById("mapClone");
+  if(mapSrc && mapClone){ mapClone.innerHTML = mapSrc.innerHTML.replace(/id="arr"/g, 'id="arrB"').replace(/url\(#arr\)/g, "url(#arrB)"); }
+
+  /* ---------- sections, nav, progress ---------- */
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.lesson"));
+  var navList = document.getElementById("navList");
+  var sidebar = document.getElementById("sidebar");
+
+  sections.forEach(function(sec, i){
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = "#s" + (i+1);
+    a.innerHTML = '<span class="dot">✓</span><span>' + (i+1) + ". " + esc(sec.getAttribute("data-title")) + ' <small style="color:var(--muted)">· ' + sec.getAttribute("data-min") + "m</small></span>";
+    a.addEventListener("click", function(ev){ ev.preventDefault(); show(i); sidebar.classList.remove("open"); });
+    li.appendChild(a); navList.appendChild(li);
+
+    var foot = document.createElement("div");
+    foot.className = "footer-nav";
+    var lab = document.createElement("label"); lab.className = "done-label";
+    var cb = document.createElement("input"); cb.type = "checkbox"; cb.className = "doneBox"; cb.checked = !!state.done[i];
+    cb.addEventListener("change", function(){ state.done[i] = cb.checked; save(); refresh(); });
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(" Mark section complete"));
+    var btns = document.createElement("div"); btns.style.display = "flex"; btns.style.gap = "8px";
+    if(i > 0){ var p = document.createElement("button"); p.className = "btn"; p.textContent = "← Back"; p.addEventListener("click", function(){ show(i-1); }); btns.appendChild(p); }
+    if(i < sections.length - 1){ var n = document.createElement("button"); n.className = "btn primary"; n.textContent = "Complete & continue →"; n.addEventListener("click", function(){ state.done[i] = true; save(); show(i+1); }); btns.appendChild(n); }
+    else { var f = document.createElement("button"); f.className = "btn primary"; f.textContent = "Finish ✓"; f.addEventListener("click", function(){ state.done[i] = true; save(); refresh(); }); btns.appendChild(f); }
+    foot.appendChild(lab); foot.appendChild(btns); sec.appendChild(foot);
+  });
+
+  function show(i){
+    if(isNaN(i) || i < 0 || i >= sections.length) i = 0;
+    state.current = i; save();
+    sections.forEach(function(s, j){ s.classList.toggle("active", j === i); });
+    refresh();
+    window.scrollTo(0, 0);
+    try{ if(history.replaceState) history.replaceState(null, "", "#s" + (i+1)); }catch(e){}
+  }
+  function refresh(){
+    var links = navList.querySelectorAll("a");
+    var n = 0;
+    sections.forEach(function(s, j){
+      if(state.done[j]) n++;
+      links[j].classList.toggle("done", !!state.done[j]);
+      links[j].classList.toggle("active", j === state.current);
+      var cb = s.querySelector(".doneBox"); if(cb) cb.checked = !!state.done[j];
+    });
+    var pct = Math.round(100 * n / sections.length);
+    document.getElementById("pct").textContent = pct + "%";
+    document.getElementById("pctMobile").textContent = pct + "%";
+    document.getElementById("bar").style.width = pct + "%";
+    document.getElementById("barMobile").style.width = pct + "%";
+    document.getElementById("progMeta").textContent = n + " of " + sections.length + " sections complete";
+  }
+  document.getElementById("menuBtn").addEventListener("click", function(){ sidebar.classList.toggle("open"); });
+
+  /* ---------- multiple-choice banks ---------- */
+  var banks = {
+    recapQ: [
+      {q:"Which of the four topics is the <i>correctness</i> problem in \"40 Postgres tables to SCD2 Silver\"?", o:["Metadata-driven pipelines","CDC (ordering, duplicates, deletes, late events)","Streaming vs batch"], a:1,
+       why:"CDC decides whether Silver is <i>right</i>. Metadata makes it scale, tests make it safe to change, and the run mode sets latency and cost."},
+      {q:"Why does a config-driven pipeline make testing <i>more</i> important, not less?", o:["Because AUTO CDC has no tests","Because one config or template bug now breaks every table at once","Because YAML can't be versioned"], a:1,
+       why:"Shared code multiplies the blast radius. The upside is that one well-tested pattern protects all 40 tables."}
+    ],
+    whereQ: [
+      {q:"Kafka redelivers a batch, so the same <code>u</code> event for customer 42 (lsn 200) lands twice.", o:["Bronze expectation drops it","Silver: AUTO CDC is idempotent on keys + sequence","The Job's If/else skips the run"], a:1,
+       why:"Bronze is the append-only replay log, so duplicates are allowed there. The apply in Silver is where replay safety lives."},
+      {q:"An event arrives with <code>lsn = NULL</code>.", o:["Bronze expectation (drop + count)","Silver handles it with sequence_by","Gold filters it"], a:0,
+       why:"AUTO CDC doesn't support NULL sequence values, so catch it at the door with <code>seq_not_null</code> and watch the drop count in the event log."},
+      {q:"An update with lsn 300 arrives after the delete with lsn 400.", o:["Silver: sequencing + delete tombstones","Bronze expectation","Nothing can handle this"], a:0,
+       why:"AUTO CDC orders by LSN and keeps delete tombstones for a configurable window, so the late update goes into history and doesn't bring the row back."},
+      {q:"Someone sets <code>sequence_by: _ingested_at</code> for the orders table.", o:["Runtime expectation","The config contract test in CI","AUTO CDC fixes it automatically"], a:1,
+       why:"Nothing fails at runtime. The table is just silently ordered by arrival. Only a check on the config (an allow-list of monotonic columns) catches it before it ships."}
+    ],
+    silverQ: [
+      {q:"You define <code>@dp.table(name=f\"bronze_{e['name']}\")</code> directly inside <code>for e in entries:</code> and read <code>e['raw_table']</code> inside the function. What happens?", o:["Works fine","Tables get distinct names but all read the last entry's source","The pipeline refuses to start"], a:1,
+       why:"Lazy evaluation plus a late-binding closure. Fix it with a factory function (<code>build(e)</code>) or a default argument."},
+      {q:"A teammate removes the <code>products</code> entry from the YAML to \"pause\" it. Next update?", o:["silver_products keeps its data, it's just not refreshed","The pipeline drops the products datasets from the target schema","AUTO CDC archives it to a backup table"], a:1,
+       why:"The docs warn that the list must be additive: datasets missing from a later run get dropped. Pausing needs a different mechanism (e.g. a flag that keeps the definition but filters the source)."},
+      {q:"Commit timestamps (<code>source_ts_ms</code>) can tie for two changes to the same key. What should <code>sequence_by</code> be?", o:["source_ts_ms","F.struct(\"source_ts_ms\", \"lsn\")","_ingested_at"], a:1,
+       why:"A struct compares field by field, so the LSN breaks ties. AUTO CDC needs one distinct update per key at each sequence value."}
+    ],
+    modeQ: [
+      {q:"Finance dashboards on the orders Silver/Gold tables, checked a few times a day. SLA: 15 minutes.", o:["Continuous","Triggered every 10–15 min"], a:1,
+       why:"Same code and same incremental processing, but compute runs only while there's work. Measure the lag and alert on it."},
+      {q:"Inventory reservations: the checkout service reads stock levels from Gold and oversells if they're more than 1 minute stale.", o:["Continuous","Triggered every 10–15 min"], a:0,
+       why:"Minute-level freshness drives an operational decision, so always-on compute is worth paying for. Ask whether the lakehouse is even the right serving path, too."},
+      {q:"A nightly reconciliation of 40 Silver tables against Postgres row counts.", o:["Continuous","Triggered (scheduled batch)"], a:1,
+       why:"It's a once-a-day check, so there's nothing to keep warm."}
+    ],
+    puzzleQ: [
+      {q:"<b>Naive SCD1 MERGE</b> applied event by event in arrival order (think tiny micro-batches), no LSN guard (<code>WHEN MATCHED AND op='d' DELETE · WHEN MATCHED UPDATE · WHEN NOT MATCHED AND op!='d' INSERT</code>). Final state of customer 42?", o:["Absent (deleted)","Present as Seattle (a zombie)","Present as Denver"], a:1,
+       why:"Austin → Denver → delete → the duplicate Denver finds no row and gets <b>inserted</b> → the late Seattle updates it. The deleted customer is back."},
+      {q:"<b>LSN-guarded MERGE</b> (<code>s.lsn &gt; t.lsn</code>) with <b>hard</b> deletes, same event-by-event arrival order. Customer 42?", o:["Absent: the guard protects it","Still a zombie (Seattle)","Error: duplicate keys"], a:1,
+       why:"The guard only works while the row exists. After the hard delete there's no <code>t.lsn</code> to compare, so the duplicate (lsn 200) is re-inserted and the late Seattle (300 &gt; 200) updates it. Fixes: soft deletes or tombstones."},
+      {q:"<b>AUTO CDC SCD1</b> (<code>apply_as_deletes=\"op = 'd'\"</code>), with the late event inside the tombstone window (default two days). Customer 42?", o:["Absent","Present as Seattle","Present as Denver"], a:0,
+       why:"The delete's tombstone remembers lsn 400, so both the duplicate (200) and the late update (300) are older and don't recreate the row. That's the reason to set <code>pipelines.cdc.tombstoneGCThresholdInSeconds</code> above your maximum lateness."}
+    ],
+    selfCheck: [
+      {q:"Why is query-based CDC (<code>WHERE updated_at &gt; :hwm</code>) a weak choice for this scenario?", o:["It's slower to write","It misses hard deletes and intermediate updates, and depends on a reliable updated_at","It can't run on Databricks"], a:1,
+       why:"A row deleted between two polls never shows up, and two updates between polls look like one. The WAL sees all of them."},
+      {q:"In an SCD2 AUTO CDC target, what marks the current version of a key?", o:["is_current = true","__END_AT IS NULL","The highest _commit_version"], a:1,
+       why:"Sequence values propagate to <code>__START_AT</code>/<code>__END_AT</code>, and the active record has <code>__END_AT = NULL</code>."},
+      {q:"Which test catches \"orders is sequenced by arrival time\" before deploy?", o:["A Bronze expectation","The config contract test (monotonic allow-list)","assertDataFrameEqual on Gold"], a:1,
+       why:"It's a config bug, not a data or logic bug. Expectations can't see it because every row is valid."},
+      {q:"Silver is SCD2 via AUTO CDC. How should incremental Gold read it?", o:["A plain readStream of silver_customers","readStream with readChangeFeed=true (or an MV over current rows)","Full scan every 15 min"], a:1,
+       why:"To stream from an AUTO CDC target you read its change feed. For simple aggregates an MV over <code>__END_AT IS NULL</code> may be simpler."},
+      {q:"Silver uses a Python loop; Gold models differ a lot (different notebooks, retries per model). Best fan-out for Gold?", o:["Same pipeline loop","Job For each over task values (with concurrency)","One Job per model, hand-copied"], a:1,
+       why:"For each gives per-iteration retries and a concurrency cap over a list passed from a previous task."},
+      {q:"The If/else task compares <code>{{tasks.check_freshness.values.lag_min}}</code> <code>&lt;=</code> <code>15</code>. How is it compared?", o:["As strings","Numerically","It depends on the cluster"], a:1,
+       why:"<code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code> and <code>&lt;=</code> compare numerically. Only <code>==</code> and <code>!=</code> compare strings."}
+    ]
+  };
+  var scoreIds = {recapQ:"recapQScore", whereQ:"whereQScore", silverQ:"silverQScore", modeQ:"modeQScore", puzzleQ:"puzzleQScore", selfCheck:"selfCheckScore"};
+
+  function renderBank(name){
+    var el = document.getElementById(name); if(!el) return;
+    el.innerHTML = "";
+    if(!state.mcq[name]) state.mcq[name] = {};
+    var picks = state.mcq[name];
+    banks[name].forEach(function(s, i){
+      var box = document.createElement("div"); box.className = "scenario";
+      var q = document.createElement("div"); q.innerHTML = "<b>" + (i+1) + ".</b> " + s.q; box.appendChild(q);
+      var ch = document.createElement("div"); ch.className = "choices";
+      var fb = document.createElement("div"); fb.className = "feedback";
+      s.o.forEach(function(opt, k){
+        var b = document.createElement("button"); b.type = "button"; b.innerHTML = opt;
+        b.addEventListener("click", function(){ picks[i] = k; save(); paint(); });
+        ch.appendChild(b);
+      });
+      function paint(){
+        var pick = picks[i];
+        if(pick === undefined){ fb.className = "feedback"; return; }
+        Array.prototype.forEach.call(ch.children, function(b, k){
+          b.disabled = true;
+          b.classList.toggle("right", k === s.a);
+          b.classList.toggle("wrong", k === pick && k !== s.a);
+        });
+        fb.className = "feedback show " + (pick === s.a ? "good" : "bad");
+        fb.innerHTML = (pick === s.a ? "✅ <b>Right.</b> " : "❌ <b>Better answer: " + s.o[s.a] + ".</b> ") + s.why;
+        score(name);
+      }
+      box.appendChild(ch); box.appendChild(fb); el.appendChild(box);
+      paint();
+    });
+    score(name);
+  }
+  function score(name){
+    var items = banks[name], picks = state.mcq[name] || {}, got = 0, answered = 0;
+    items.forEach(function(s, i){ if(picks[i] !== undefined){ answered++; if(picks[i] === s.a) got++; } });
+    var el = document.getElementById(scoreIds[name]);
+    if(el) el.textContent = answered ? ("Score: " + got + " / " + items.length + (answered < items.length ? " (" + (items.length - answered) + " to go)" : "")) : "";
+  }
+  function renderAllBanks(){ Object.keys(banks).forEach(renderBank); }
+  document.getElementById("quizReset").addEventListener("click", function(){ state.mcq.selfCheck = {}; save(); renderBank("selfCheck"); });
+
+  /* ---------- Hands-on A: YAML config -> contract test -> generated code ---------- */
+  var CTRL = ["op", "lsn", "source_ts_ms", "_ingested_at"];
+  var CATALOG = {
+    customers:   {pk:["customer_id"], cols:["customer_id","email","city","tier","updated_at"]},
+    orders:      {pk:["order_id"], cols:["order_id","customer_id","status","total","updated_at"]},
+    order_items: {pk:["order_id","line_no"], cols:["order_id","line_no","product_id","qty","unit_price"]},
+    products:    {pk:["product_id"], cols:["product_id","sku","name","price","updated_at"]},
+    inventory:   {pk:["warehouse_id","product_id"], cols:["warehouse_id","product_id","on_hand","updated_at"]}
+  };
+  Object.keys(CATALOG).forEach(function(t){ CATALOG[t].all = CATALOG[t].cols.concat(CTRL); });
+  var FIELDS = ["name","keys","sequence_by","scd_type","delete_marker","exclude","track_history","freshness_sla_min"];
+  var STARTER = [
+    "# config/sources.yml: one entry per Postgres table (via Debezium)",
+    "- name: customers",
+    "  keys: [customer_id]",
+    "  sequence_by: lsn",
+    "  scd_type: 2",
+    "  delete_marker: \"op = 'd'\"",
+    "  exclude: [op, lsn, _ingested_at]",
+    "  freshness_sla_min: 15",
+    "",
+    "- name: orders",
+    "  keys: [order_id]",
+    "  sequence_by: _ingested_at",
+    "  scd_type: 1",
+    "  delete_marker: \"op = 'd'\"",
+    "  exclude: [op, _ingested_at]",
+    "  freshness_sla_min: 15",
+    "",
+    "- name: products",
+    "  keys: []",
+    "  scd_type: 2",
+    "  exclude: [lsn, _ingested_at]",
+    "  freshness_sla_min: 60",
+    ""
+  ].join("\n");
+
+  // schema reference table
+  (function(){
+    var t = document.getElementById("srcSchema");
+    var h = "<tr><th>table</th><th>primary key</th><th>row columns</th></tr>";
+    Object.keys(CATALOG).forEach(function(n){
+      h += "<tr><td><code>" + n + "</code></td><td><code>" + CATALOG[n].pk.join(", ") + "</code></td><td>" + CATALOG[n].cols.map(function(c){ return "<code>" + c + "</code>"; }).join(" ") + "</td></tr>";
+    });
+    t.innerHTML = h;
+  })();
+
+  function stripComment(line){
+    var q = null;
+    for(var i = 0; i < line.length; i++){
+      var c = line.charAt(i);
+      if(q){ if(c === q) q = null; }
+      else if(c === '"' || c === "'"){ q = c; }
+      else if(c === "#" && (i === 0 || /\s/.test(line.charAt(i-1)))){ return line.slice(0, i); }
+    }
+    return line;
+  }
+  function unquote(v){
+    v = v.trim();
+    if(v.length >= 2 && ((v.charAt(0) === '"' && v.charAt(v.length-1) === '"') || (v.charAt(0) === "'" && v.charAt(v.length-1) === "'"))) return v.slice(1, -1);
+    return v;
+  }
+  function scalar(v){
+    v = v.trim();
+    if(v === "") return "";
+    if(v.charAt(0) === "["){
+      if(v.charAt(v.length-1) !== "]") throw new Error("unclosed [ list");
+      var inner = v.slice(1, -1).trim();
+      if(inner === "") return [];
+      return inner.split(",").map(function(x){ return unquote(x); }).filter(function(x){ return x !== ""; });
+    }
+    if(/^-?\d+$/.test(v)) return parseInt(v, 10);
+    if(v === "true") return true;
+    if(v === "false") return false;
+    return unquote(v);
+  }
+  function parseYaml(text){
+    var lines = text.split("\n"), items = [], cur = null, pendingKey = null, errors = [];
+    lines.forEach(function(raw, idx){
+      var ln = idx + 1;
+      if(/\t/.test(raw)){ errors.push("line " + ln + ": tab character (YAML needs spaces)"); return; }
+      var line = stripComment(raw).replace(/\s+$/, "");
+      if(line.trim() === "") return;
+      var m;
+      try{
+        if((m = /^-\s*(.*)$/.exec(line))){
+          cur = {__line: ln}; items.push(cur); pendingKey = null;
+          var rest = m[1];
+          if(rest){ var kv = /^([A-Za-z_][\w]*)\s*:\s*(.*)$/.exec(rest); if(!kv) throw new Error("expected 'field: value' after '- '"); setKV(kv[1], kv[2], ln); }
+          return;
+        }
+        if(/^\S/.test(line)) throw new Error("expected '- name: …' to start a table entry (top level must be a list)");
+        if(!cur) throw new Error("indented line before any '- ' entry");
+        if((m = /^\s+-\s*(.+)$/.exec(line))){
+          if(!pendingKey) throw new Error("list item without a 'field:' above it");
+          cur[pendingKey].push(unquote(m[1])); return;
+        }
+        if((m = /^\s+([A-Za-z_][\w]*)\s*:\s*(.*)$/.exec(line))){ setKV(m[1], m[2], ln); return; }
+        throw new Error("can't read this line");
+      }catch(e){ errors.push("line " + ln + ": " + e.message); }
+    });
+    function setKV(k, v, ln){
+      if(Object.prototype.hasOwnProperty.call(cur, k)) throw new Error("duplicate field '" + k + "'");
+      if(v.trim() === ""){ cur[k] = []; pendingKey = k; }
+      else { cur[k] = scalar(v); pendingKey = null; }
+    }
+    return {items: items, errors: errors};
+  }
+  function asList(v){ return Array.isArray(v) ? v : (v === undefined || v === "" ? [] : [v]); }
+  function pyList(a){ return "[" + a.map(function(x){ return '"' + x + '"'; }).join(", ") + "]"; }
+
+  function validate(items){
+    var res = [], seen = {};
+    items.forEach(function(it){
+      var errs = [], warns = [], nm = it.name;
+      var label = nm ? "<code>" + esc(nm) + "</code>" : "entry at line " + it.__line;
+      Object.keys(it).forEach(function(k){ if(k !== "__line" && FIELDS.indexOf(k) === -1) warns.push("unknown field <code>" + esc(k) + "</code> (typo?). It will be ignored."); });
+      var cat = null;
+      if(!nm){ errs.push("missing <code>name</code>"); }
+      else if(!CATALOG[nm]){ errs.push("no source table <code>" + esc(nm) + "</code> in the catalog"); }
+      else { cat = CATALOG[nm]; if(seen[nm]) errs.push("duplicate entry: two flows would target <code>silver_" + esc(nm) + "</code>"); seen[nm] = true; }
+      var keys = asList(it.keys);
+      if(!keys.length) errs.push("missing key: <code>keys</code> is empty, so AUTO CDC can't match changes to rows");
+      else if(cat){
+        keys.forEach(function(k){ if(cat.all.indexOf(k) === -1) errs.push("key column <code>" + esc(k) + "</code> doesn't exist in " + esc(nm)); });
+        var missingPk = cat.pk.filter(function(k){ return keys.indexOf(k) === -1; });
+        if(missingPk.length && keys.every(function(k){ return cat.all.indexOf(k) !== -1; })) errs.push("keys aren't unique: the primary key is <code>(" + cat.pk.join(", ") + ")</code>; missing <code>" + missingPk.join(", ") + "</code>");
+        else if(!missingPk.length && keys.length > cat.pk.length) warns.push("keys are wider than the primary key <code>(" + cat.pk.join(", ") + ")</code>. Is that intended?");
+      }
+      var scd = it.scd_type;
+      if(scd !== 1 && scd !== 2) errs.push("<code>scd_type</code> must be 1 or 2" + (scd === undefined ? " (missing)" : ""));
+      var seq = asList(it.sequence_by);
+      if(!seq.length){
+        if(scd === 2) errs.push("<b>SCD2 without a sequence</b>: history needs an event order, and <code>sequence_by</code> is required by <code>create_auto_cdc_flow</code>. Use <code>lsn</code>");
+        else errs.push("missing <code>sequence_by</code>: it's required by <code>create_auto_cdc_flow</code> even for SCD1. Use <code>lsn</code>");
+      } else if(cat){
+        var hasLsn = seq.indexOf("lsn") !== -1;
+        seq.forEach(function(c){ if(cat.all.indexOf(c) === -1) errs.push("sequence column <code>" + esc(c) + "</code> doesn't exist in " + esc(nm)); });
+        var first = seq[0];
+        if(cat.all.indexOf(first) !== -1){
+          if(first === "_ingested_at") errs.push("<b>non-monotonic sequence</b>: <code>_ingested_at</code> is arrival time, not event order. Retries and replays reorder it. Use <code>lsn</code>");
+          else if(first === "updated_at") errs.push("<b>non-monotonic sequence</b>: <code>updated_at</code> is set by the application, can tie or go backwards (clock skew, manual fixes), and says nothing about deletes. Use <code>lsn</code>");
+          else if(first === "source_ts_ms" && !hasLsn) warns.push("<code>source_ts_ms</code> (commit time) can tie for two changes to one key. Use <code>[source_ts_ms, lsn]</code> (a struct) or just <code>lsn</code>");
+          else if(first !== "lsn" && first !== "source_ts_ms") errs.push("<b>non-monotonic sequence</b>: <code>" + esc(first) + "</code> isn't an ordering column. Use <code>lsn</code>");
+        }
+      }
+      if(it.delete_marker === undefined || it.delete_marker === "") warns.push("no <code>delete_marker</code>: Debezium deletes (<code>op = 'd'</code>) would be <b>upserted</b> as rows full of nulls instead of applied as deletes");
+      else if(String(it.delete_marker).indexOf("op") === -1) warns.push("<code>delete_marker</code> doesn't reference <code>op</code>. Are you sure that's how deletes are flagged?");
+      var exc = asList(it.exclude);
+      if(exc.indexOf("op") === -1) warns.push("<code>op</code> isn't excluded, so it becomes a column in Silver");
+      if(cat) exc.forEach(function(c){ if(cat.all.indexOf(c) === -1) warns.push("exclude column <code>" + esc(c) + "</code> doesn't exist"); });
+      keys.forEach(function(k){ if(exc.indexOf(k) !== -1) errs.push("key <code>" + esc(k) + "</code> is excluded: keys must stay in the target"); });
+      if(it.track_history !== undefined){
+        if(scd !== 2) errs.push("<code>track_history</code> only makes sense with <code>scd_type: 2</code>");
+        if(cat) asList(it.track_history).forEach(function(c){ if(cat.all.indexOf(c) === -1) errs.push("track_history column <code>" + esc(c) + "</code> doesn't exist"); });
+      }
+      var sla = it.freshness_sla_min;
+      if(sla === undefined) warns.push("no <code>freshness_sla_min</code>: defaulting to 15");
+      else if(typeof sla !== "number" || sla <= 0) errs.push("<code>freshness_sla_min</code> must be a positive integer");
+      res.push({it: it, label: label, errs: errs, warns: warns, keys: keys, seq: seq, exc: exc, sla: (typeof sla === "number" && sla > 0) ? sla : 15});
+    });
+    return res;
+  }
+
+  function gen(r){
+    var it = r.it, n = it.name;
+    var seqExpr = r.seq.length > 1 ? "F.struct(" + r.seq.map(function(c){ return '"' + c + '"'; }).join(", ") + ")" : 'F.col("' + r.seq[0] + '")';
+    var expKey = r.keys.map(function(k){ return k + " IS NOT NULL"; }).join(" AND ");
+    var out = [];
+    out.push("# ---- " + n + " (SCD" + it.scd_type + ") ----");
+    out.push('@dp.table(name="bronze_' + n + '")');
+    out.push("@dp.expect_all_or_drop({");
+    out.push('    "key_not_null": "' + expKey + '",');
+    out.push('    "valid_op": "op IN (\'c\', \'u\', \'d\', \'r\')",');
+    out.push('    "seq_not_null": "' + r.seq.map(function(c){ return c + " IS NOT NULL"; }).join(" AND ") + '",');
+    out.push("})");
+    out.push("def bronze_" + n + "():");
+    out.push('    return spark.readStream.table("raw.debezium.' + n + '")');
+    out.push("");
+    out.push('dp.create_streaming_table(name="silver_' + n + '")');
+    out.push("dp.create_auto_cdc_flow(");
+    out.push('    target="silver_' + n + '",');
+    out.push('    source="bronze_' + n + '",');
+    out.push("    keys=" + pyList(r.keys) + ",");
+    out.push("    sequence_by=" + seqExpr + ",");
+    if(it.delete_marker) out.push('    apply_as_deletes=F.expr("' + String(it.delete_marker).replace(/"/g, '\\"') + '"),');
+    if(r.exc.length) out.push("    except_column_list=" + pyList(r.exc) + ",");
+    out.push("    stored_as_scd_type=" + it.scd_type + ",");
+    if(it.track_history !== undefined) out.push("    track_history_column_list=" + pyList(asList(it.track_history)) + ",");
+    out.push(")");
+    return out.join("\n");
+  }
+
+  var yamlBox = document.getElementById("yamlBox");
+  yamlBox.value = (typeof state.yaml === "string") ? state.yaml : STARTER;
+  var missions = [
+    {t:"Fix every contract-test <b>error</b> in the starter config", ok:function(R){ return R.parsed && R.totalErr === 0 && R.res.length > 0; }},
+    {t:"Get to <b>zero warnings</b> too (deletes, <code>op</code>, defaults)", ok:function(R){ return R.parsed && R.totalErr === 0 && R.totalWarn === 0 && R.res.length > 0; }},
+    {t:"Add <code>order_items</code> as SCD1 with the right composite key and a valid sequence", ok:function(R){ return R.res.some(function(r){ return r.it.name === "order_items" && r.errs.length === 0 && r.it.scd_type === 1; }); }},
+    {t:"Bonus: add <code>inventory</code> as SCD2 sequenced by <code>[source_ts_ms, lsn]</code>", ok:function(R){ return R.res.some(function(r){ return r.it.name === "inventory" && r.errs.length === 0 && r.it.scd_type === 2 && r.seq.length === 2 && r.seq[0] === "source_ts_ms" && r.seq[1] === "lsn"; }); }}
+  ];
+  function runYaml(){
+    state.yaml = yamlBox.value; save();
+    var P = parseYaml(yamlBox.value);
+    var issues = document.getElementById("yamlIssues"), codeEl = document.getElementById("yamlCode"), modeEl = document.getElementById("yamlMode");
+    var html = "", R = {parsed: P.errors.length === 0, res: [], totalErr: 0, totalWarn: 0};
+    if(P.errors.length){
+      P.errors.forEach(function(e){ html += '<li class="err">YAML parse error · ' + esc(e) + "</li>"; });
+      issues.innerHTML = html; codeEl.textContent = "# fix the YAML syntax first"; modeEl.innerHTML = ""; paintMissions(R); return;
+    }
+    if(!P.items.length){
+      issues.innerHTML = '<li class="err"><b>Zero entries.</b> In a real pipeline an empty config would drop every Silver table on the next update. <code>load_config()</code> must fail loudly.</li>';
+      codeEl.textContent = "# nothing to generate"; modeEl.innerHTML = ""; paintMissions(R); return;
+    }
+    R.res = validate(P.items);
+    var code = ["from pyspark import pipelines as dp", "from pyspark.sql import functions as F", ""];
+    R.res.forEach(function(r){
+      R.totalErr += r.errs.length; R.totalWarn += r.warns.length;
+      r.errs.forEach(function(e){ html += '<li class="err">❌ ' + r.label + " · " + e + "</li>"; });
+      r.warns.forEach(function(w){ html += '<li class="wrn">⚠️ ' + r.label + " · " + w + "</li>"; });
+      if(!r.errs.length && !r.warns.length) html += '<li class="ok">✅ ' + r.label + " · passes</li>";
+      if(r.errs.length) code.push("# ---- SKIPPED " + (r.it.name || "entry@line" + r.it.__line) + ": " + r.errs.length + " contract error(s), and CI should fail here ----", "");
+      else code.push(gen(r), "");
+    });
+    issues.innerHTML = html;
+    codeEl.textContent = code.join("\n");
+    var ok = R.res.filter(function(r){ return !r.errs.length; });
+    if(ok.length){
+      var minSla = Math.min.apply(null, ok.map(function(r){ return r.sla; }));
+      var tight = ok.filter(function(r){ return r.sla === minSla; }).map(function(r){ return r.it.name; }).join(", ");
+      var msg;
+      if(minSla <= 5) msg = "Tightest SLA is <b>" + minSla + " min</b> (" + esc(tight) + "). That's close to the cost of starting a triggered update, so consider a <b>continuous</b> pipeline, or split the tight tables into their own pipeline so the other tables don't pay for it.";
+      else { var every = Math.max(5, Math.floor(minSla * 2 / 3)); msg = "Tightest SLA is <b>" + minSla + " min</b> (" + esc(tight) + ") → <b>triggered</b> pipeline, Job schedule about every <b>" + every + " min</b>, with an alert when lag goes over " + minSla + " min. Continuous isn't needed."; }
+      modeEl.innerHTML = "<b>Run mode (DE1):</b> " + msg;
+    } else modeEl.innerHTML = "";
+    paintMissions(R);
+  }
+  function paintMissions(R){
+    var ol = document.getElementById("missions"); ol.innerHTML = "";
+    missions.forEach(function(m){
+      var done = false; try{ done = !!m.ok(R); }catch(e){ done = false; }
+      var li = document.createElement("li"); li.innerHTML = (done ? "✅ " : "⬜ ") + m.t; if(done) li.style.color = "var(--ok)";
+      ol.appendChild(li);
+    });
+  }
+  var yamlTimer = null;
+  yamlBox.addEventListener("input", function(){ clearTimeout(yamlTimer); yamlTimer = setTimeout(runYaml, 350); });
+  yamlBox.addEventListener("keydown", function(ev){
+    if(ev.key === "Tab"){ ev.preventDefault(); var s = yamlBox.selectionStart, e = yamlBox.selectionEnd; yamlBox.value = yamlBox.value.slice(0, s) + "  " + yamlBox.value.slice(e); yamlBox.selectionStart = yamlBox.selectionEnd = s + 2; }
+  });
+  document.getElementById("yamlRun").addEventListener("click", runYaml);
+  document.getElementById("yamlReset").addEventListener("click", function(){ yamlBox.value = STARTER; runYaml(); });
+
+  /* ---------- Hands-on B: ordering puzzle ---------- */
+  var events = [
+    {t:"c · 42 · Austin · lsn 100", c:""},
+    {t:"c · 7 · Boston · lsn 150", c:""},
+    {t:"u · 42 · Denver · lsn 200", c:""},
+    {t:"d · 42 · lsn 400", c:"del"},
+    {t:"u · 42 · Denver · lsn 200 (again)", c:"dup"},
+    {t:"u · 7 · Miami · lsn 250", c:""},
+    {t:"u · 42 · Seattle · lsn 300", c:"late"}
+  ];
+  var evEl = document.getElementById("evtList");
+  events.forEach(function(e, i){ var s = document.createElement("span"); s.className = e.c; s.textContent = (i+1) + ". " + e.t; evEl.appendChild(s); });
+
+  var cands = [
+    {r:[42,"Austin","100","200"], ok:true,  why:"First version, closed when Denver starts at 200."},
+    {r:[42,"Denver","200","400"], ok:false, why:"This is the state <i>before</i> the late Seattle event arrives. Once it's applied, Denver ends at 300."},
+    {r:[42,"Denver","200","300"], ok:true,  why:"The duplicate lsn 200 doesn't add anything (idempotent on keys + sequence)."},
+    {r:[42,"Denver","200","300"], ok:false, why:"A second copy from the duplicate event. Replays don't create versions.", dup:true},
+    {r:[42,"Seattle","300","400"], ok:true, why:"The late event goes into history in its LSN slot and is closed by the delete at 400."},
+    {r:[42,"Seattle","300","NULL"], ok:false, why:"That's the zombie: the late update reviving a deleted customer. Sequencing prevents it."},
+    {r:[42,"(deleted)","400","NULL"], ok:false, why:"A delete closes the current version. It doesn't add a 'deleted' row."},
+    {r:[7,"Boston","150","250"], ok:true, why:"Closed by Miami at 250."},
+    {r:[7,"Miami","250","NULL"], ok:true, why:"Ben's current version (__END_AT IS NULL)."}
+  ];
+  var candTable = document.getElementById("candTable"), candFb = document.getElementById("candFb");
+  function renderCands(){
+    var h = "<tr><th></th><th>customer_id</th><th>city</th><th>__START_AT</th><th>__END_AT</th>" + (state.candChecked ? "<th>Why</th>" : "") + "</tr>";
+    candTable.innerHTML = h;
+    cands.forEach(function(c, i){
+      var tr = document.createElement("tr");
+      var sel = state.cand.indexOf(i) !== -1;
+      if(state.candChecked){ tr.className = c.ok ? (sel ? "right" : "missed") : (sel ? "wrongpick" : ""); }
+      else if(sel) tr.className = "sel";
+      tr.innerHTML = "<td>" + (sel ? "☑" : "☐") + "</td><td>" + c.r[0] + "</td><td>" + c.r[1] + (c.dup ? " <small>(copy)</small>" : "") + "</td><td>" + c.r[2] + "</td><td>" + c.r[3] + "</td>" + (state.candChecked ? "<td style='font-size:13px'>" + (c.ok ? "✅ in the table. " : "✗ not in the table. ") + c.why + "</td>" : "");
+      tr.addEventListener("click", function(){
+        if(state.candChecked) return;
+        var k = state.cand.indexOf(i); if(k === -1) state.cand.push(i); else state.cand.splice(k, 1);
+        save(); renderCands();
+      });
+      candTable.appendChild(tr);
+    });
+    if(state.candChecked){
+      var right = 0, wrong = 0, missed = 0;
+      cands.forEach(function(c, i){ var sel = state.cand.indexOf(i) !== -1; if(c.ok && sel) right++; else if(c.ok) missed++; else if(sel) wrong++; });
+      var perfect = (missed === 0 && wrong === 0);
+      candFb.className = "feedback show " + (perfect ? "good" : "bad");
+      candFb.innerHTML = (perfect ? "✅ <b>Exactly right: 5 rows.</b> " : "<b>" + right + " of 5 correct rows picked, " + wrong + " extra, " + missed + " missed.</b> ") +
+        "Same shape as the docs' SCD2 example: order by sequence, ignore exact replays, a late change goes into its slot, and a delete closes the current version. Customer 42 has no current row.";
+    } else { candFb.className = "feedback"; candFb.innerHTML = ""; }
+  }
+  document.getElementById("candCheck").addEventListener("click", function(){ state.candChecked = true; save(); renderCands(); });
+  document.getElementById("candReset").addEventListener("click", function(){ state.cand = []; state.candChecked = false; state.step = -1; save(); renderCands(); renderStep(); });
+
+  var steps = [
+    {e:"lsn 100 · c 42 Austin", rows:[["42","Austin","100","NULL"]]},
+    {e:"lsn 150 · c 7 Boston", rows:[["42","Austin","100","NULL"],["7","Boston","150","NULL"]]},
+    {e:"lsn 200 · u 42 Denver (its duplicate is the same lsn 200: no-op)", rows:[["42","Austin","100","200"],["42","Denver","200","NULL"],["7","Boston","150","NULL"]]},
+    {e:"lsn 250 · u 7 Miami", rows:[["42","Austin","100","200"],["42","Denver","200","NULL"],["7","Boston","150","250"],["7","Miami","250","NULL"]]},
+    {e:"lsn 300 · u 42 Seattle (arrived last, applied in its slot)", rows:[["42","Austin","100","200"],["42","Denver","200","300"],["42","Seattle","300","NULL"],["7","Boston","150","250"],["7","Miami","250","NULL"]]},
+    {e:"lsn 400 · d 42 (closes the current version)", rows:[["42","Austin","100","200"],["42","Denver","200","300"],["42","Seattle","300","400"],["7","Boston","150","250"],["7","Miami","250","NULL"]]}
+  ];
+  var stepOut = document.getElementById("stepOut");
+  function renderStep(){
+    if(state.step < 0){ stepOut.innerHTML = ""; return; }
+    var s = steps[state.step];
+    var h = "<div class='card'><b>Step " + (state.step+1) + " / " + steps.length + ":</b> " + s.e + "<div class='tablewrap'><table><tr><th>customer_id</th><th>city</th><th>__START_AT</th><th>__END_AT</th></tr>";
+    s.rows.forEach(function(r){ h += "<tr><td>" + r.join("</td><td>") + "</td></tr>"; });
+    h += "</table></div><small style='color:var(--muted)'>This shows the logical result in sequence order. The engine gets there no matter what order the events arrive in.</small></div>";
+    stepOut.innerHTML = h;
+  }
+  document.getElementById("stepBtn").addEventListener("click", function(){ state.step = (state.step + 1) % steps.length; save(); renderStep(); });
+
+  /* ---------- hands-on C checklist ---------- */
+  var checks = [
+    "Cell 1 ran: workspace.cdc_lab.cdc_sources has 2 rows; both *_cdc_raw tables exist",
+    "Pipeline graph shows bronze_customers → silver_customers and bronze_orders → silver_orders",
+    "Update 1: silver_customers = 3 rows (42 Austin 100→200, 42 Denver 200→400, 7 Boston 150→NULL); one Denver despite the duplicate",
+    "Update 1: silver_orders = 1001 SHIPPED, 1002 PLACED (SCD1)",
+    "Update 2: 5 rows; Denver now ends at 300 and Seattle 300→400 sits before the delete; 42 has no current row",
+    "Update 2: bronze_customers data quality shows 1 record dropped by key_not_null",
+    "Cell 4: the unit test printed 'passed'",
+    "Optional: looked at _change_type rows in Silver's change feed"
+  ];
+  var hc = document.getElementById("hoChecks");
+  function renderChecks(){
+    hc.innerHTML = "";
+    checks.forEach(function(c, i){
+      var l = document.createElement("label"); l.className = "check";
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!state.checks[i];
+      cb.addEventListener("change", function(){ state.checks[i] = cb.checked; save(); });
+      l.appendChild(cb); l.appendChild(document.createTextNode(c)); hc.appendChild(l);
+    });
+  }
+
+  document.getElementById("resetBtn").addEventListener("click", function(){
+    if(!window.confirm("Reset progress, answers, puzzle, config and checklist for this lesson?")) return;
+    state.done = {}; state.mcq = {}; state.checks = {}; state.cand = []; state.candChecked = false; state.step = -1; state.yaml = null; save();
+    yamlBox.value = STARTER; runYaml(); renderAllBanks(); renderCands(); renderStep(); renderChecks(); show(0);
+  });
+
+  /* ---------- copy buttons ---------- */
+  Array.prototype.forEach.call(document.querySelectorAll(".codewrap"), function(w){
+    var b = document.createElement("button"); b.className = "copy"; b.textContent = "Copy";
+    b.addEventListener("click", function(){
+      var txt = w.querySelector("pre").innerText;
+      var done = function(){ b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy"; }, 1200); };
+      if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done, function(){ b.textContent = "Select & copy"; }); }
+      else { b.textContent = "Select & copy"; }
+    });
+    w.appendChild(b);
+  });
+
+  renderAllBanks(); runYaml(); renderCands(); renderStep(); renderChecks();
+  var m = /^#s(\d+)$/.exec(location.hash || "");
+  show(m ? parseInt(m[1], 10) - 1 : (state.current || 0));
+})();
+</script>
+</body>
+</html>

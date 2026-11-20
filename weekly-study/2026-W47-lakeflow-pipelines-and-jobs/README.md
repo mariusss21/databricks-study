@@ -16,10 +16,14 @@ Pill files get linked here as they land.
 | Tue 2026-11-17 | [DB2: Pipeline expectations in practice and the pipeline event log](DB2-expectations-and-event-log.md) | [DE2: Testing data pipelines as code (unit, contract, integration, and CI)](DE2-testing-pipelines-as-code.md) |
 | Wed 2026-11-18 | [DB3: AUTO CDC for SCD Type 1 and Type 2 inside pipelines](DB3-auto-cdc-scd1-scd2.md) | [DE3: CDC end to end (capture, ordering, deletes, idempotent apply)](DE3-cdc-end-to-end.md) |
 | Thu 2026-11-19 | [DB4: Lakeflow Jobs deeper: parameters, task values, for-each, if/else, pipeline task](DB4-jobs-parameters-task-values-for-each.md) | [DE4: Metadata-driven pipelines (config-driven frameworks, and when they're over-engineering)](DE4-metadata-driven-pipelines.md) |
-| Fri 2026-11-20 | Monitoring and troubleshooting Jobs | Incident and on-call stories (STAR, tech-lead framing) |
+| Fri 2026-11-20 | Monitoring and troubleshooting Jobs | Incident and on-call stories (STAR, tech-lead framing) · [Deep dive: 40 Postgres tables, one config: CDC to SCD2 Silver with a config-driven Lakeflow pipeline, tested and orchestrated](deepdive-de-config-driven-cdc-pipeline.html) |
 | Sat 2026-11-21 | Lakeflow Connect: managed connectors | Ingestion patterns: full vs incremental, Fivetran/Airbyte vs Lakeflow Connect |
 | Sun 2026-11-22 | Recap: Connect to Declarative Pipelines to Jobs | System design capstone: near-real-time CDC Postgres to Gold |
 
 ## Deep dives (Zé Carlos)
 
 Linked here as they land.
+
+- **Data engineering, Fri 2026-11-20:** [Connection Deep Dive: 40 Postgres tables, one config: CDC to SCD2 Silver with a config-driven Lakeflow pipeline, tested and orchestrated](deepdive-de-config-driven-cdc-pipeline.html) ([brief from NJ in Dollar](deepdive-de-config-driven-cdc-pipeline-brief.md)). It connects this week's DE pills DE1–DE4 (CDC end to end, metadata-driven pipelines, testing pipelines as code, and streaming vs batch) into one system: ~40 Postgres tables via Debezium into a config-driven Lakeflow Declarative Pipeline (AUTO CDC SCD2 with expectations), run by a Lakeflow Job with If/else and For each, guarded by pytest and bundle CI, and feeding Gold through Silver's change data feed. Hands-on: an in-browser YAML config checker and code generator, a CDC ordering puzzle, and a Databricks Free Edition lab.
+
+The deep dives are self-contained HTML files. Download one and open it in a browser; GitHub's file view shows the source, not the rendered page.
