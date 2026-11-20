@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Weekly Cheat Sheet · 2026-W47 · Lakeflow pipelines and Jobs in depth</title>
+<style>
+  @page { size: A4 landscape; margin: 0; }
+  :root{
+    --db:#d9480f; --db-bg:#fff4ec;
+    --ai:#6741d9; --ai-bg:#f4f0ff;
+    --de:#0b7285; --de-bg:#e9f8fb;
+    --trap:#c92a2a; --trap-bg:#fff0f0;
+    --ink:#1b1f24; --mut:#5c6670; --line:#d0d5db;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#fff}
+  body{font-family:Inter,"Helvetica Neue",Arial,sans-serif;color:var(--ink);font-size:7.6pt;line-height:1.25;
+       -webkit-print-color-adjust:exact;print-color-adjust:exact}
+  code,.m{font-family:"Geist Mono","DejaVu Sans Mono",monospace;font-size:6.8pt;background:#eef1f4;padding:0 1.5px;border-radius:2px;white-space:nowrap}
+  .page{width:297mm;height:210mm;padding:4.5mm 6mm 3.5mm;display:grid;grid-template-rows:auto minmax(0,1fr) 61mm auto;gap:2mm;overflow:hidden}
+  /* header */
+  .hd{display:flex;align-items:center;gap:3mm;border-bottom:1.2pt solid var(--ink);padding-bottom:1.4mm}
+  .hd h1{font-size:14pt;letter-spacing:-.2pt;white-space:nowrap}
+  .hd .wk{font-size:8.5pt;color:var(--mut);white-space:nowrap}
+  .theme{flex:1;font-size:8.2pt;background:#f1f3f5;border-left:2.5pt solid var(--ink);padding:1mm 2mm;border-radius:0 2px 2px 0}
+  .theme b{font-size:8.4pt}
+  .legend{display:flex;gap:1.5mm;font-size:7pt;white-space:nowrap}
+  .chip{padding:.3mm 1.6mm;border-radius:8px;color:#fff;font-weight:700}
+  .chip.db{background:var(--db)}.chip.ai{background:var(--ai)}.chip.de{background:var(--de)}
+  /* three tracks */
+  .tracks{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:minmax(0,1fr);gap:2.2mm;min-height:0}
+  .card{border:1.1pt solid;border-radius:3px;padding:1.4mm 1.9mm 1.2mm;display:flex;flex-direction:column;gap:1mm;min-height:0;overflow:hidden}
+  .card.db{border-color:var(--db);background:linear-gradient(var(--db-bg),#fff 14mm)}
+  .card.ai{border-color:var(--ai);background:linear-gradient(var(--ai-bg),#fff 14mm)}
+  .card.de{border-color:var(--de);background:linear-gradient(var(--de-bg),#fff 14mm)}
+  .ch{display:flex;align-items:baseline;justify-content:space-between;gap:2mm}
+  .ch h2{font-size:10.5pt;letter-spacing:-.1pt}
+  .db .ch h2{color:var(--db)}.ai .ch h2{color:var(--ai)}.de .ch h2{color:var(--de)}
+  .ch .src{font-size:6.8pt;color:var(--mut);white-space:nowrap}
+  .one{font-weight:700;font-size:8.2pt}
+  .h{font-size:6.8pt;font-weight:800;letter-spacing:.6pt;text-transform:uppercase;color:var(--mut);margin-top:.3mm}
+  ul{list-style:none}
+  ul.d li{padding-left:2.2mm;position:relative;margin-bottom:.45mm}
+  ul.d li:before{content:"▸";position:absolute;left:0;font-size:5.5pt;top:.5pt}
+  .db ul.d li:before{color:var(--db)}.ai ul.d li:before{color:var(--ai)}.de ul.d li:before{color:var(--de)}
+  b.t{font-weight:800}
+  svg{display:block;width:100%;height:auto;flex:none}
+  .trap{background:var(--trap-bg);border-left:2pt solid var(--trap);padding:.8mm 1.6mm;border-radius:0 2px 2px 0}
+  .trap li{padding-left:2.4mm;position:relative;margin-bottom:.4mm}
+  .trap li:before{content:"✖";position:absolute;left:0;color:var(--trap);font-size:5.5pt;top:.4pt}
+  .trap .h{color:var(--trap);margin:0 0 .4mm}
+  .recall{margin-top:auto;font-size:7.2pt;color:var(--mut);border-top:.6pt dashed var(--line);padding-top:.6mm}
+  .recall b{color:var(--ink)}
+  table{border-collapse:collapse;width:100%}
+  th,td{padding:.25mm 1mm;text-align:left;vertical-align:top;border:.5pt solid var(--line)}
+  th{background:#f1f3f5;font-size:6.8pt;letter-spacing:.3pt}
+  .tbl-db th{background:var(--db-bg)}.tbl-ai th{background:var(--ai-bg)}
+  /* bottom row */
+  .bottom{display:grid;grid-template-columns:2.15fr 1fr;gap:2.2mm}
+  .box{border:1.1pt solid var(--ink);border-radius:3px;padding:1.1mm 1.9mm;overflow:hidden;min-height:0}
+  .box h2{font-size:10pt;margin-bottom:.8mm;display:flex;justify-content:space-between;align-items:baseline}
+  .box h2 small{font-size:7pt;font-weight:500;color:var(--mut)}
+  .dc td:first-child{font-weight:800;width:31mm}
+  .dc td:nth-child(2),.dc td:nth-child(3){width:40%}
+  .tg{display:inline-block;font-size:6pt;font-weight:800;color:#fff;border-radius:6px;padding:0 1.2mm;margin-right:.6mm;vertical-align:1px}
+  .tg.db{background:var(--db)}.tg.ai{background:var(--ai)}.tg.de{background:var(--de)}.tg.x{background:#495057}
+  ol.q{padding-left:3.2mm}
+  ol.q li{margin-bottom:.8mm}
+  .foot{display:flex;justify-content:space-between;gap:4mm;font-size:6.5pt;color:var(--mut);border-top:.6pt solid var(--line);padding-top:.7mm}
+  .key{background:#fff8db;border:.6pt solid #f0c36d;border-radius:2px;padding:.5mm 1.5mm;margin-top:.8mm;font-size:7.2pt}
+  .key b{color:#7a5300}
+  .key span{display:inline-block;transform:none}
+</style>
+</head>
+<body>
+<div class="page" id="page">
+
+  <div class="hd">
+    <div><h1>Weekly Cheat Sheet</h1><div class="wk">2026-W47 · 16 – 22 Nov</div></div>
+    <div class="theme"><b>Theme: Lakeflow pipelines and Jobs in depth.</b> 40 Postgres tables → SCD2 Silver. Ask of every pipeline:
+      <b>① ordered by what? ② is a replay safe? ③ run how often, at what cost?</b>
+      AI track = evals: <b>every instrument has its own error</b>, so measure it too.</div>
+    <div class="legend"><span class="chip db">DATABRICKS · Gerald</span><span class="chip ai">AI ENG · Jack</span><span class="chip de">DATA ENG · NJ</span></div>
+  </div>
+
+  <div class="tracks">
+
+    <!-- DATABRICKS -->
+    <section class="card db">
+      <div class="ch"><h2>Databricks · Associate cert</h2><span class="src">Mon 16 Nov deep dive * + docs</span></div>
+      <div class="one">Pipeline = what to compute (ST · MV · AUTO CDC); Job = when, which branch, what to repair.</div>
+      <svg viewBox="0 0 330 64" role="img" aria-label="Flow: bronze streaming table, AUTO CDC, silver streaming table, gold materialized view, Job"><defs><marker id="ar1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0L8,4L0,8z" fill="#495057"/></marker></defs><g font-family="Inter,Arial,sans-serif" text-anchor="middle"><rect x="1" y="2" width="58" height="32" rx="4" fill="#f1f3f5" stroke="#868e96"/><text x="30.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">bronze ST</text><text x="30.0" y="23.0" font-size="7.6">append-only</text><rect x="68" y="2" width="58" height="32" rx="4" fill="#fff4ec" stroke="#d9480f"/><text x="97.0" y="13" font-weight="700" font-size="8.8" fill="#d9480f">AUTO CDC</text><text x="97.0" y="23.0" font-size="7.6">SEQUENCE BY</text><rect x="135" y="2" width="60" height="32" rx="4" fill="#fff4ec" stroke="#d9480f"/><text x="165.0" y="13" font-weight="700" font-size="8.8" fill="#d9480f">silver ST</text><text x="165.0" y="23.0" font-size="7.6">SCD1 · SCD2</text><rect x="204" y="2" width="58" height="32" rx="4" fill="#fff4ec" stroke="#d9480f"/><text x="233.0" y="13" font-weight="700" font-size="8.8" fill="#d9480f">gold MV</text><text x="233.0" y="23.0" font-size="7.6">recomputed</text><rect x="271" y="2" width="58" height="32" rx="4" fill="#ebfbee" stroke="#2f9e44"/><text x="300.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">Job</text><text x="300.0" y="23.0" font-size="7.6">if/else · repair</text><path d="M60,18H66" stroke="#495057" stroke-width="1.3" marker-end="url(#ar1)"/><path d="M127,18H133" stroke="#495057" stroke-width="1.3" marker-end="url(#ar1)"/><path d="M196,18H202" stroke="#495057" stroke-width="1.3" marker-end="url(#ar1)"/><path d="M263,18H269" stroke="#495057" stroke-width="1.3" marker-end="url(#ar1)"/><path d="M300,34 V40 H30 V36" fill="none" stroke="#2f9e44" stroke-width="1.3" stroke-dasharray="3 2" marker-end="url(#ar1)"/><text x="165" y="51.5" font-size="7.8" fill="#2b8a3e" font-weight="700">triggered: refresh what’s there, stop · continuous: keep fresh</text><text x="165" y="62" font-size="8" fill="#c92a2a" font-weight="700">NULL sequence value → not supported by AUTO CDC</text></g></svg>
+      <ul class="d">
+        <li><b class="t">Streaming table</b>: each record processed once; append-only source ✓</li>
+        <li><b class="t">Materialized view</b>: recomputed to current state; aggregations, joins ✓</li>
+        <li><b class="t">AUTO CDC</b> (ex <code>APPLY CHANGES</code>): CDC feed → SCD1/2 target ✓</li>
+        <li><b class="t"><code>SEQUENCE BY</code></b>: sortable order column; <code>STRUCT(ts, id)</code> breaks ties ✓</li>
+        <li><b class="t">Repair run</b>: re-runs unsuccessful tasks + their dependents ✓</li>
+      </ul>
+      <div class="h">Pipeline mode ✓</div>
+      <table class="tbl-db">
+        <tr><td><b>Triggered</b></td><td>stops when done</td><td>every 10 min · hourly · daily</td></tr>
+        <tr><td><b>Continuous</b></td><td>runs until stopped</td><td>10 s – a few minutes</td></tr>
+      </table>
+      <div class="trap"><div class="h">Exam traps</div><ul>
+        <li>Job mode <b>overrides</b> pipeline mode; prefer a continuous job ✓</li>
+        <li>If/else: <code>==</code> / <code>!=</code> compare <b>strings</b> (<code>12.0 == 12</code> false); <code>&lt; &gt;</code> numeric ✓</li>
+        <li>Repair ≠ idempotent: partial append + repair = duplicates ✓</li>
+      </ul></div>
+      <div class="recall"><b>Recall:</b> ST vs MV vs view · triggered vs continuous · repair scope.</div>
+    </section>
+
+    <!-- AI -->
+    <section class="card ai">
+      <div class="ch"><h2>AI Engineering</h2><span class="src">Wed 18 Nov deep dive</span></div>
+      <div class="one">An eval isn’t a test suite, it’s a measurement loop: validate every instrument.</div>
+      <svg viewBox="0 0 330 64" role="img" aria-label="Eval loop: traces, error analysis, graders, dataset, CI gate, back via production sampling"><defs><marker id="ar2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0L8,4L0,8z" fill="#495057"/></marker></defs><g font-family="Inter,Arial,sans-serif" text-anchor="middle"><rect x="1" y="2" width="58" height="32" rx="4" fill="#f1f3f5" stroke="#868e96"/><text x="30.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">traces</text><text x="30.0" y="23.0" font-size="7.6">logged trials</text><rect x="68" y="2" width="58" height="32" rx="4" fill="#f4f0ff" stroke="#6741d9"/><text x="97.0" y="13" font-weight="700" font-size="8.2" fill="#1b1f24">error analysis</text><text x="97.0" y="23.0" font-size="7.6">→ taxonomy</text><rect x="135" y="2" width="60" height="32" rx="4" fill="#f4f0ff" stroke="#6741d9"/><text x="165.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">graders</text><text x="165.0" y="23.0" font-size="7.6">code → judge</text><rect x="204" y="2" width="58" height="32" rx="4" fill="#f4f0ff" stroke="#6741d9"/><text x="233.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">dataset</text><text x="233.0" y="23.0" font-size="7.6">versioned table</text><rect x="271" y="2" width="58" height="32" rx="4" fill="#ebfbee" stroke="#2f9e44"/><text x="300.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">CI gate</text><text x="300.0" y="23.0" font-size="7.6">reg · capability</text><path d="M60,18H66" stroke="#495057" stroke-width="1.3" marker-end="url(#ar2)"/><path d="M127,18H133" stroke="#495057" stroke-width="1.3" marker-end="url(#ar2)"/><path d="M196,18H202" stroke="#495057" stroke-width="1.3" marker-end="url(#ar2)"/><path d="M263,18H269" stroke="#495057" stroke-width="1.3" marker-end="url(#ar2)"/><path d="M300,34 V40 H30 V36" fill="none" stroke="#2f9e44" stroke-width="1.3" stroke-dasharray="3 2" marker-end="url(#ar2)"/><text x="165" y="51.5" font-size="7.8" fill="#2b8a3e" font-weight="700">production sampling → escapes become new tasks</text><text x="165" y="62" font-size="8" fill="#c92a2a" font-weight="700">grading the transcript (“booked!”), not the outcome</text></g></svg>
+      <ul class="d">
+        <li><b class="t">Task · trial · transcript · outcome</b>: test case · one attempt · full record · final env state ✓</li>
+        <li><b class="t">Grader</b>: logic scoring one aspect: code, model or human ✓</li>
+        <li><b class="t">Error analysis</b>: open → axial coding → counted taxonomy; stop at saturation ◦</li>
+        <li><b class="t">LLM judge</b>: narrow, binary, critique first; report TPR/TNR + kappa on frozen test ◦</li>
+        <li><b class="t">pass@k / pass^k</b>: ≥1 of k trials succeeds / all k succeed ✓</li>
+        <li><b class="t">Capability / regression eval</b>: “can it?” / “still can?” (~100 % pass) ✓</li>
+        <li><b class="t">Gates</b>: regression blocks any new failure; capability = paired, clustered test ◦</li>
+      </ul>
+      <div class="trap"><div class="h">Traps</div><ul>
+        <li>5 % defects: an always-“pass” judge scores 95 % agreement, catches nothing ◦</li>
+        <li>200 tasks at 80 % → 95 % CI ≈ ±5.5 pts: a +2 is noise (illustrative) ◦</li>
+        <li>Grader bugs: CORE-Bench 42 % → 95 % after fixing grading and specs ✓</li>
+      </ul></div>
+      <div class="recall"><b>Recall:</b> the loop’s stages · pass@k vs pass^k · TPR/TNR, not agreement.</div>
+    </section>
+
+    <!-- DE -->
+    <section class="card de">
+      <div class="ch"><h2>Data Eng · US senior interviews</h2><span class="src">Fri 20 Nov deep dive</span></div>
+      <div class="one">Correct (LSN) · at scale (config) · safe (tests) · right-sized (triggered).</div>
+      <svg viewBox="0 0 330 64" role="img" aria-label="Flow: Postgres WAL, Debezium, Bronze, Silver AUTO CDC per config entry, Gold reads CDF"><defs><marker id="ar3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0L8,4L0,8z" fill="#495057"/></marker></defs><g font-family="Inter,Arial,sans-serif" text-anchor="middle"><rect x="1" y="2" width="58" height="32" rx="4" fill="#f1f3f5" stroke="#868e96"/><text x="30.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">Postgres</text><text x="30.0" y="23.0" font-size="7.6">WAL · LSN</text><rect x="68" y="2" width="58" height="32" rx="4" fill="#e9f8fb" stroke="#0b7285"/><text x="97.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">Debezium</text><text x="97.0" y="23.0" font-size="7.6">op c/u/d/r</text><rect x="135" y="2" width="60" height="32" rx="4" fill="#e9f8fb" stroke="#0b7285"/><text x="165.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">bronze</text><text x="165.0" y="23.0" font-size="7.6">append-only</text><rect x="204" y="2" width="58" height="32" rx="4" fill="#e9f8fb" stroke="#0b7285"/><text x="233.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">silver</text><text x="233.0" y="23.0" font-size="7.6">AUTO CDC</text><rect x="271" y="2" width="58" height="32" rx="4" fill="#ebfbee" stroke="#2f9e44"/><text x="300.0" y="13" font-weight="700" font-size="8.8" fill="#1b1f24">gold</text><text x="300.0" y="23.0" font-size="7.6">reads CDF</text><path d="M60,18H66" stroke="#495057" stroke-width="1.3" marker-end="url(#ar3)"/><path d="M127,18H133" stroke="#495057" stroke-width="1.3" marker-end="url(#ar3)"/><path d="M196,18H202" stroke="#495057" stroke-width="1.3" marker-end="url(#ar3)"/><path d="M263,18H269" stroke="#495057" stroke-width="1.3" marker-end="url(#ar3)"/><path d="M120,44 H233 V36" fill="none" stroke="#0b7285" stroke-width="1.3" stroke-dasharray="3 2" marker-end="url(#ar3)"/><text x="116" y="47" text-anchor="end" font-size="7.8" fill="#0b7285" font-weight="700">sources.yml</text><text x="240" y="47" text-anchor="start" font-size="7.8" fill="#0b7285" font-weight="700">1 flow / entry</text><text x="165" y="62" font-size="8" fill="#c92a2a" font-weight="700">order by arrival time → wrong on 40 tables at once</text></g></svg>
+      <ul class="d">
+        <li><b class="t">Log-based CDC</b>: reads the WAL, sees deletes; query-based misses them ◦</li>
+        <li><b class="t">LSN</b>: Postgres log position = the source’s own order ◦</li>
+        <li><b class="t">Debezium op</b>: c create · u update · d delete · r snapshot read ✓</li>
+        <li><b class="t">Tombstone</b>: null-value event after a delete, same key ✓</li>
+        <li><b class="t">Metadata-driven</b>: one pattern + one config entry per table ◦</li>
+        <li><b class="t">Zombie row</b>: late update re-inserted after a hard delete ◦</li>
+      </ul>
+      <div class="trap"><div class="h">Gotchas</div><ul>
+        <li>Loop closure: all flows read the <b>last</b> entry → factory fn ◦</li>
+        <li>Delete a YAML entry → pipeline <b>drops</b> that table; require <code>retired: true</code> ◦</li>
+        <li>AUTO CDC keeps tombstones <b>2 days</b> by default (<code>tombstoneGCThresholdInSeconds</code>) ✓</li>
+        <li>Test layers: config contract → pytest → dev integration → runtime expectations ◦</li>
+      </ul></div>
+      <div class="recall"><b>Recall:</b> 4 hard CDC problems (order · dupes · deletes · late) · 4 test layers.</div>
+    </section>
+  </div>
+
+  <div class="bottom">
+    <section class="box">
+      <h2>Don’t confuse <small>across the three tracks</small></h2>
+      <table class="dc">
+        <tr><td><span class="tg de">DE</span><span class="tg db">DB</span>CDC / CDF</td><td><b>CDC</b>: capture source-DB inserts/updates/deletes (Debezium reads WAL) ✓</td><td><b>CDF</b>: row-level changes between Delta table versions ✓</td></tr>
+        <tr><td><span class="tg db">DB</span><span class="tg de">DE</span>SCD1 / SCD2</td><td><b>SCD1</b>: overwrite; current state only ✓</td><td><b>SCD2</b>: version per change; <code>__END_AT</code> NULL = active ✓</td></tr>
+        <tr><td><span class="tg db">DB</span>AUTO CDC / MERGE</td><td><b>AUTO CDC</b>: declarative; out-of-order via <code>SEQUENCE BY</code> ✓</td><td><b>MERGE</b>: hand-rolled; dedupe + <code>s.lsn &gt; t.lsn</code> guard ◦</td></tr>
+        <tr><td><span class="tg db">DB</span>Streaming table / MV</td><td><b>ST</b>: each record once, append-only source ✓</td><td><b>MV</b>: recomputed to current state of source ✓</td></tr>
+        <tr><td><span class="tg db">DB</span><span class="tg de">DE</span>Triggered / continuous</td><td><b>Triggered</b>: process what’s available, stop ✓</td><td><b>Continuous</b>: keeps running; always-on compute ✓</td></tr>
+        <tr><td><span class="tg ai">AI</span>pass@k / pass^k</td><td><b>pass@k</b>: ≥1 success in k; rises with k ✓</td><td><b>pass^k</b>: all k succeed; 0.75³ ≈ 42 % ✓</td></tr>
+        <tr><td><span class="tg x">ALL</span>Source of truth</td><td>order by LSN <span class="tg de">DE</span> · <code>SEQUENCE BY</code> <span class="tg db">DB</span>, never arrival</td><td>compare on one pinned dataset version <span class="tg ai">AI</span> ◦</td></tr>
+        <tr><td><span class="tg x">ALL</span>Before / at runtime</td><td>contract + pytest <span class="tg de">DE</span> · CI gate <span class="tg ai">AI</span></td><td>expectations + event log <span class="tg db">DB</span> · prod sampling <span class="tg ai">AI</span></td></tr>
+      </table>
+    </section>
+    <section class="box">
+      <h2>Self-test <small>answer aloud, then check</small></h2>
+      <ol class="q">
+        <li><span class="tg de">DE</span>Hand-rolled MERGE: late update (LSN 300) after a hard delete (400)?</li>
+        <li><span class="tg db">DB</span>15-min freshness SLA, cost matters: which pipeline mode?</li>
+        <li><span class="tg ai">AI</span>Judge agrees with humans 95 %, defects are 5 %. Trust it?</li>
+        <li><span class="tg db">DB</span>Task 3 of 5 failed; code fixed. What re-runs?</li>
+        <li><span class="tg ai">AI</span>75 % per trial; users need all 3 tries to work. Metric?</li>
+      </ol>
+      <div class="key"><b>Check:</b> 1 zombie row → AUTO CDC tombstones / soft delete · 2 triggered every 10–15 min · 3 not yet: TPR/TNR + kappa on test · 4 repair run: failed + dependents · 5 pass^3 ≈ 42 %</div>
+    </section>
+  </div>
+
+  <div class="foot">
+    <span>Sources: deep dives 2026-11-20 (DE), 2026-11-18 (AI), 2026-11-16 (DB) + briefs. ✓ = re-checked on official docs 2026-11-20 (Databricks, Anthropic, Debezium). ◦ = from the lesson, not re-checked.</span>
+    <span>* No W47 DB deep dive yet (Mon 23 Nov): DB = Mon 16 Nov (W46 close + W47 bridge) + W47 pipeline docs. AI = Jack’s Week 2 evals.</span>
+  </div>
+</div>
+<script>
+  window.addEventListener('load', function () {
+    var bad = [];
+    document.querySelectorAll('.card,.box,.page').forEach(function (e, i) {
+      if (e.scrollHeight > e.clientHeight + 1 || e.scrollWidth > e.clientWidth + 1) bad.push((e.className || 'el') + '#' + i + ':' + e.scrollHeight + '>' + e.clientHeight);
+    });
+    document.documentElement.setAttribute('data-overflow', bad.length ? bad.join(' | ') : 'none');
+  });
+</script>
+</body>
+</html>

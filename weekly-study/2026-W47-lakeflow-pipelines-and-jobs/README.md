@@ -27,3 +27,7 @@ Linked here as they land.
 - **Data engineering, Fri 2026-11-20:** [Connection Deep Dive: 40 Postgres tables, one config: CDC to SCD2 Silver with a config-driven Lakeflow pipeline, tested and orchestrated](deepdive-de-config-driven-cdc-pipeline.html) ([brief from NJ in Dollar](deepdive-de-config-driven-cdc-pipeline-brief.md)). It connects this week's DE pills DE1–DE4 (CDC end to end, metadata-driven pipelines, testing pipelines as code, and streaming vs batch) into one system: ~40 Postgres tables via Debezium into a config-driven Lakeflow Declarative Pipeline (AUTO CDC SCD2 with expectations), run by a Lakeflow Job with If/else and For each, guarded by pytest and bundle CI, and feeding Gold through Silver's change data feed. Hands-on: an in-browser YAML config checker and code generator, a CDC ordering puzzle, and a Databricks Free Edition lab.
 
 The deep dives are self-contained HTML files. Download one and open it in a browser; GitHub's file view shows the source, not the rendered page.
+
+## Weekly review
+
+- **Weekly review, Fri 2026-11-20:** [Cheat sheet](cheatsheet.html) (one A4 landscape page; open it in a browser and print, or use the PDF sent in chat) · [Definitions quiz](definitions-quiz.html) (24 multiple-choice definitions across Databricks, AI Engineering and Data Engineering).
