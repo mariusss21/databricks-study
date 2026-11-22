@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="250" viewBox="0 0 1000 250" role="img" aria-label="Flow from vendor bucket to Gold view"><style>
+text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;fill:#1b1f2a}
+.muted{fill:#5b6476}.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.box{fill:#f0f2f8;stroke:#dde1ea;stroke-width:1.5}.boxA{fill:#fff0ed;stroke:#ff3621;stroke-width:1.5}
+.boxI{fill:#e9f1ff;stroke:#1f5fbf;stroke-width:1.5}.boxO{fill:#e5f6ee;stroke:#11845b;stroke-width:1.5}
+.boxW{fill:#fff6dd;stroke:#9a6700;stroke-width:1.5}.boxB{fill:#fdecee;stroke:#c62f3a;stroke-width:1.5}
+.ln{stroke:#5b6476;stroke-width:1.6;fill:none}.lnA{stroke:#ff3621;stroke-width:2;fill:none}.lnO{stroke:#11845b;stroke-width:2;fill:none}
+.dash{stroke-dasharray:5 4}.fA{fill:#ff3621}.fO{fill:#11845b}.fB{fill:#c62f3a}.fI{fill:#1f5fbf}.fW{fill:#9a6700}
+</style><rect x="0" y="0" width="100%" height="100%" fill="#ffffff"/>
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fA"/></marker></defs>
+    <text x="10" y="18" font-size="12" class="muted">OUTSIDE WRITER</text>
+    <text x="212" y="18" font-size="12" class="muted">UC SECURABLES (govern a path)</text>
+    <text x="616" y="18" font-size="12" class="muted">UC DATA OBJECTS</text>
+    <rect x="10" y="28" width="170" height="96" rx="10" class="boxW"/>
+    <text x="95" y="54" font-size="14" font-weight="700" text-anchor="middle">Vendor bucket</text>
+    <text x="95" y="74" font-size="11" text-anchor="middle" class="mono">s3://acme-landing/</text>
+    <text x="95" y="90" font-size="11" text-anchor="middle" class="mono">vendor/orders/*.csv</text>
+    <text x="95" y="112" font-size="11" text-anchor="middle" class="muted">vendor owns the files</text>
+    <rect x="212" y="28" width="170" height="96" rx="10" class="boxI"/>
+    <text x="297" y="54" font-size="14" font-weight="700" text-anchor="middle">External location</text>
+    <text x="297" y="74" font-size="11" text-anchor="middle" class="mono">acme_landing</text>
+    <text x="297" y="92" font-size="11" text-anchor="middle">storage credential</text>
+    <text x="297" y="106" font-size="11" text-anchor="middle">+ path</text>
+    <rect x="414" y="28" width="170" height="96" rx="10" class="boxI"/>
+    <text x="499" y="54" font-size="14" font-weight="700" text-anchor="middle">External volume</text>
+    <text x="499" y="74" font-size="11" text-anchor="middle" class="mono">main.landing.vendor_raw</text>
+    <text x="499" y="92" font-size="11" text-anchor="middle" class="mono">/Volumes/main/landing/</text>
+    <text x="499" y="106" font-size="11" text-anchor="middle" class="mono">vendor_raw/orders/</text>
+    <rect x="616" y="28" width="170" height="96" rx="10" class="boxA"/>
+    <text x="701" y="54" font-size="14" font-weight="700" text-anchor="middle">Managed Delta table</text>
+    <text x="701" y="74" font-size="11" text-anchor="middle" class="mono">main.bronze.vendor_orders</text>
+    <text x="701" y="92" font-size="11" text-anchor="middle">UC owns files + log</text>
+    <text x="701" y="106" font-size="11" text-anchor="middle">predictive optimization</text>
+    <rect x="818" y="28" width="172" height="96" rx="10" class="boxO"/>
+    <text x="904" y="54" font-size="14" font-weight="700" text-anchor="middle">Plain view (Gold)</text>
+    <text x="904" y="74" font-size="11" text-anchor="middle" class="mono">main.gold.</text>
+    <text x="904" y="88" font-size="11" text-anchor="middle" class="mono">daily_vendor_revenue</text>
+    <text x="904" y="106" font-size="11" text-anchor="middle">stores only SQL</text>
+    <line x1="180" y1="76" x2="210" y2="76" class="lnA" marker-end="url(#ar)"/>
+    <line x1="382" y1="76" x2="412" y2="76" class="lnA" marker-end="url(#ar)"/>
+    <line x1="584" y1="76" x2="614" y2="76" class="lnA" marker-end="url(#ar)"/>
+    <line x1="786" y1="76" x2="816" y2="76" class="lnA" marker-end="url(#ar)"/>
+    <text x="600" y="146" font-size="11" text-anchor="middle" class="muted">read_files → CTAS</text>
+    <text x="802" y="146" font-size="11" text-anchor="middle" class="muted">SQL</text>
+    <rect x="10" y="166" width="980" height="34" rx="8" class="box"/>
+    <text x="20" y="188" font-size="12" font-weight="700">Compute:</text>
+    <text x="499" y="188" font-size="12" text-anchor="middle">serverless notebook (explore)</text>
+    <text x="701" y="188" font-size="12" text-anchor="middle">serverless job (nightly load)</text>
+    <text x="904" y="188" font-size="12" text-anchor="middle">SQL warehouse (BI)</text>
+    <rect x="10" y="206" width="980" height="34" rx="8" class="box"/>
+    <text x="20" y="228" font-size="12" font-weight="700">If dropped:</text>
+    <text x="297" y="228" font-size="12" text-anchor="middle">nothing to drop (files)</text>
+    <text x="499" y="228" font-size="12" text-anchor="middle">files stay in S3</text>
+    <text x="701" y="228" font-size="12" text-anchor="middle">UNDROP within 7 days</text>
+    <text x="904" y="228" font-size="12" text-anchor="middle">only the SQL is lost</text>
+  </svg>

@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="250" viewBox="0 0 1000 250" role="img" aria-label="Retention windows: 7 days data files and UNDROP, 14 days SET MANAGED rollback, 30 days log history"><style>
+text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;fill:#1b1f2a}
+.muted{fill:#5b6476}.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.box{fill:#f0f2f8;stroke:#dde1ea;stroke-width:1.5}.boxA{fill:#fff0ed;stroke:#ff3621;stroke-width:1.5}
+.boxI{fill:#e9f1ff;stroke:#1f5fbf;stroke-width:1.5}.boxO{fill:#e5f6ee;stroke:#11845b;stroke-width:1.5}
+.boxW{fill:#fff6dd;stroke:#9a6700;stroke-width:1.5}.boxB{fill:#fdecee;stroke:#c62f3a;stroke-width:1.5}
+.ln{stroke:#5b6476;stroke-width:1.6;fill:none}.lnA{stroke:#ff3621;stroke-width:2;fill:none}.lnO{stroke:#11845b;stroke-width:2;fill:none}
+.dash{stroke-dasharray:5 4}.fA{fill:#ff3621}.fO{fill:#11845b}.fB{fill:#c62f3a}.fI{fill:#1f5fbf}.fW{fill:#9a6700}
+</style><rect x="0" y="0" width="100%" height="100%" fill="#ffffff"/>
+    <line x1="230" y1="30" x2="980" y2="30" class="ln"/>
+    <g font-size="11" class="muted">
+      <text x="230" y="22" text-anchor="middle">day 0</text><text x="405" y="22" text-anchor="middle">7</text><text x="580" y="22" text-anchor="middle">14</text><text x="980" y="22" text-anchor="middle">30</text>
+    </g>
+    <line x1="405" y1="26" x2="405" y2="235" class="ln dash"/><line x1="580" y1="26" x2="580" y2="235" class="ln dash"/>
+    <text x="10" y="64" font-size="12.5" font-weight="700">Time travel / RESTORE</text><text x="10" y="80" font-size="11" class="mono muted">deletedFileRetentionDuration</text>
+    <rect x="230" y="52" width="175" height="26" rx="6" class="boxA"/><text x="318" y="70" font-size="12" text-anchor="middle">old data files kept</text>
+    <text x="415" y="70" font-size="11.5" class="fB">then VACUUM / predictive optimization may delete them</text>
+    <text x="10" y="114" font-size="12.5" font-weight="700">UNDROP a table</text><text x="10" y="130" font-size="11" class="muted">configurable per catalog/schema</text>
+    <rect x="230" y="102" width="175" height="26" rx="6" class="boxO"/><text x="318" y="120" font-size="12" text-anchor="middle">recoverable</text>
+    <text x="415" y="120" font-size="11.5" class="fB">managed files purged · UC_UNDROP_RESOURCE_PAST_RETENTION_PERIOD</text>
+    <text x="10" y="164" font-size="12.5" font-weight="700">UNSET MANAGED</text><text x="10" y="180" font-size="11" class="muted">after SET MANAGED</text>
+    <rect x="230" y="152" width="350" height="26" rx="6" class="boxI"/><text x="405" y="170" font-size="12" text-anchor="middle">old external copy kept → rollback possible</text>
+    <text x="10" y="214" font-size="12.5" font-weight="700">DESCRIBE HISTORY</text><text x="10" y="230" font-size="11" class="mono muted">logRetentionDuration</text>
+    <rect x="230" y="202" width="750" height="26" rx="6" class="box"/><text x="605" y="220" font-size="12" text-anchor="middle">commit entries visible for 30 days … but versions older than 7 days usually can't be read</text>
+  </svg>

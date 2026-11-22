@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="252" viewBox="0 0 1000 252" role="img" aria-label="Optimistic concurrency control flow"><style>
+text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;fill:#1b1f2a}
+.muted{fill:#5b6476}.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.box{fill:#f0f2f8;stroke:#dde1ea;stroke-width:1.5}.boxA{fill:#fff0ed;stroke:#ff3621;stroke-width:1.5}
+.boxI{fill:#e9f1ff;stroke:#1f5fbf;stroke-width:1.5}.boxO{fill:#e5f6ee;stroke:#11845b;stroke-width:1.5}
+.boxW{fill:#fff6dd;stroke:#9a6700;stroke-width:1.5}.boxB{fill:#fdecee;stroke:#c62f3a;stroke-width:1.5}
+.ln{stroke:#5b6476;stroke-width:1.6;fill:none}.lnA{stroke:#ff3621;stroke-width:2;fill:none}.lnO{stroke:#11845b;stroke-width:2;fill:none}
+.dash{stroke-dasharray:5 4}.fA{fill:#ff3621}.fO{fill:#11845b}.fB{fill:#c62f3a}.fI{fill:#1f5fbf}.fW{fill:#9a6700}
+</style><rect x="0" y="0" width="100%" height="100%" fill="#ffffff"/>
+    <defs><marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fI"/></marker></defs>
+    <rect x="10" y="20" width="170" height="64" rx="10" class="box"/><text x="95" y="46" font-size="13" font-weight="700" text-anchor="middle">1 · Read snapshot</text><text x="95" y="66" font-size="12" text-anchor="middle">"table is at v11"</text>
+    <rect x="210" y="20" width="190" height="64" rx="10" class="box"/><text x="305" y="46" font-size="13" font-weight="700" text-anchor="middle">2 · Write new Parquet</text><text x="305" y="66" font-size="12" text-anchor="middle">invisible to everyone</text>
+    <rect x="430" y="20" width="200" height="64" rx="10" class="boxI"/><text x="530" y="46" font-size="13" font-weight="700" text-anchor="middle">3 · Try to create</text><text x="530" y="66" font-size="12" text-anchor="middle" class="mono">…012.json (if absent)</text>
+    <rect x="680" y="20" width="310" height="64" rx="10" class="boxO"/><text x="835" y="46" font-size="13" font-weight="700" text-anchor="middle">Created → v12 is live</text><text x="835" y="66" font-size="12" text-anchor="middle">all-or-nothing: readers switch at once</text>
+    <line x1="180" y1="52" x2="208" y2="52" class="ln" marker-end="url(#ar5)"/><line x1="400" y1="52" x2="428" y2="52" class="ln" marker-end="url(#ar5)"/><line x1="630" y1="52" x2="678" y2="52" class="ln" marker-end="url(#ar5)"/>
+    <line x1="530" y1="84" x2="530" y2="118" class="ln" marker-end="url(#ar5)"/><text x="545" y="106" font-size="12" class="fB" font-weight="700">012 already exists (someone else won)</text>
+    <rect x="380" y="120" width="300" height="56" rx="10" class="boxW"/><text x="530" y="144" font-size="13" font-weight="700" text-anchor="middle">4 · Check v12 against what I read</text><text x="530" y="163" font-size="12" text-anchor="middle">did they touch files my operation depends on?</text>
+    <line x1="380" y1="148" x2="200" y2="148" class="ln" marker-end="url(#ar5)"/><text x="290" y="140" font-size="12" text-anchor="middle" class="fO" font-weight="700">no conflict</text>
+    <rect x="10" y="120" width="190" height="56" rx="10" class="boxO"/><text x="105" y="144" font-size="13" font-weight="700" text-anchor="middle">Retry silently as v13</text><text x="105" y="163" font-size="12" text-anchor="middle">e.g. two blind appends</text>
+    <line x1="680" y1="148" x2="728" y2="148" class="ln" marker-end="url(#ar5)"/><text x="704" y="140" font-size="12" text-anchor="middle" class="fB" font-weight="700">yes</text>
+    <rect x="730" y="120" width="260" height="56" rx="10" class="boxB"/><text x="860" y="144" font-size="13" font-weight="700" text-anchor="middle">Fail: DELTA_CONCURRENT_…</text><text x="860" y="163" font-size="12" text-anchor="middle">e.g. ConcurrentAppendException</text>
+    <text x="10" y="204" font-size="12" class="muted">If the job crashes between 2 and 3, there is no commit: readers stay on v11 and the new Parquet files are orphans.</text>
+    <text x="10" y="222" font-size="12" class="muted">VACUUM (FULL, the default) removes orphans once they're older than the retention window.</text>
+    <text x="10" y="240" font-size="12" class="muted">VACUUM LITE only reads the log, so it never sees files from aborted transactions.</text>
+  </svg>

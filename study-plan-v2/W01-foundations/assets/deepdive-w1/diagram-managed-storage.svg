@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="230" viewBox="0 0 1000 230" role="img" aria-label="Managed storage resolution: schema overrides catalog overrides metastore"><style>
+text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;fill:#1b1f2a}
+.muted{fill:#5b6476}.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.box{fill:#f0f2f8;stroke:#dde1ea;stroke-width:1.5}.boxA{fill:#fff0ed;stroke:#ff3621;stroke-width:1.5}
+.boxI{fill:#e9f1ff;stroke:#1f5fbf;stroke-width:1.5}.boxO{fill:#e5f6ee;stroke:#11845b;stroke-width:1.5}
+.boxW{fill:#fff6dd;stroke:#9a6700;stroke-width:1.5}.boxB{fill:#fdecee;stroke:#c62f3a;stroke-width:1.5}
+.ln{stroke:#5b6476;stroke-width:1.6;fill:none}.lnA{stroke:#ff3621;stroke-width:2;fill:none}.lnO{stroke:#11845b;stroke-width:2;fill:none}
+.dash{stroke-dasharray:5 4}.fA{fill:#ff3621}.fO{fill:#11845b}.fB{fill:#c62f3a}.fI{fill:#1f5fbf}.fW{fill:#9a6700}
+</style><rect x="0" y="0" width="100%" height="100%" fill="#ffffff"/>
+    <defs><marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fA"/></marker></defs>
+    <rect x="10" y="14" width="560" height="50" rx="8" class="box"/>
+    <text x="24" y="36" font-size="13" font-weight="700">3 · Metastore managed storage (optional)</text>
+    <text x="24" y="54" font-size="11.5" class="mono muted">s3://acme-uc/root/   ← set by an account admin; new auto-enabled workspaces skip it</text>
+    <rect x="40" y="74" width="530" height="50" rx="8" class="boxI"/>
+    <text x="54" y="96" font-size="13" font-weight="700">2 · Catalog main · MANAGED LOCATION</text>
+    <text x="54" y="114" font-size="11.5" class="mono">s3://acme-uc/main/   ← recommended level (data isolation)</text>
+    <rect x="70" y="134" width="500" height="50" rx="8" class="boxA"/>
+    <text x="84" y="156" font-size="13" font-weight="700">1 · Schema main.bronze · MANAGED LOCATION</text>
+    <text x="84" y="174" font-size="11.5" class="mono">s3://acme-uc/bronze/   ← if set, this wins</text>
+    <rect x="620" y="74" width="370" height="110" rx="10" class="boxO"/>
+    <text x="805" y="98" font-size="13" font-weight="700" text-anchor="middle">CREATE TABLE main.bronze.vendor_orders</text>
+    <text x="805" y="118" font-size="12" text-anchor="middle">no LOCATION → managed → goes to</text>
+    <text x="805" y="138" font-size="12" text-anchor="middle" class="mono">s3://acme-uc/bronze/__unitystorage/</text>
+    <text x="805" y="154" font-size="12" text-anchor="middle" class="mono">schemas/&lt;uuid&gt;/…</text>
+    <text x="805" y="174" font-size="11" text-anchor="middle" class="muted">UC adds hashed folders; you never pick the path</text>
+    <line x1="572" y1="159" x2="618" y2="140" class="lnA" marker-end="url(#ar4)"/>
+    <text x="10" y="212" font-size="12" class="muted">Resolution: schema → catalog → metastore. Catalog and schema roots must sit inside an external location (you need CREATE MANAGED STORAGE on it).</text>
+  </svg>

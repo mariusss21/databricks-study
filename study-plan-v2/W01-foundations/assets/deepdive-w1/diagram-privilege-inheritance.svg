@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="310" viewBox="0 0 1000 310" role="img" aria-label="Privilege inheritance from catalog to schema to objects"><style>
+text{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;fill:#1b1f2a}
+.muted{fill:#5b6476}.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.box{fill:#f0f2f8;stroke:#dde1ea;stroke-width:1.5}.boxA{fill:#fff0ed;stroke:#ff3621;stroke-width:1.5}
+.boxI{fill:#e9f1ff;stroke:#1f5fbf;stroke-width:1.5}.boxO{fill:#e5f6ee;stroke:#11845b;stroke-width:1.5}
+.boxW{fill:#fff6dd;stroke:#9a6700;stroke-width:1.5}.boxB{fill:#fdecee;stroke:#c62f3a;stroke-width:1.5}
+.ln{stroke:#5b6476;stroke-width:1.6;fill:none}.lnA{stroke:#ff3621;stroke-width:2;fill:none}.lnO{stroke:#11845b;stroke-width:2;fill:none}
+.dash{stroke-dasharray:5 4}.fA{fill:#ff3621}.fO{fill:#11845b}.fB{fill:#c62f3a}.fI{fill:#1f5fbf}.fW{fill:#9a6700}
+</style><rect x="0" y="0" width="100%" height="100%" fill="#ffffff"/>
+    <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fO"/></marker></defs>
+    <rect x="330" y="10" width="200" height="40" rx="8" class="box"/><text x="430" y="35" font-size="13" font-weight="700" text-anchor="middle">Metastore (region)</text>
+    <line x1="430" y1="50" x2="430" y2="74" class="ln"/>
+    <rect x="330" y="74" width="200" height="44" rx="8" class="boxI"/><text x="430" y="94" font-size="13" font-weight="700" text-anchor="middle">Catalog main</text><text x="430" y="110" font-size="11" text-anchor="middle" class="muted">container</text>
+    <line x1="430" y1="118" x2="430" y2="134" class="ln"/><line x1="200" y1="134" x2="660" y2="134" class="ln"/>
+    <line x1="200" y1="134" x2="200" y2="150" class="ln"/><line x1="660" y1="134" x2="660" y2="150" class="ln"/>
+    <rect x="100" y="150" width="200" height="44" rx="8" class="boxB"/><text x="200" y="170" font-size="13" font-weight="700" text-anchor="middle">Schema main.bronze</text><text x="200" y="186" font-size="11" text-anchor="middle">analysts: no USE SCHEMA</text>
+    <rect x="560" y="150" width="200" height="44" rx="8" class="boxO"/><text x="660" y="170" font-size="13" font-weight="700" text-anchor="middle">Schema main.gold</text><text x="660" y="186" font-size="11" text-anchor="middle">container</text>
+    <line x1="200" y1="194" x2="200" y2="226" class="ln"/>
+    <rect x="100" y="226" width="200" height="44" rx="8" class="box"/><text x="200" y="246" font-size="12" text-anchor="middle" class="mono">vendor_orders</text><text x="200" y="262" font-size="11" text-anchor="middle" class="fB">invisible to analysts</text>
+    <line x1="660" y1="194" x2="660" y2="210" class="ln"/><line x1="560" y1="210" x2="770" y2="210" class="ln"/>
+    <line x1="560" y1="210" x2="560" y2="226" class="ln"/><line x1="770" y1="210" x2="770" y2="226" class="ln"/>
+    <rect x="470" y="226" width="180" height="44" rx="8" class="box"/><text x="560" y="246" font-size="12" text-anchor="middle" class="mono">daily_vendor_revenue</text><text x="560" y="262" font-size="11" text-anchor="middle" class="fO">readable ✓</text>
+    <rect x="680" y="226" width="180" height="44" rx="8" class="box dash" style="stroke-dasharray:5 4"/><text x="770" y="246" font-size="12" text-anchor="middle" class="mono">weekly_kpis (next month)</text><text x="770" y="262" font-size="11" text-anchor="middle" class="fO">readable ✓ (future child)</text>
+    <text x="560" y="96" font-size="12" class="mono">GRANT USE CATALOG ON CATALOG main TO analysts</text>
+    <text x="790" y="158" font-size="12" class="mono">GRANT USE SCHEMA, SELECT</text>
+    <text x="790" y="174" font-size="12" class="mono">ON SCHEMA main.gold</text>
+    <text x="790" y="190" font-size="12" class="mono">TO analysts</text>
+    <path d="M900 196 C 915 230, 895 266, 865 262" class="lnO" marker-end="url(#ar3)"/>
+    <text x="890" y="292" font-size="11.5" text-anchor="middle" class="fO">SELECT inherits to all</text>
+    <text x="890" y="306" font-size="11.5" text-anchor="middle" class="fO">current + future children</text>
+  </svg>

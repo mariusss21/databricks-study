@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W1 deep dive · Anatomy of a governed table</title>
+<style>
+:root{
+  --bg:#f6f7fb;--panel:#fff;--panel2:#f0f2f8;--text:#1b1f2a;--muted:#5b6476;--border:#dde1ea;
+  --accent:#ff3621;--accent-soft:#fff0ed;--ok:#11845b;--ok-soft:#e5f6ee;--bad:#c62f3a;--bad-soft:#fdecee;
+  --warn:#9a6700;--warn-soft:#fff6dd;--info:#1f5fbf;--info-soft:#e9f1ff;
+  --code-bg:#0f1420;--code-text:#e6e9f0;
+  --t1:#2f6fd6;--t2:#b7791f;--t3:#8a4fd8;--t4:#0f9d74;--t5:#c2410c;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06);
+  --radius:12px;--sidebar:300px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:#0d1117;--panel:#151b24;--panel2:#1b2330;--text:#e6e9ef;--muted:#9aa4b6;--border:#2a3342;
+  --accent:#ff6a55;--accent-soft:#2a1814;--ok:#3ccf91;--ok-soft:#10261d;--bad:#ff6b77;--bad-soft:#2b1418;
+  --warn:#f0c04a;--warn-soft:#2a230f;--info:#7fb2ff;--info-soft:#121f36;--code-bg:#0a0e16;
+  --t1:#6fa3ff;--t2:#f0c04a;--t3:#b48cff;--t4:#3ccf91;--t5:#fb923c;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 20px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.6;font-size:16px}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--panel2);border:1px solid var(--border);padding:.05em .35em;border-radius:5px;overflow-wrap:anywhere}
+pre{background:var(--code-bg);color:var(--code-text);padding:14px 16px;border-radius:10px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.5;margin:0}
+pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+.codewrap{position:relative;margin:12px 0}
+.copy{position:absolute;top:8px;right:8px;font-size:12px;padding:3px 9px;border-radius:6px;border:1px solid #3a4456;background:#1d2533;color:#e6e9f0;cursor:pointer}
+.c-com{color:#8b97ad}
+.layout{display:grid;grid-template-columns:var(--sidebar) minmax(0,1fr);min-height:100vh}
+.sidebar{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--panel);border-right:1px solid var(--border);padding:18px 14px 24px;display:flex;flex-direction:column;gap:14px}
+.brand{display:flex;gap:10px;align-items:center}
+.logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#ff9a3c);display:grid;place-items:center;color:#fff;font-weight:800;font-size:14px;flex:none}
+.brand h1{font-size:15px;line-height:1.25;margin:0}
+.brand small{color:var(--muted);font-size:12px}
+.progress-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.progress-top{display:flex;justify-content:space-between;font-size:13px;font-weight:600}
+.bar{height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin:6px 0}
+.bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),#ff9a3c);transition:width .3s}
+.progress-meta{font-size:12px;color:var(--muted)}
+nav ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+nav a{display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border-radius:8px;text-decoration:none;color:var(--text);font-size:14px}
+nav a:hover{background:var(--panel2)}
+nav a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+nav .dot{flex:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--border);margin-top:2px;display:grid;place-items:center;font-size:11px;color:#fff}
+nav a.done .dot{background:var(--ok);border-color:var(--ok)}
+nav .part{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:700;padding:10px 8px 2px}
+.side-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+.btn{font:inherit;font-size:14px;padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.small{font-size:12px;padding:5px 10px}
+main{padding:28px clamp(16px,4vw,48px) 80px;max-width:1000px}
+section.lesson{display:none}
+section.lesson.active{display:block;animation:fade .25s}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;color:var(--accent)}
+.sec{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--info-soft);color:var(--info);margin-left:6px;letter-spacing:0;text-transform:none;vertical-align:1px}
+h2{font-size:26px;line-height:1.25;margin:4px 0 6px}
+h3{font-size:18px;margin:22px 0 6px}
+.lead{color:var(--muted);font-size:17px;margin-top:0}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;box-shadow:var(--shadow);margin:14px 0}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;margin-bottom:4px}
+.t1{color:var(--t1)}.t2{color:var(--t2)}.t3{color:var(--t3)}.t4{color:var(--t4)}.t5{color:var(--t5)}
+.b1{border-top:4px solid var(--t1)}.b2{border-top:4px solid var(--t2)}.b3{border-top:4px solid var(--t3)}.b4{border-top:4px solid var(--t4)}.b5{border-top:4px solid var(--t5)}
+.note{border-left:4px solid var(--info);background:var(--info-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.warn{border-left:4px solid var(--warn);background:var(--warn-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.okbox{border-left:4px solid var(--ok);background:var(--ok-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.trap{border-left:4px solid var(--bad);background:var(--bad-soft);padding:10px 14px;border-radius:8px;margin:12px 0}
+.trap b:first-child,.warn b:first-child,.note b:first-child,.okbox b:first-child{margin-right:4px}
+.pause{display:flex;gap:10px;align-items:center;border:2px dashed var(--ok);border-radius:10px;padding:10px 14px;margin:18px 0;color:var(--ok);font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:10px 0}
+th,td{border:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
+th{background:var(--panel2)}
+.tablewrap{overflow-x:auto}
+.footer-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:28px;padding-top:16px;border-top:1px solid var(--border);flex-wrap:wrap}
+.done-label{display:flex;gap:8px;align-items:center;font-size:14px;color:var(--muted)}
+.svgwrap{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:10px;overflow-x:auto;margin:12px 0}
+.svgwrap svg{width:100%;min-width:700px;height:auto;display:block}
+.svgwrap text{font-family:var(--sans);fill:var(--text)}
+.svgwrap .muted{fill:var(--muted)}
+.svgwrap .mono{font-family:var(--mono)}
+.svgwrap .box{fill:var(--panel2);stroke:var(--border);stroke-width:1.5}
+.svgwrap .boxA{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+.svgwrap .boxI{fill:var(--info-soft);stroke:var(--info);stroke-width:1.5}
+.svgwrap .boxO{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.5}
+.svgwrap .boxW{fill:var(--warn-soft);stroke:var(--warn);stroke-width:1.5}
+.svgwrap .boxB{fill:var(--bad-soft);stroke:var(--bad);stroke-width:1.5}
+.svgwrap .ln{stroke:var(--muted);stroke-width:1.6;fill:none}
+.svgwrap .lnA{stroke:var(--accent);stroke-width:2;fill:none}
+.svgwrap .lnO{stroke:var(--ok);stroke-width:2;fill:none}
+.svgwrap .lnB{stroke:var(--bad);stroke-width:2;fill:none}
+.svgwrap .dash{stroke-dasharray:5 4}
+.svgwrap .fA{fill:var(--accent)}.svgwrap .fO{fill:var(--ok)}.svgwrap .fB{fill:var(--bad)}.svgwrap .fI{fill:var(--info)}.svgwrap .fW{fill:var(--warn)}
+figure.official{margin:14px 0;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px;box-shadow:var(--shadow)}
+figure.official img{display:block;max-width:100%;height:auto;margin:0 auto;border-radius:6px;background:#fff}
+figure.official figcaption{font-size:13px;color:var(--muted);margin-top:8px}
+figure.official figcaption b{color:var(--text)}
+.src{display:inline-block;font-size:11px;font-weight:700;background:var(--panel2);border:1px solid var(--border);border-radius:99px;padding:0 8px;margin-right:6px;color:var(--muted)}
+.stepper{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.stepper button{font:inherit;font-size:13px;padding:6px 10px;border-radius:99px;border:1px solid var(--border);background:var(--panel);color:var(--text);cursor:pointer}
+.stepper button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.wt{display:none}.wt.on{display:block;animation:fade .2s}
+.wt-nav{display:flex;gap:8px;margin-top:10px}
+details.call{background:var(--warn-soft);border:1px solid var(--border);border-left:4px solid var(--warn);border-radius:8px;padding:8px 12px;margin:10px 0}
+details.call summary{cursor:pointer;font-weight:650}
+details.call summary::before{content:"🤔 Your call: "}
+details.call[open] summary{margin-bottom:6px}
+.scenario{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin:14px 0;box-shadow:var(--shadow)}
+.scenario .stag{float:right;font-size:11px;font-weight:700;color:var(--info);background:var(--info-soft);border-radius:99px;padding:1px 8px}
+.choices{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.choices button{font:inherit;font-size:14px;text-align:left;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text);cursor:pointer}
+.choices button:hover:not(:disabled){border-color:var(--accent)}
+.choices button.right{background:var(--ok-soft);border-color:var(--ok);color:var(--ok);font-weight:700}
+.choices button.wrong{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+.choices button:disabled{cursor:default}
+.feedback{display:none;padding:10px 12px;border-radius:8px;font-size:15px}
+.feedback.show{display:block}
+.feedback.good{background:var(--ok-soft);border-left:4px solid var(--ok)}
+.feedback.bad{background:var(--bad-soft);border-left:4px solid var(--bad)}
+.feedback ul{margin:6px 0 0;padding-left:20px}
+.score{font-weight:700}
+details.qa{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;margin:12px 0;box-shadow:var(--shadow)}
+details.qa summary{cursor:pointer;font-weight:650}
+details.qa[open] summary{margin-bottom:8px}
+.why-senior{font-size:14px;color:var(--muted);border-top:1px dashed var(--border);margin-top:8px;padding-top:6px}
+.check{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.check input{margin-top:5px}
+.kv{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;font-size:14px}
+.kv b{font-family:var(--mono);font-size:13px}
+/* cheat sheet */
+.cheat{background:#fff;color:#1b1f2a;border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;font-size:13px;line-height:1.45}
+:root[data-theme="dark"] .cheat{background:var(--panel);color:var(--text)}
+.cheat h4{margin:0 0 4px;font-size:14px;color:var(--accent)}
+.cheat .cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.cheat .blk{border:1px solid var(--border);border-radius:8px;padding:8px 10px}
+.cheat ul{margin:0;padding-left:16px}
+.cheat li{margin:1px 0}
+.cheat .traps{background:var(--bad-soft)}
+.cheat code{font-size:11.5px}
+.mobilebar{display:none}
+@media (max-width:860px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:fixed;inset:0 auto 0 0;width:min(86vw,320px);transform:translateX(-105%);transition:transform .25s;z-index:20;box-shadow:var(--shadow)}
+  .sidebar.open{transform:none}
+  .mobilebar{display:flex;gap:10px;align-items:center;position:sticky;top:0;z-index:10;background:var(--panel);border-bottom:1px solid var(--border);padding:8px 12px}
+  .mobilebar .bar{flex:1;margin:0}
+  .cheat .cols{grid-template-columns:1fr}
+}
+@media print{
+  .sidebar,.mobilebar,.footer-nav,.noprint{display:none!important}
+  .layout{display:block} main{max-width:none;padding:0}
+  body.print-cheat section.lesson{display:none!important}
+  body.print-cheat section.lesson#cheatsheet{display:block!important}
+  body:not(.print-cheat) section.lesson{display:block!important;page-break-after:always}
+  .cheat{border:0;padding:0;font-size:10.5px}
+  @page{size:A4 landscape;margin:10mm}
+}
+</style>
+</head>
+<body>
+<div class="mobilebar">
+  <button class="btn small" id="menuBtn" aria-label="Open navigation">☰ Sections</button>
+  <div class="bar" aria-hidden="true"><span id="barMobile"></span></div>
+  <span id="pctMobile" style="font-size:13px;color:var(--muted)">0%</span>
+</div>
+<div class="layout">
+<aside class="sidebar" id="sidebar">
+  <div class="brand">
+    <div class="logo">W1</div>
+    <div><h1>Anatomy of a governed table</h1><small>Friday deep dive · W1 Foundations · Fri 2026-11-20 (v2, rebuilt 2026-11-22) · ~65 min + 10 optional</small></div>
+  </div>
+  <div class="progress-card">
+    <div class="progress-top"><span>Progress</span><span id="pct">0%</span></div>
+    <div class="bar"><span id="bar"></span></div>
+    <div class="progress-meta" id="progMeta">0 of 0 sections complete</div>
+  </div>
+  <nav aria-label="Sections"><ol id="navList"></ol></nav>
+  <div class="side-actions">
+    <button class="btn small" id="themeBtn">◐ Theme</button>
+    <button class="btn small" id="printCheat">🖨 Print cheat sheet</button>
+    <button class="btn small" id="resetBtn">↺ Reset progress</button>
+  </div>
+</aside>
+<main id="main">
+
+<!-- ============ 1. START HERE ============ -->
+<section class="lesson" data-part="Orient" data-title="Start here" data-min="4">
+  <div class="eyebrow">1 · Start here · ~4 min</div>
+  <h2>One vendor feed, followed from a CSV file to a governed Gold view</h2>
+  <p class="lead">This closes Week 1. P1, P2 and P3 each gave you one layer. Today you stack them: <b>platform → catalog → storage → Delta log</b>, then run one real-looking scenario through all four and break it on purpose.</p>
+
+  <div class="grid3">
+    <div class="card b1"><span class="tag t1">P1 · Delta + ACID</span>
+      <p class="rule"><b>A write is visible only when its commit lands in <code>_delta_log</code>.</b></p>
+      <ul><li>History, time travel, <code>RESTORE</code></li><li><code>VACUUM</code> bounds how far back you can go</li></ul>
+      <small>Your warm-ups: 4/4 ✅</small></div>
+    <div class="card b2"><span class="tag t2">P2 · Compute</span>
+      <p class="rule"><b>Storage never moves; you pick the engine per job.</b></p>
+      <ul><li>Serverless by default, SQL warehouse for BI</li><li>Classic when you need what serverless won't let you configure</li></ul>
+      <small>Your warm-ups: 3/4 · W4 miss (init scripts) → revisited in §3</small></div>
+    <div class="card b3"><span class="tag t3">P3 · Unity Catalog</span>
+      <p class="rule"><b>UC always owns the metadata. Managed = UC owns the files too.</b></p>
+      <ul><li>External locations, volumes, grants</li><li><code>DROP</code> / <code>UNDROP</code> / <code>SET MANAGED</code></li></ul>
+      <small>Your warm-ups: 3/4 · W3 miss (RESTORE vs UNDROP) → revisited in §8</small></div>
+  </div>
+
+  <div class="note"><b>Your misses, on purpose.</b> Diagnostic Q6 (§3, plain vs materialized view) comes back in the walkthrough step 5. P2 W4 (§1, serverless limits) comes back in section 3. P3 W3 (§7, <code>RESTORE</code> vs <code>UNDROP</code>) comes back in section 8 and in the scenario check.</div>
+
+  <h3>How to use this page</h3>
+  <div class="grid2">
+    <div class="card">
+      <ul>
+        <li><b>One section at a time.</b> The sidebar shows minutes per section. Your progress and answers are saved in this browser.</li>
+        <li><b>🤔 "Your call" boxes:</b> answer in your head first, then open.</li>
+        <li><b>Two pause points</b> (green dashed boxes). Stop there if you're tired; nothing is lost.</li>
+        <li>The scenario check (§11) has a <b>"Copy my answers"</b> button so you can paste them in chat for the misses log.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="tablewrap"><table>
+        <tr><th>Exam section (weight)</th><th>Where</th></tr>
+        <tr><td>§1 Databricks Intelligence Platform (6%)</td><td>3, 6</td></tr>
+        <tr><td>§2 Data Ingestion and Loading (21%)</td><td>5, 7</td></tr>
+        <tr><td>§3 Data Transformation and Modeling (22%)</td><td>7</td></tr>
+        <tr><td>§6 Troubleshooting, Monitoring, Optimization (10%)</td><td>6, 8, 9</td></tr>
+        <tr><td>§7 Governance and Security (15%)</td><td>4, 5, 8</td></tr>
+      </table></div>
+      <small class="muted">Sections per the <a href="https://www.databricks.com/learn/certification/data-engineer-associate" target="_blank" rel="noopener">official exam page</a>.</small>
+    </div>
+  </div>
+  <p><b>Takeaway:</b> one table, four layers. If you can say what each layer does when something goes wrong, you understand the table.</p>
+</section>
+
+<!-- ============ 2. MAP ============ -->
+<section class="lesson" data-title="The map" data-min="3">
+  <div class="eyebrow">2 · The map · ~3 min</div>
+  <h2>Acme Retail's vendor feed, end to end</h2>
+  <p class="lead">A vendor drops daily CSV order files into <b>their own</b> S3 bucket. You make them reachable with governance, load a Bronze Delta table, and give analysts a small Gold object. Read left to right.</p>
+  <div class="svgwrap">
+  <svg viewBox="0 0 1000 250" role="img" aria-label="Flow from vendor bucket to Gold view">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="fA"/></marker></defs>
+    <text x="10" y="18" font-size="12" class="muted">OUTSIDE WRITER</text>
+    <text x="212" y="18" font-size="12" class="muted">UC SECURABLES (govern a path)</text>
+    <text x="616" y="18" font-size="12" class="muted">UC DATA OBJECTS</text>
+    <rect x="10" y="28" width="170" height="96" rx="10" class="boxW"/>
+    <text x="95" y="54" font-size="14" font-weight="700" text-anchor="middle">Vendor bucket</text>
+    <text x="95" y="74" font-size="11" text-anchor="middle" class="mono">s3://acme-landing/</text>
+    <text x="95" y="90" font-size="11" text-anchor="middle" class="mono">vendor/orders/*.csv</text>
+    <text x="95" y="112" font-size="11" text-anchor="middle" class="muted">vendor owns the files</text>
+    <rect x="212" y="28" width="170" height="96" rx="10" class="boxI"/>
+    <text x="297" y="54" font-size="14" font-weight="700" text-anchor="middle">External location</text>
+    <text x="297" y="74" font-size="11" text-anchor="middle" class="mono">acme_landing</text>
+    <text x="297" y="92" font-size="11" text-anchor="middle">storage credential</text>
+    <text x="297" y="106" font-size="11" text-anchor="middle">+ path</text>
+    <rect x="414" y="28" width="170" height="96" rx="10" class="boxI"/>
+    <text x="499" y="54" font-size="14" font-weight="700" text-anchor="middle">External volume</text>
+    <text x="499" y="74" font-size="11" text-anchor="middle" class="mono">main.landing.vendor_raw</text>
+    <text x="499" y="92" font-size="11" text-anchor="middle" class="mono">/Volumes/main/landing/</text>
+    <text x="499" y="106" font-size="11" text-anchor="middle" class="mono">vendor_raw/orders/</text>
+    <rect x="616" y="28" width="170" height="96" rx="10" class="boxA"/>
+    <text x="701" y="54" font-size="14" font-weight="700" text-anchor="middle">Managed Delta table</text>
+    <text x="701" y="74" font-size="11" text-anchor="middle" class="mono">main.bronze.vendor_orders</text>
+    <text x="701" y="92" font-size="11" text-anchor="middle">UC owns files + log</text>
+    <text x="701" y="106" font-size="11" text-anchor="middle">predictive optimization</text>
+    <rect x="818" y="28" width="172" height="96" rx="10" class="boxO"/>
+    <text x="904" y="54" font-size="14" font-weight="700" text-anchor="middle">Plain view (Gold)</text>
+    <text x="904" y="74" font-size="11" text-anchor="middle" class="mono">main.gold.</text>
+    <text x="904" y="88" font-size="11" text-anchor="middle" class="mono">daily_vendor_revenue</text>
+    <text x="904" y="106" font-size="11" text-anchor="middle">stores only SQL</text>
+    <line x1="180" y1="76" x2="210" y2="76" class="lnA" marker-end="url(#ar)"/>
+    <line x1="382" y1="76" x2="412" y2="76" class="lnA" marker-end="url(#ar)"/>
+    <line x1="584" y1="76" x2="614" y2="76" class="lnA" marker-end="url(#ar)"/>
+    <line x1="786" y1="76" x2="816" y2="76" class="lnA" marker-end="url(#ar)"/>
+    <text x="600" y="146" font-size="11" text-anchor="middle" class="muted">read_files → CTAS</text>
+    <text x="802" y="146" font-size="11" text-anchor="middle" class="muted">SQL</text>
+    <rect x="10" y="166" width="980" height="34" rx="8" class="box"/>
+    <text x="20" y="188" font-size="12" font-weight="700">Compute:</text>
+    <text x="499" y="188" font-size="12" text-anchor="middle">serverless notebook (explore)</text>
+    <text x="701" y="188" font-size="12" text-anchor="middle">serverless job (nightly load)</text>
+    <text x="904" y="188" font-size="12" text-anchor="middle">SQL warehouse (BI)</text>
+    <rect x="10" y="206" width="980" height="34" rx="8" class="box"/>
+    <text x="20" y="228" font-size="12" font-weight="700">If dropped:</text>
+    <text x="297" y="228" font-size="12" text-anchor="middle">nothing to drop (files)</text>
+    <text x="499" y="228" font-size="12" text-anchor="middle">files stay in S3</text>
+    <text x="701" y="228" font-size="12" text-anchor="middle">UNDROP within 7 days</text>
+    <text x="904" y="228" font-size="12" text-anchor="middle">only the SQL is lost</text>
+  </svg></div>
+  <p>The same picture, as four layers stacked under every table:</p>
+  <div class="tablewrap"><table>
+    <tr><th>Layer</th><th>Question it answers</th><th>Section</th></tr>
+    <tr><td><b>Platform / compute</b></td><td>What engine runs my code, and where does it run?</td><td>3</td></tr>
+    <tr><td><b>Catalog (Unity Catalog)</b></td><td>What exists, what's it called, who may touch it?</td><td>4</td></tr>
+    <tr><td><b>Storage</b></td><td>Where do the bytes live, and who owns their lifecycle?</td><td>5</td></tr>
+    <tr><td><b>Delta log</b></td><td>Which files make up version N, and how do writers agree?</td><td>6</td></tr>
+  </table></div>
+  <p><b>Takeaway:</b> the vendor owns the <i>files</i>; your pipeline owns the <i>table</i>. That one split decides external vs managed everywhere on this page.</p>
+</section>
+
+<!-- ============ 3. PLATFORM & COMPUTE ============ -->
+<section class="lesson" data-part="The four layers" data-title="Layer 1 · Platform and compute" data-min="6">
+  <div class="eyebrow">3 · Platform and compute · ~6 min <span class="sec">§1</span></div>
+  <h2>Control plane, compute plane, and where your data sits</h2>
+  <p class="lead">Databricks splits into a <b>control plane</b> (web app, job orchestration, Unity Catalog, your queries and code) and a <b>compute plane</b> where the work runs. Classic compute runs in <i>your</i> cloud account; serverless compute runs in Databricks' account. Your data stays in your storage either way.</p>
+  <div class="grid2">
+    <figure class="official"><img src="assets/deepdive-w1/databricks-architecture-aws.png" alt="Databricks architecture for AWS: control plane, serverless compute plane, classic compute plane in your cloud account">
+      <figcaption><span class="src">Official</span><b>Classic + serverless.</b> Classic compute lives in your cloud account next to the workspace storage bucket. Source: <a href="https://docs.databricks.com/aws/en/getting-started/high-level-architecture" target="_blank" rel="noopener">Databricks docs · High-level architecture</a></figcaption></figure>
+    <figure class="official"><img src="assets/deepdive-w1/serverless-workspace-architecture.png" alt="Databricks serverless workspace architecture">
+      <figcaption><span class="src">Official</span><b>Serverless workspace.</b> Compute runs in Databricks' account and reaches your buckets; default storage can be Databricks-managed. Source: <a href="https://docs.databricks.com/aws/en/getting-started/high-level-architecture" target="_blank" rel="noopener">Databricks docs · High-level architecture</a></figcaption></figure>
+  </div>
+  <p>This is the P2 idea in a picture: storage (S3 + Delta) never moves, and any engine can point at the same table because <b>Unity Catalog in the control plane</b> tells each engine what the table is and whether you're allowed in.</p>
+
+  <h3>Pick the engine: a decision flow</h3>
+  <div class="svgwrap">
+  <svg viewBox="0 0 1000 270" role="img" aria-label="Compute decision flow">
+    <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fI"/></marker></defs>
+    <rect x="10" y="20" width="250" height="70" rx="10" class="box"/>
+    <text x="135" y="48" font-size="13" font-weight="700" text-anchor="middle">Pure SQL for BI / dashboards,</text>
+    <text x="135" y="66" font-size="13" font-weight="700" text-anchor="middle">many concurrent users?</text>
+    <rect x="330" y="20" width="250" height="70" rx="10" class="boxO"/>
+    <text x="455" y="48" font-size="14" font-weight="700" text-anchor="middle">SQL warehouse</text>
+    <text x="455" y="68" font-size="12" text-anchor="middle">(serverless preferred) · size ≠ max clusters</text>
+    <line x1="260" y1="55" x2="328" y2="55" class="ln" marker-end="url(#ar2)"/><text x="294" y="48" font-size="12" text-anchor="middle" class="fO" font-weight="700">yes</text>
+    <line x1="135" y1="90" x2="135" y2="128" class="ln" marker-end="url(#ar2)"/><text x="150" y="114" font-size="12" class="fB" font-weight="700">no</text>
+    <rect x="10" y="130" width="250" height="118" rx="10" class="box"/>
+    <text x="135" y="152" font-size="13" font-weight="700" text-anchor="middle">Needs something you configure</text>
+    <text x="135" y="170" font-size="13" font-weight="700" text-anchor="middle">on the compute itself?</text>
+    <text x="135" y="192" font-size="11.5" text-anchor="middle">init script · most Spark confs · RDD API</text>
+    <text x="135" y="208" font-size="11.5" text-anchor="middle">instance pool · compute policy · GPU type</text>
+    <text x="135" y="224" font-size="11.5" text-anchor="middle">compute-scoped libraries · runs &gt; 7 days</text>
+    <line x1="260" y1="170" x2="328" y2="170" class="ln" marker-end="url(#ar2)"/><text x="294" y="163" font-size="12" text-anchor="middle" class="fO" font-weight="700">yes</text>
+    <rect x="330" y="130" width="250" height="80" rx="10" class="boxW"/>
+    <text x="455" y="156" font-size="14" font-weight="700" text-anchor="middle">Classic compute</text>
+    <text x="455" y="176" font-size="12" text-anchor="middle">scheduled → jobs compute</text>
+    <text x="455" y="194" font-size="12" text-anchor="middle">interactive → all-purpose</text>
+    <line x1="135" y1="248" x2="135" y2="262" class="ln"/><line x1="135" y1="262" x2="650" y2="262" class="ln"/><line x1="650" y1="262" x2="650" y2="212" class="ln" marker-end="url(#ar2)"/>
+    <text x="300" y="257" font-size="12" class="fB" font-weight="700">no</text>
+    <rect x="610" y="130" width="380" height="80" rx="10" class="boxA"/>
+    <text x="800" y="156" font-size="14" font-weight="700" text-anchor="middle">Serverless (the default)</text>
+    <text x="800" y="176" font-size="12" text-anchor="middle">notebook → serverless notebook compute</text>
+    <text x="800" y="194" font-size="12" text-anchor="middle">scheduled → serverless job · Python deps via %pip / environment</text>
+    <rect x="610" y="20" width="380" height="70" rx="10" class="box"/>
+    <text x="800" y="44" font-size="12" text-anchor="middle" class="muted">The axis is configurability,</text>
+    <text x="800" y="62" font-size="12" text-anchor="middle" class="muted">not Python vs SQL. Python and SQL run everywhere</text>
+    <text x="800" y="80" font-size="12" text-anchor="middle" class="muted">except the SQL warehouse (SQL only).</text>
+  </svg></div>
+
+  <h3>Serverless limits worth memorising</h3>
+  <p>Checked against <a href="https://docs.databricks.com/aws/en/compute/serverless/limitations" target="_blank" rel="noopener">Serverless compute limitations</a> (page updated Nov 17, 2026):</p>
+  <div class="grid2">
+    <div class="card"><b>You can't configure the compute</b>
+      <ul>
+        <li>No <b>compute-scoped init scripts</b>. Install Python packages with <code>%pip</code> or the environment panel instead (P2 W4).</li>
+        <li><b>Most Spark configs</b> can't be set, only a supported list.</li>
+        <li>No compute policies, instance pools, compute-scoped libraries or env vars.</li>
+        <li>Max runtime <b>7 days</b>; longer runs need classic.</li>
+      </ul></div>
+    <div class="card"><b>Behaves a bit differently</b>
+      <ul>
+        <li><b>Spark Connect only</b>: DataFrame APIs work, RDD APIs don't.</li>
+        <li><b>No Spark UI</b>: use the <b>query profile</b> (W4 Friday).</li>
+        <li>Streaming: only <code>availableNow</code> (or deprecated <code>once</code>) triggers.</li>
+        <li>ANSI mode on; session time zone UTC; <code>%pip</code> installs vanish with the session.</li>
+        <li>Data access must go through <b>Unity Catalog</b> (external locations, volumes).</li>
+      </ul></div>
+  </div>
+  <details class="call"><summary>A nightly Python job must read from an internal system whose JDBC driver is installed by your platform team's init script. Serverless or classic?</summary>
+    <p><b>Classic jobs compute.</b> The blocker isn't Python or JDBC. It's the <b>init script</b>, which serverless doesn't run. If the driver could come in as a normal Python package (<code>%pip</code>) or the source has a Lakeflow Connect connector, serverless would be fine.</p></details>
+  <div class="warn"><b>Exam trap.</b> Options like "use a larger serverless environment" or "run it on a SQL warehouse" sound plausible. Neither adds init scripts. The SQL warehouse also can't run a Python task.</div>
+  <p class="muted" style="font-size:14px">Cost check, if you're curious: <code>SELECT sku_name, usage_date, SUM(usage_quantity) AS dbus FROM system.billing.usage GROUP BY ALL ORDER BY usage_date DESC</code>. Older note: <a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/spark-parallelism-single-node-and-serverless.md" target="_blank" rel="noopener">Spark parallelism on single-node and serverless</a>.</p>
+  <p><b>Takeaway:</b> serverless by default; classic only when you must configure the machine.</p>
+</section>
+<!-- ============ 4. UNITY CATALOG ============ -->
+<section class="lesson" data-title="Layer 2 · Unity Catalog and privileges" data-min="7">
+  <div class="eyebrow">4 · Unity Catalog: objects and privileges · ~7 min <span class="sec">§7</span></div>
+  <h2>Three-level names, securables beside them, and grants that flow down</h2>
+  <p class="lead">Every table you'll ever query is <code>catalog.schema.object</code> inside one <b>metastore</b> (one per region). Next to catalogs sit the securables that govern <i>access to things outside</i>: storage credentials, external locations, connections, shares.</p>
+  <figure class="official"><img src="assets/deepdive-w1/uc-object-model.png" alt="Unity Catalog object model: metastore, then credentials, external locations, catalogs, connections, shares; catalog, then schema, then tables, views, volumes, functions, models">
+    <figcaption><span class="src">Official</span><b>Unity Catalog object model.</b> Data objects sit under catalog → schema. Storage credentials and external locations hang off the metastore directly, not under a catalog. Source: <a href="https://docs.databricks.com/aws/en/data-governance/unity-catalog/" target="_blank" rel="noopener">Databricks docs · What is Unity Catalog?</a></figcaption></figure>
+
+  <h3>How privileges flow: inheritance + "usage gates"</h3>
+  <div class="svgwrap">
+  <svg viewBox="0 0 1000 310" role="img" aria-label="Privilege inheritance from catalog to schema to objects">
+    <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fO"/></marker></defs>
+    <rect x="330" y="10" width="200" height="40" rx="8" class="box"/><text x="430" y="35" font-size="13" font-weight="700" text-anchor="middle">Metastore (region)</text>
+    <line x1="430" y1="50" x2="430" y2="74" class="ln"/>
+    <rect x="330" y="74" width="200" height="44" rx="8" class="boxI"/><text x="430" y="94" font-size="13" font-weight="700" text-anchor="middle">Catalog main</text><text x="430" y="110" font-size="11" text-anchor="middle" class="muted">container</text>
+    <line x1="430" y1="118" x2="430" y2="134" class="ln"/><line x1="200" y1="134" x2="660" y2="134" class="ln"/>
+    <line x1="200" y1="134" x2="200" y2="150" class="ln"/><line x1="660" y1="134" x2="660" y2="150" class="ln"/>
+    <rect x="100" y="150" width="200" height="44" rx="8" class="boxB"/><text x="200" y="170" font-size="13" font-weight="700" text-anchor="middle">Schema main.bronze</text><text x="200" y="186" font-size="11" text-anchor="middle">analysts: no USE SCHEMA</text>
+    <rect x="560" y="150" width="200" height="44" rx="8" class="boxO"/><text x="660" y="170" font-size="13" font-weight="700" text-anchor="middle">Schema main.gold</text><text x="660" y="186" font-size="11" text-anchor="middle">container</text>
+    <line x1="200" y1="194" x2="200" y2="226" class="ln"/>
+    <rect x="100" y="226" width="200" height="44" rx="8" class="box"/><text x="200" y="246" font-size="12" text-anchor="middle" class="mono">vendor_orders</text><text x="200" y="262" font-size="11" text-anchor="middle" class="fB">invisible to analysts</text>
+    <line x1="660" y1="194" x2="660" y2="210" class="ln"/><line x1="560" y1="210" x2="770" y2="210" class="ln"/>
+    <line x1="560" y1="210" x2="560" y2="226" class="ln"/><line x1="770" y1="210" x2="770" y2="226" class="ln"/>
+    <rect x="470" y="226" width="180" height="44" rx="8" class="box"/><text x="560" y="246" font-size="12" text-anchor="middle" class="mono">daily_vendor_revenue</text><text x="560" y="262" font-size="11" text-anchor="middle" class="fO">readable ✓</text>
+    <rect x="680" y="226" width="180" height="44" rx="8" class="box dash" style="stroke-dasharray:5 4"/><text x="770" y="246" font-size="12" text-anchor="middle" class="mono">weekly_kpis (next month)</text><text x="770" y="262" font-size="11" text-anchor="middle" class="fO">readable ✓ (future child)</text>
+    <text x="560" y="96" font-size="12" class="mono">GRANT USE CATALOG ON CATALOG main TO analysts</text>
+    <text x="790" y="158" font-size="12" class="mono">GRANT USE SCHEMA, SELECT</text>
+    <text x="790" y="174" font-size="12" class="mono">ON SCHEMA main.gold</text>
+    <text x="790" y="190" font-size="12" class="mono">TO analysts</text>
+    <path d="M900 196 C 915 230, 895 266, 865 262" class="lnO" marker-end="url(#ar3)"/>
+    <text x="890" y="292" font-size="11.5" text-anchor="middle" class="fO">SELECT inherits to all</text>
+    <text x="890" y="306" font-size="11.5" text-anchor="middle" class="fO">current + future children</text>
+  </svg></div>
+  <div class="grid2">
+    <div class="card b4"><span class="tag t4">Inheritance</span>
+      <p>A privilege granted on a <b>container</b> (catalog, schema) applies to all its <b>current and future</b> children. <code>SELECT</code> on a schema = read every table and view in it, including ones created next month.</p></div>
+    <div class="card b5"><span class="tag t5">Usage gates</span>
+      <p>To read <code>main.gold.x</code> you need <b>all three</b>: <code>USE CATALOG</code> on <code>main</code>, <code>USE SCHEMA</code> on <code>main.gold</code>, <code>SELECT</code> on <code>x</code> (or inherited). A table owner can't bypass the gates: the catalog/schema owner controls them.</p></div>
+  </div>
+  <div class="tablewrap"><table>
+    <tr><th>To do this…</th><th>…you need (besides USE CATALOG + USE SCHEMA)</th></tr>
+    <tr><td>Read a table or view</td><td><code>SELECT</code> on it (or on its schema/catalog)</td></tr>
+    <tr><td>Create a managed table</td><td><code>CREATE TABLE</code> on the schema</td></tr>
+    <tr><td>Create an external table at a path</td><td><code>CREATE TABLE</code> on the schema + <code>CREATE EXTERNAL TABLE</code> on the external location (P3 W2)</td></tr>
+    <tr><td>Create an external volume</td><td><code>CREATE VOLUME</code> on the schema + <code>CREATE EXTERNAL VOLUME</code> on the external location</td></tr>
+    <tr><td>List / read files in a volume</td><td><code>READ VOLUME</code> (write needs <code>WRITE VOLUME</code>)</td></tr>
+    <tr><td>Discover that objects exist, without data access</td><td><code>BROWSE</code> on the catalog (doesn't need the usage gates)</td></tr>
+    <tr><td>Grant, revoke, change ownership</td><td>Be the owner, or have <code>MANAGE</code> on the object</td></tr>
+  </table></div>
+  <div class="trap"><b>Traps.</b>
+    <ul>
+      <li><b>All users have <code>USE CATALOG</code> on <code>main</code> by default.</b> So in a "can't read the view" question about <code>main</code>, the missing piece is usually <code>USE SCHEMA</code>.</li>
+      <li><b>Views run with the owner's rights</b> on the underlying tables (on serverless, SQL warehouses and standard compute). Analysts need <code>SELECT</code> on the <i>view</i>, not on Bronze. The view owner must keep <code>SELECT</code> on Bronze, or the view breaks for everyone.</li>
+      <li><code>MODIFY</code> = change data (INSERT/UPDATE/DELETE/MERGE). It never helps a read.</li>
+    </ul></div>
+  <div class="codewrap"><pre><code><span class="c-com">-- Who can do what? Owners, MANAGE holders and metastore admins see all grants.</span>
+SHOW GRANTS ON SCHEMA main.gold;
+SHOW GRANTS `analysts` ON VIEW main.gold.daily_vendor_revenue;
+<span class="c-com">-- Make the catalog discoverable without opening data</span>
+GRANT BROWSE ON CATALOG main TO `account users`;</code></pre></div>
+  <details class="call"><summary>An analyst has <code>SELECT</code> on <code>main.gold.daily_vendor_revenue</code> but gets INSUFFICIENT_PERMISSIONS. Bronze grants are fine for the view owner. What's missing?</summary>
+    <p><b><code>USE SCHEMA</code> on <code>main.gold</code></b> (and <code>USE CATALOG</code> on <code>main</code>, though everyone has that by default). <code>SELECT</code> alone never opens the containers. Not <code>MODIFY</code> (that's for writes) and not anything on Bronze (the view uses its owner's rights).</p></details>
+  <p><b>Takeaway:</b> grants flow down; usage gates must be open at every level above the object.</p>
+</section>
+
+<!-- ============ 5. STORAGE ============ -->
+<section class="lesson" data-title="Layer 3 · Storage: locations and volumes" data-min="6">
+  <div class="eyebrow">5 · Storage: credentials, locations, volumes, managed storage · ~6 min <span class="sec">§7</span><span class="sec">§2</span></div>
+  <h2>Who is allowed to touch which path, and where managed data lands</h2>
+  <p class="lead">A <b>storage credential</b> wraps a cloud identity (an IAM role on AWS). An <b>external location</b> pairs a credential with a path. External tables, external volumes and managed storage roots are all created <i>under</i> external locations.</p>
+  <figure class="official"><img src="assets/deepdive-w1/external-locations-overview.png" alt="Storage credentials, external locations and cloud storage paths for external tables and volumes">
+    <figcaption><span class="src">Official</span><b>Credential → external location → path.</b> One credential can back several locations; each location governs one path; external tables and volumes live under those paths. Source: <a href="https://docs.databricks.com/aws/en/connect/unity-catalog/cloud-storage/external-locations" target="_blank" rel="noopener">Databricks docs · External locations</a></figcaption></figure>
+  <h3>Where does a managed table's data go? The most specific root wins</h3>
+  <div class="svgwrap">
+  <svg viewBox="0 0 1000 230" role="img" aria-label="Managed storage resolution: schema overrides catalog overrides metastore">
+    <defs><marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fA"/></marker></defs>
+    <rect x="10" y="14" width="560" height="50" rx="8" class="box"/>
+    <text x="24" y="36" font-size="13" font-weight="700">3 · Metastore managed storage (optional)</text>
+    <text x="24" y="54" font-size="11.5" class="mono muted">s3://acme-uc/root/   ← set by an account admin; new auto-enabled workspaces skip it</text>
+    <rect x="40" y="74" width="530" height="50" rx="8" class="boxI"/>
+    <text x="54" y="96" font-size="13" font-weight="700">2 · Catalog main · MANAGED LOCATION</text>
+    <text x="54" y="114" font-size="11.5" class="mono">s3://acme-uc/main/   ← recommended level (data isolation)</text>
+    <rect x="70" y="134" width="500" height="50" rx="8" class="boxA"/>
+    <text x="84" y="156" font-size="13" font-weight="700">1 · Schema main.bronze · MANAGED LOCATION</text>
+    <text x="84" y="174" font-size="11.5" class="mono">s3://acme-uc/bronze/   ← if set, this wins</text>
+    <rect x="620" y="74" width="370" height="110" rx="10" class="boxO"/>
+    <text x="805" y="98" font-size="13" font-weight="700" text-anchor="middle">CREATE TABLE main.bronze.vendor_orders</text>
+    <text x="805" y="118" font-size="12" text-anchor="middle">no LOCATION → managed → goes to</text>
+    <text x="805" y="138" font-size="12" text-anchor="middle" class="mono">s3://acme-uc/bronze/__unitystorage/</text>
+    <text x="805" y="154" font-size="12" text-anchor="middle" class="mono">schemas/&lt;uuid&gt;/…</text>
+    <text x="805" y="174" font-size="11" text-anchor="middle" class="muted">UC adds hashed folders; you never pick the path</text>
+    <line x1="572" y1="159" x2="618" y2="140" class="lnA" marker-end="url(#ar4)"/>
+    <text x="10" y="212" font-size="12" class="muted">Resolution: schema → catalog → metastore. Catalog and schema roots must sit inside an external location (you need CREATE MANAGED STORAGE on it).</text>
+  </svg></div>
+  <div class="trap"><b>Traps.</b>
+    <ul>
+      <li><b>Paths can't overlap.</b> Managed storage, external tables and external volumes each need their own path. Overlaps fail with <code>LOCATION_OVERLAP</code>.</li>
+      <li><code>ALTER SCHEMA … SET MANAGED LOCATION</code> affects only <b>new</b> managed tables and volumes. Existing ones don't move.</li>
+      <li>Where the <i>source files</i> came from never decides managed vs external. Only <code>LOCATION</code> on the table does.</li>
+    </ul></div>
+  <h3>Volumes: governed files, not tables</h3>
+  <div class="grid2">
+    <figure class="official"><img src="assets/deepdive-w1/uc-volume-object-model.png" alt="Unity Catalog object model focused on volume, sibling of table, view and function under schema">
+      <figcaption><span class="src">Official</span><b>A volume is a schema-level sibling of a table.</b> Source: <a href="https://docs.databricks.com/aws/en/volumes/" target="_blank" rel="noopener">Databricks docs · What are Unity Catalog volumes?</a></figcaption></figure>
+    <div class="card">
+      <div class="tablewrap"><table>
+        <tr><th></th><th>Managed volume</th><th>External volume</th></tr>
+        <tr><td>Files live</td><td>In the schema's managed storage</td><td>At an existing path under an external location</td></tr>
+        <tr><td><code>DROP VOLUME</code></td><td>UC deletes files (7-day retention)</td><td><b>Files stay</b> in cloud storage</td></tr>
+        <tr><td>Access</td><td>Only through UC</td><td>UC governs; outside tools can use the URI</td></tr>
+        <tr><td>Fits</td><td>Files your pipelines create</td><td>Landing zones others write (our vendor)</td></tr>
+      </table></div>
+      <p style="font-size:14px">Path: <code>/Volumes/&lt;catalog&gt;/&lt;schema&gt;/&lt;volume&gt;/&lt;path&gt;</code>. You can't list <code>/Volumes/main</code> alone, and you <b>can't register volume files as a table</b>. You read them into one.</p>
+    </div>
+  </div>
+  <div class="codewrap"><pre><code><span class="c-com">-- Admin, once: credential + location (needs CREATE EXTERNAL LOCATION on the metastore)</span>
+CREATE EXTERNAL LOCATION IF NOT EXISTS acme_landing
+  URL 's3://acme-landing/'
+  WITH (STORAGE CREDENTIAL acme_landing_role);
+GRANT CREATE EXTERNAL VOLUME ON EXTERNAL LOCATION acme_landing TO `data-engineers`;
+
+<span class="c-com">-- You: govern the vendor's folder in place</span>
+CREATE SCHEMA IF NOT EXISTS main.landing;
+CREATE EXTERNAL VOLUME main.landing.vendor_raw LOCATION 's3://acme-landing/vendor/';
+GRANT READ VOLUME ON VOLUME main.landing.vendor_raw TO `data-engineers`;
+LIST '/Volumes/main/landing/vendor_raw/orders/';</code></pre></div>
+  <div class="codewrap"><pre><code><span class="c-com"># Python: the same governed path works everywhere</span>
+display(dbutils.fs.ls("/Volumes/main/landing/vendor_raw/orders/"))
+df = spark.read.option("header", True).csv("/Volumes/main/landing/vendor_raw/orders/")</code></pre></div>
+  <details class="call"><summary>Why an external volume and not a managed one, or an external table over the CSVs?</summary>
+    <p>The vendor keeps <b>writing</b> into their bucket, so the files have an outside owner → govern in place (external). A managed volume means copying files into UC storage the vendor can't write to. An external table would govern rows, not files, and wouldn't give you <code>/Volumes</code> file access for inspection, reprocessing or Auto Loader next week.</p></details>
+  <p class="muted" style="font-size:14px">Older note: <a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/unity-catalog-volumes-and-external-locations.md" target="_blank" rel="noopener">Unity Catalog volumes, storage credentials and external locations</a>.</p>
+  <p><b>Takeaway:</b> credentials and locations govern <i>paths</i>; volumes govern <i>files</i>; tables govern <i>rows</i>. Managed data lands at the most specific managed root.</p>
+</section>
+<!-- ============ 6. DELTA LOG ============ -->
+<section class="lesson" data-title="Layer 4 · Delta log, checkpoints, concurrency" data-min="7">
+  <div class="eyebrow">6 · Delta under the hood · ~7 min <span class="sec">§1</span><span class="sec">§6</span></div>
+  <h2>A table version is a list of files, written down in order</h2>
+  <p class="lead">A Delta table is Parquet data files plus a <code>_delta_log/</code> folder. Each successful write adds exactly one numbered commit file. The table at version N = everything the commits 0…N say is "added" and not later "removed".</p>
+  <div class="grid2">
+    <figure class="official"><img src="assets/deepdive-w1/delta-log-structure.png" alt="Delta table directory with _delta_log commit JSON files and Parquet data files">
+      <figcaption><span class="src">Official · Databricks blog</span><b>Table folder = log + data files.</b> Source: <a href="https://www.databricks.com/blog/2019/08/21/diving-into-delta-lake-unpacking-the-transaction-log.html" target="_blank" rel="noopener">Diving into Delta Lake: Unpacking the transaction log</a> (2019; partition folders are optional and today's tables usually skip them).</figcaption></figure>
+    <figure class="official"><img src="assets/deepdive-w1/delta-log-checkpoint.png" alt="Reader uses a Parquet checkpoint plus later JSON commits to compute table state">
+      <figcaption><span class="src">Official · Databricks blog</span><b>Checkpoints save replaying.</b> A reader starts at the latest Parquet checkpoint and applies only the later JSON commits. The blog's "every 10 commits" is the classic open-source default; Databricks now tunes checkpoint frequency itself. Source: <a href="https://www.databricks.com/blog/2019/08/21/diving-into-delta-lake-unpacking-the-transaction-log.html" target="_blank" rel="noopener">same post</a></figcaption></figure>
+  </div>
+  <h3>What one commit contains (illustrative, trimmed)</h3>
+  <div class="codewrap"><pre><code><span class="c-com">// _delta_log/00000000000000000008.json — the nightly append, one JSON action per line</span>
+{"commitInfo":{"operation":"WRITE","operationParameters":{"mode":"Append"},"isBlindAppend":true}}
+{"add":{"path":"part-00000-3f1c….snappy.parquet","size":48213,"dataChange":true,"stats":"{\"numRecords\":5120,…}"}}
+{"add":{"path":"part-00001-9a2e….snappy.parquet","size":47790,"dataChange":true,"stats":"{\"numRecords\":5004,…}"}}
+<span class="c-com">// an UPDATE would instead write "remove" for rewritten files and "add" for their replacements;</span>
+<span class="c-com">// schema/property changes write "metaData"; feature upgrades write "protocol".</span></code></pre></div>
+  <p>Two consequences you'll use all the time:</p>
+  <ul>
+    <li><b>Old files aren't deleted by UPDATE/DELETE.</b> They're only <i>marked</i> removed in the log. That's why time travel and <code>RESTORE</code> work, and why <code>VACUUM</code> exists.</li>
+    <li><b>Per-file stats</b> (row counts, min/max) live in the log, so engines skip files without opening them (data skipping, W4).</li>
+  </ul>
+  <h3>Atomic commits and optimistic concurrency</h3>
+  <div class="svgwrap">
+  <svg viewBox="0 0 1000 252" role="img" aria-label="Optimistic concurrency control flow">
+    <defs><marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="fI"/></marker></defs>
+    <rect x="10" y="20" width="170" height="64" rx="10" class="box"/><text x="95" y="46" font-size="13" font-weight="700" text-anchor="middle">1 · Read snapshot</text><text x="95" y="66" font-size="12" text-anchor="middle">"table is at v11"</text>
+    <rect x="210" y="20" width="190" height="64" rx="10" class="box"/><text x="305" y="46" font-size="13" font-weight="700" text-anchor="middle">2 · Write new Parquet</text><text x="305" y="66" font-size="12" text-anchor="middle">invisible to everyone</text>
+    <rect x="430" y="20" width="200" height="64" rx="10" class="boxI"/><text x="530" y="46" font-size="13" font-weight="700" text-anchor="middle">3 · Try to create</text><text x="530" y="66" font-size="12" text-anchor="middle" class="mono">…012.json (if absent)</text>
+    <rect x="680" y="20" width="310" height="64" rx="10" class="boxO"/><text x="835" y="46" font-size="13" font-weight="700" text-anchor="middle">Created → v12 is live</text><text x="835" y="66" font-size="12" text-anchor="middle">all-or-nothing: readers switch at once</text>
+    <line x1="180" y1="52" x2="208" y2="52" class="ln" marker-end="url(#ar5)"/><line x1="400" y1="52" x2="428" y2="52" class="ln" marker-end="url(#ar5)"/><line x1="630" y1="52" x2="678" y2="52" class="ln" marker-end="url(#ar5)"/>
+    <line x1="530" y1="84" x2="530" y2="118" class="ln" marker-end="url(#ar5)"/><text x="545" y="106" font-size="12" class="fB" font-weight="700">012 already exists (someone else won)</text>
+    <rect x="380" y="120" width="300" height="56" rx="10" class="boxW"/><text x="530" y="144" font-size="13" font-weight="700" text-anchor="middle">4 · Check v12 against what I read</text><text x="530" y="163" font-size="12" text-anchor="middle">did they touch files my operation depends on?</text>
+    <line x1="380" y1="148" x2="200" y2="148" class="ln" marker-end="url(#ar5)"/><text x="290" y="140" font-size="12" text-anchor="middle" class="fO" font-weight="700">no conflict</text>
+    <rect x="10" y="120" width="190" height="56" rx="10" class="boxO"/><text x="105" y="144" font-size="13" font-weight="700" text-anchor="middle">Retry silently as v13</text><text x="105" y="163" font-size="12" text-anchor="middle">e.g. two blind appends</text>
+    <line x1="680" y1="148" x2="728" y2="148" class="ln" marker-end="url(#ar5)"/><text x="704" y="140" font-size="12" text-anchor="middle" class="fB" font-weight="700">yes</text>
+    <rect x="730" y="120" width="260" height="56" rx="10" class="boxB"/><text x="860" y="144" font-size="13" font-weight="700" text-anchor="middle">Fail: DELTA_CONCURRENT_…</text><text x="860" y="163" font-size="12" text-anchor="middle">e.g. ConcurrentAppendException</text>
+    <text x="10" y="204" font-size="12" class="muted">If the job crashes between 2 and 3, there is no commit: readers stay on v11 and the new Parquet files are orphans.</text>
+    <text x="10" y="222" font-size="12" class="muted">VACUUM (FULL, the default) removes orphans once they're older than the retention window.</text>
+    <text x="10" y="240" font-size="12" class="muted">VACUUM LITE only reads the log, so it never sees files from aborted transactions.</text>
+  </svg></div>
+  <figure class="official"><img src="assets/deepdive-w1/delta-log-occ.png" alt="Two users read version 0; user 1 commits version 1; user 2 fails on 1 and retries as version 2" style="max-width:440px">
+    <figcaption><span class="src">Official · Databricks blog</span><b>The retry case.</b> Both users read v0 and append. User 1 wins v1; user 2's attempt on v1 fails, it checks for conflicts, finds none, and commits v2. Source: <a href="https://www.databricks.com/blog/2019/08/21/diving-into-delta-lake-unpacking-the-transaction-log.html" target="_blank" rel="noopener">Unpacking the transaction log</a></figcaption></figure>
+  <div class="grid2">
+    <div class="card"><b>Rules that come up</b>
+      <ul>
+        <li>Default isolation is <b>WriteSerializable</b>. Appends that don't read the table <b>never conflict</b> with each other.</li>
+        <li>Conflicts happen when an <code>UPDATE</code>/<code>DELETE</code>/<code>MERGE</code> read data that a concurrent commit changed. Row-level concurrency (with deletion vectors) shrinks that to real row overlaps.</li>
+        <li><b>Metadata changes</b> (<code>ALTER TABLE … ADD COLUMNS</code>, table properties) can fail <i>all</i> concurrent writers and stop streaming readers.</li>
+      </ul></div>
+    <div class="card"><b>Readers never block</b>
+      <ul>
+        <li>A query reads the snapshot it started with, even while writers commit (isolation).</li>
+        <li>There is no "half-written table" state to repair after a crash. <code>FSCK REPAIR TABLE</code> is for a different problem: files deleted by hand from storage.</li>
+      </ul></div>
+  </div>
+  <details class="call"><summary>Two nightly jobs append to <code>main.bronze.vendor_orders</code> at the same second. One also runs a <code>MERGE</code> that reads yesterday's rows. Which one can fail?</summary>
+    <p>The two plain appends both succeed (the loser retries as the next version). The <b>MERGE</b> is the one that can raise a concurrent-modification error, because it <i>read</i> data that may have changed under it. Fixes: narrow the MERGE condition so it touches fewer files, schedule them apart, or retry.</p></details>
+  <p class="muted" style="font-size:14px">Older notes: <a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/acid-on-delta.md" target="_blank" rel="noopener">ACID on Delta</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/courses/monitoring-and-optimization/02-using-apache-spark-with-delta-lake.html" target="_blank" rel="noopener">Course: Using Apache Spark with Delta Lake</a>.</p>
+  <p><b>Takeaway:</b> a commit is one atomic file creation. No commit, no change. Writers race optimistically and only real overlaps fail.</p>
+  <div class="pause">⏸ Pause point 1. You've finished the four layers (~26 min). Take five minutes, or stop here and come back to Part C another day.</div>
+</section>
+<!-- ============ 7. WALKTHROUGH ============ -->
+<section class="lesson" data-part="Put it together" data-title="Walkthrough · the vendor feed in 6 steps" data-min="8">
+  <div class="eyebrow">7 · End-to-end walkthrough · ~8 min <span class="sec">§2</span><span class="sec">§3</span><span class="sec">§7</span></div>
+  <h2>Run the week: land, load, break, fix, publish, clean up</h2>
+  <p class="lead">Six steps, one table. Before each <b>Next</b>, say what you'd do. Each step names the layer it leans on.</p>
+  <div class="stepper" id="wtSteps"></div>
+  <div id="wtBody">
+    <div class="wt" data-t="1 · Land">
+      <h3>Step 1 · Make the files reachable <span class="sec">§7 storage</span></h3>
+      <p>Done in section 5: <code>acme_landing</code> external location → external volume <code>main.landing.vendor_raw</code>. Engineers browse <code>/Volumes/main/landing/vendor_raw/orders/</code> with <code>READ VOLUME</code>; nobody touches raw S3 URIs or IAM keys.</p>
+      <div class="note"><b>Why it matters later:</b> the raw files stay in the vendor's bucket. If Bronze is ever lost beyond <code>UNDROP</code>, you can rebuild it from them. Keeping raw input replayable is a design choice, not an accident.</div>
+    </div>
+    <div class="wt" data-t="2 · Compute">
+      <h3>Step 2 · Pick compute per job <span class="sec">§1 platform</span></h3>
+      <div class="tablewrap"><table>
+        <tr><th>Work</th><th>Compute</th><th>Why</th></tr>
+        <tr><td>Explore files in a notebook (Python + SQL)</td><td>Serverless notebook</td><td>Starts in seconds, nothing to size</td></tr>
+        <tr><td>Nightly Bronze load</td><td>Serverless job</td><td>Short, scheduled, no idle cost</td></tr>
+        <tr><td>Analysts on the Gold view</td><td>Serverless SQL warehouse</td><td>SQL + BI concurrency</td></tr>
+        <tr><td>Legacy task with an init script</td><td>Classic jobs compute</td><td>Serverless won't run init scripts</td></tr>
+      </table></div>
+    </div>
+    <div class="wt" data-t="3 · Load Bronze">
+      <h3>Step 3 · Load Bronze as a managed table <span class="sec">§2 §3 storage</span></h3>
+      <p>The <i>files</i> have an outside owner; the <i>table</i> is yours. No <code>LOCATION</code> → <b>managed</b>, so it gets predictive optimization, automatic cleanup and <code>UNDROP</code>.</p>
+      <div class="codewrap"><pre><code>CREATE TABLE IF NOT EXISTS main.bronze.vendor_orders AS
+SELECT *,
+       _metadata.file_path    AS source_file,     <span class="c-com">-- lineage: which CSV each row came from</span>
+       current_timestamp()    AS ingested_at
+FROM read_files('/Volumes/main/landing/vendor_raw/orders/',
+                format => 'csv', header => true);
+<span class="c-com">-- read_files adds _rescued_data by default: values that don't fit the inferred schema land there</span>
+DESCRIBE TABLE EXTENDED main.bronze.vendor_orders;   <span class="c-com">-- Type: MANAGED</span></code></pre></div>
+      <div class="codewrap"><pre><code><span class="c-com"># Python equivalent: no .option("path") → managed</span>
+from pyspark.sql import functions as F
+(spark.read.option("header", True).csv("/Volumes/main/landing/vendor_raw/orders/")
+   .select("*", F.col("_metadata.file_path").alias("source_file"))
+   .withColumn("ingested_at", F.current_timestamp())
+   .write.saveAsTable("main.bronze.vendor_orders"))</code></pre></div>
+      <div class="warn"><b>Bridge to W2.</b> A CTAS is fine once. Re-run nightly, it re-reads every file. Monday's week swaps it for <code>COPY INTO</code> and Auto Loader, which only pick up new files.</div>
+    </div>
+    <div class="wt" data-t="4 · Bad day">
+      <h3>Step 4 · Wednesday goes wrong <span class="sec">§6 Delta log</span></h3>
+      <p><b>(a) The load crashes mid-write</b> while analysts query. No commit → they keep seeing the last version. Nothing to repair.</p>
+      <p><b>(b) A teammate runs a bad update:</b> <code>UPDATE main.bronze.vendor_orders SET amount = 0 WHERE vendor_id = 42;</code> (wrong vendor).</p>
+      <div class="codewrap"><pre><code>DESCRIBE HISTORY main.bronze.vendor_orders;               <span class="c-com">-- find the UPDATE (say v8) → good version is 7</span>
+SELECT count(*), sum(amount) FROM main.bronze.vendor_orders VERSION AS OF 7 WHERE vendor_id = 42;
+RESTORE TABLE main.bronze.vendor_orders TO VERSION AS OF 7; <span class="c-com">-- itself a new commit (v9)</span></code></pre></div>
+      <figure class="official"><img src="assets/deepdive-w1/restore-metrics.png" alt="RESTORE output metrics: table size, number of files, removed and restored files">
+        <figcaption><span class="src">Official</span><b>What RESTORE returns.</b> It re-adds the old files and removes the newer ones in one commit, so you can even undo the restore. Source: <a href="https://docs.databricks.com/aws/en/delta/history" target="_blank" rel="noopener">Databricks docs · History and data retention</a></figcaption></figure>
+      <details class="call"><summary>Could you restore to 12 days ago?</summary><p>Not by default. Time travel needs the old <b>data files</b>, kept 7 days (<code>delta.deletedFileRetentionDuration</code>). On UC managed tables, queries older than that are blocked even before <code>VACUUM</code> runs. See section 8.</p></details>
+    </div>
+    <div class="wt" data-t="5 · Publish Gold">
+      <h3>Step 5 · Give analysts a Gold object <span class="sec">§3 §7 catalog</span></h3>
+      <p>Analysts want daily revenue per vendor that matches Bronze <b>the moment</b> they query. The query is light. → <b>plain view</b>: no stored data, always fresh. A materialized view stores results and refreshes on a schedule, so it lags (your diagnostic Q6).</p>
+      <div class="codewrap"><pre><code>CREATE OR REPLACE VIEW main.gold.daily_vendor_revenue AS
+SELECT vendor_id, CAST(order_ts AS DATE) AS order_date, SUM(amount) AS revenue
+FROM main.bronze.vendor_orders
+GROUP BY ALL;
+
+GRANT USE SCHEMA ON SCHEMA main.gold TO `analysts`;      <span class="c-com">-- USE CATALOG on main: everyone has it by default</span>
+GRANT SELECT     ON VIEW   main.gold.daily_vendor_revenue TO `analysts`;</code></pre></div>
+      <div class="tablewrap"><table>
+        <tr><th></th><th>Plain view</th><th>Materialized view</th></tr>
+        <tr><td>Stores data?</td><td>No, only the SQL</td><td>Yes, precomputed results</td></tr>
+        <tr><td>Freshness</td><td>Always current</td><td>As of the last refresh</td></tr>
+        <tr><td>Pick when</td><td>Query is light, freshness matters</td><td>Query is heavy, read often, lag OK</td></tr>
+      </table></div>
+      <p class="muted" style="font-size:14px">Older: <a href="https://github.com/mariusss21/databricks-study/blob/main/weekly-study/2026-W46-gold-objects-and-jobs/DB3-gold-layer-objects.md" target="_blank" rel="noopener">W46 DB3 Gold layer objects</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/weekly-study/2026-W47-lakeflow-pipelines-and-jobs/DB1-sdp-streaming-tables-vs-mvs.md" target="_blank" rel="noopener">W47 DB1 streaming tables vs MVs</a>.</p>
+    </div>
+    <div class="wt" data-t="6 · Clean up">
+      <h3>Step 6 · Friday's cleanup script <span class="sec">§7 lifecycle</span></h3>
+      <div class="tablewrap"><table>
+        <tr><th>Action</th><th>Result</th></tr>
+        <tr><td><code>DROP VOLUME main.landing.vendor_raw</code> (external)</td><td>Volume gone; <b>files stay</b> in the vendor's bucket</td></tr>
+        <tr><td><code>DROP TABLE main.bronze.vendor_orders</code> (managed)</td><td><code>UNDROP TABLE</code> restores data, history and grants within <b>7 days</b>; then files are purged</td></tr>
+        <tr><td><code>DROP VIEW main.gold.daily_vendor_revenue</code></td><td>Only the SQL is lost; recreate it</td></tr>
+        <tr><td>Legacy external Delta table only Databricks writes</td><td><code>ALTER TABLE … SET MANAGED</code> keeps name, grants, history; rollback window 14 days</td></tr>
+      </table></div>
+      <div class="okbox"><b>The one-liner:</b> <code>RESTORE</code> undoes a <i>change</i> (table still exists). <code>UNDROP</code> undoes a <i>delete</i>.</div>
+    </div>
+  </div>
+  <div class="wt-nav"><button class="btn" id="wtPrev">← Prev step</button><button class="btn primary" id="wtNext">Next step →</button></div>
+  <p><b>Takeaway:</b> the same four layers answer every step: where files live, which engine, what the log allows, who can see it.</p>
+</section>
+
+<!-- ============ 8. SAFETY NETS ============ -->
+<section class="lesson" data-title="Safety nets and lifecycle" data-min="7">
+  <div class="eyebrow">8 · Safety nets and lifecycle · ~7 min <span class="sec">§6</span><span class="sec">§7</span></div>
+  <h2>Every recovery tool has a clock. Know the clocks.</h2>
+  <div class="svgwrap">
+  <svg viewBox="0 0 1000 250" role="img" aria-label="Retention windows: 7 days data files and UNDROP, 14 days SET MANAGED rollback, 30 days log history">
+    <line x1="230" y1="30" x2="980" y2="30" class="ln"/>
+    <g font-size="11" class="muted">
+      <text x="230" y="22" text-anchor="middle">day 0</text><text x="405" y="22" text-anchor="middle">7</text><text x="580" y="22" text-anchor="middle">14</text><text x="980" y="22" text-anchor="middle">30</text>
+    </g>
+    <line x1="405" y1="26" x2="405" y2="235" class="ln dash"/><line x1="580" y1="26" x2="580" y2="235" class="ln dash"/>
+    <text x="10" y="64" font-size="12.5" font-weight="700">Time travel / RESTORE</text><text x="10" y="80" font-size="11" class="mono muted">deletedFileRetentionDuration</text>
+    <rect x="230" y="52" width="175" height="26" rx="6" class="boxA"/><text x="318" y="70" font-size="12" text-anchor="middle">old data files kept</text>
+    <text x="415" y="70" font-size="11.5" class="fB">then VACUUM / predictive optimization may delete them</text>
+    <text x="10" y="114" font-size="12.5" font-weight="700">UNDROP a table</text><text x="10" y="130" font-size="11" class="muted">configurable per catalog/schema</text>
+    <rect x="230" y="102" width="175" height="26" rx="6" class="boxO"/><text x="318" y="120" font-size="12" text-anchor="middle">recoverable</text>
+    <text x="415" y="120" font-size="11.5" class="fB">managed files purged · UC_UNDROP_RESOURCE_PAST_RETENTION_PERIOD</text>
+    <text x="10" y="164" font-size="12.5" font-weight="700">UNSET MANAGED</text><text x="10" y="180" font-size="11" class="muted">after SET MANAGED</text>
+    <rect x="230" y="152" width="350" height="26" rx="6" class="boxI"/><text x="405" y="170" font-size="12" text-anchor="middle">old external copy kept → rollback possible</text>
+    <text x="10" y="214" font-size="12.5" font-weight="700">DESCRIBE HISTORY</text><text x="10" y="230" font-size="11" class="mono muted">logRetentionDuration</text>
+    <rect x="230" y="202" width="750" height="26" rx="6" class="box"/><text x="605" y="220" font-size="12" text-anchor="middle">commit entries visible for 30 days … but versions older than 7 days usually can't be read</text>
+  </svg></div>
+  <div class="tablewrap"><table>
+    <tr><th>Tool</th><th>Fixes</th><th>Needs</th><th>Gotcha</th></tr>
+    <tr><td><code>VERSION AS OF</code> / <code>TIMESTAMP AS OF</code></td><td>Look at the past</td><td>Old log + old data files</td><td>Blocked past <code>deletedFileRetentionDuration</code> on UC managed tables</td></tr>
+    <tr><td><code>RESTORE TABLE … TO VERSION AS OF n</code></td><td>A bad change on an existing table</td><td>The table exists; files of v<i>n</i> still exist</td><td>It's a new commit; history keeps the whole story</td></tr>
+    <tr><td><code>UNDROP TABLE</code> (also <code>WITH ID</code>)</td><td>A dropped UC table (managed or external)</td><td>Within the recovery period (7 days default); parent schema exists</td><td>Brings back grants and history, <b>not</b> PK/FK constraints. External needs <code>CREATE EXTERNAL TABLE</code> on the location</td></tr>
+    <tr><td><code>VACUUM</code></td><td>Storage cost, compliance deletes</td><td>Files unreferenced &gt; 7 days</td><td>Shrinks time travel. Below 7 days: <code>DELTA_VACUUM_RETENTION_PERIOD_TOO_SHORT</code></td></tr>
+    <tr><td><code>SET MANAGED</code> / <code>UNSET MANAGED</code></td><td>Move external → managed in place</td><td>DBR 17.3 LTS+ or serverless</td><td>Brief write pause. Run <code>UNSET MANAGED</code> before ever dropping it in the window</td></tr>
+  </table></div>
+  <h3>VACUUM vs time travel: the interplay</h3>
+  <div>
+    <div class="card">
+      <ul>
+        <li><b>Two clocks:</b> <code>logRetentionDuration</code> (30 days) decides how long <i>history entries</i> live. <code>deletedFileRetentionDuration</code> (7 days) decides how long <i>removed data files</i> live. Reading a version needs both.</li>
+        <li>Want 30 days of time travel? Raise <b>both</b>, before the files are gone, and accept higher storage cost.</li>
+        <li><code>VACUUM … DRY RUN</code> previews deletions. <code>LITE</code> is faster (uses the log); <code>FULL</code> (default) also catches orphans from aborted writes.</li>
+      </ul>
+    </div>
+    <div class="codewrap"><pre><code><span class="c-com">-- keep 30 days of readable history (set BEFORE you need it)</span>
+ALTER TABLE main.bronze.vendor_orders SET TBLPROPERTIES (
+  'delta.deletedFileRetentionDuration' = 'interval 30 days',
+  'delta.logRetentionDuration'         = 'interval 30 days');
+
+VACUUM main.bronze.vendor_orders DRY RUN;
+
+<span class="c-com">-- the dropped-table toolkit</span>
+SHOW TABLES DROPPED IN main.bronze;
+UNDROP TABLE main.bronze.vendor_orders;</code></pre></div>
+  </div>
+  <h3>Predictive optimization: maintenance you don't schedule</h3>
+  <div class="grid2">
+    <div class="card">
+      <ul>
+        <li>Runs <code>OPTIMIZE</code>, <code>VACUUM</code> and <code>ANALYZE</code> automatically on <b>UC managed tables only</b> (external tables aren't eligible, which is why P3 W4 used <code>SET MANAGED</code>).</li>
+        <li>Enabled by default; set at account, inherited by catalog → schema → table, overridable at each level.</li>
+        <li>Billed as serverless jobs. It doesn't run <code>ZORDER</code>.</li>
+        <li><b>Consequence:</b> <code>VACUUM</code> will actually run on your managed tables, so the 7-day time-travel limit is real, not theoretical.</li>
+      </ul>
+    </div>
+    <figure class="official" style="margin:0"><img src="assets/deepdive-w1/po-history-catalog-explorer.png" alt="Catalog Explorer history tab listing MERGE operations and an automatic AUTO LIQUID operation marked Not applied">
+      <figcaption><span class="src">Official</span><b>Automatic runs show up in table history</b> next to your own commits (filter "Automatic runs"). Source: <a href="https://docs.databricks.com/aws/en/optimizations/predictive-optimization" target="_blank" rel="noopener">Databricks docs · Predictive optimization</a></figcaption></figure>
+  </div>
+  <details class="call"><summary>P3 W3 again: yesterday someone dropped the managed table <code>main.silver.customers</code>. <code>RESTORE</code> or <code>UNDROP</code>?</summary>
+    <p><b><code>UNDROP TABLE main.silver.customers</code>.</b> <code>RESTORE</code> rolls an <i>existing</i> table back to an older version; on a dropped table it fails with <code>TABLE_OR_VIEW_NOT_FOUND</code>. If a new table already took the name, rename it first, or use <code>SHOW TABLES DROPPED</code> + <code>UNDROP TABLE WITH ID</code>.</p></details>
+  <p class="muted" style="font-size:14px">Older note: <a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/delta-time-travel-and-retention.md" target="_blank" rel="noopener">Delta time travel and retention</a>.</p>
+  <p><b>Takeaway:</b> 7 days for data files and UNDROP, 14 for UNSET MANAGED, 30 for history entries. RESTORE = change, UNDROP = delete.</p>
+</section>
+
+<!-- ============ 9. TROUBLESHOOTING ============ -->
+<section class="lesson" data-title="When it breaks · errors to recognise" data-min="4">
+  <div class="eyebrow">9 · When it breaks · ~4 min <span class="sec">§6</span></div>
+  <h2>Read the error class, name the layer, apply the fix</h2>
+  <p class="lead">Every error below is a real Databricks error class. Notice how each one points at exactly one of the four layers.</p>
+  <div class="tablewrap"><table>
+    <tr><th>You see</th><th>Layer</th><th>Usual cause</th><th>Fix</th></tr>
+    <tr><td><code>INSUFFICIENT_PERMISSIONS</code> on a <code>SELECT</code></td><td>Catalog</td><td>Missing <code>USE SCHEMA</code> / <code>USE CATALOG</code>, or the view owner lost <code>SELECT</code> on the source</td><td><code>SHOW GRANTS</code>, open the gates</td></tr>
+    <tr><td><code>INSUFFICIENT_PERMISSIONS_EXT_LOC</code> on <code>CREATE TABLE … LOCATION</code></td><td>Storage</td><td>No <code>CREATE EXTERNAL TABLE</code> on the external location</td><td>Grant it on the location (P3 W2)</td></tr>
+    <tr><td><code>LOCATION_OVERLAP</code></td><td>Storage</td><td>Path overlaps another external table, volume or managed root</td><td>Use a distinct sub-path</td></tr>
+    <tr><td><code>TABLE_OR_VIEW_NOT_FOUND</code> on <code>RESTORE</code></td><td>Catalog</td><td>The table was dropped</td><td><code>UNDROP TABLE</code></td></tr>
+    <tr><td><code>UC_UNDROP_RESOURCE_PAST_RETENTION_PERIOD</code></td><td>Catalog</td><td>Dropped more than the recovery period ago</td><td>Rebuild from raw files (Step 1's replayable landing)</td></tr>
+    <tr><td><code>DELTA_UNSUPPORTED_TIME_TRAVEL_BEYOND_DELETED_FILE_RETENTION_DURATION</code></td><td>Delta log</td><td>Asked for a version older than file retention</td><td>Raise retention <i>ahead</i> of time</td></tr>
+    <tr><td><code>DELTA_VACUUM_RETENTION_PERIOD_TOO_SHORT</code></td><td>Delta log</td><td><code>VACUUM … RETAIN</code> below the safety check</td><td>Keep ≥ 7 days; long writers may still be running</td></tr>
+    <tr><td><code>DELTA_CONCURRENT_APPEND</code> (ConcurrentAppendException)</td><td>Delta log</td><td>A MERGE/UPDATE read files that a concurrent append changed</td><td>Narrow predicates, separate schedules, retry</td></tr>
+    <tr><td><code>DELTA_FILE_NOT_FOUND</code></td><td>Storage</td><td>Someone deleted data files directly in S3</td><td>Never touch table folders by hand; use <code>DELETE</code>/<code>VACUUM</code></td></tr>
+    <tr><td><code>INFINITE_STREAMING_TRIGGER_NOT_SUPPORTED</code></td><td>Compute</td><td>Default stream trigger on serverless</td><td><code>.trigger(availableNow=True)</code></td></tr>
+  </table></div>
+  <h3>Your diagnostic toolkit</h3>
+  <div class="kv">
+    <b>DESCRIBE HISTORY t</b><span>who changed what, when, with which operation; find the version to restore</span>
+    <b>DESCRIBE DETAIL t</b><span>location, file count, size, table features and properties</span>
+    <b>DESCRIBE TABLE EXTENDED t</b><span>Type: MANAGED or EXTERNAL, owner, storage location</span>
+    <b>SHOW GRANTS ON …</b><span>the effective grants; check every level above the object</span>
+    <b>SHOW TABLES DROPPED IN s</b><span>what UNDROP can still bring back, with IDs</span>
+    <b>Query profile</b><span>serverless replacement for the Spark UI (W4)</span>
+    <b>system.billing.usage</b><span>what each workload costs in DBUs</span>
+  </div>
+  <p><b>Takeaway:</b> before fixing, name the layer. The fix is almost always in that layer.</p>
+  <div class="pause">⏸ Pause point 2. The content part is done (~45 min). What's left is practice: optional hands-on, the scenario check, interview questions and the cheat sheet.</div>
+</section>
+<!-- ============ 10. HANDS-ON ============ -->
+<section class="lesson" data-part="Lock it in" data-title="Hands-on (optional) · Free Edition" data-min="10">
+  <div class="eyebrow">10 · Hands-on, optional · ~10 min · Databricks Free Edition</div>
+  <h2>Load, break, restore, drop, undrop, all in your own schema</h2>
+  <p class="lead">Create a notebook, attach <b>serverless</b>, default language SQL. Paste one cell at a time (Python cells start with <code>%python</code>). Free Edition has no external locations, so the landing zone is a <b>managed</b> volume; everything else is the same as Acme's.</p>
+  <div class="note"><b>Expected results</b> in the comments were worked out by hand from the data below, not run on a workspace. If a number differs, trust the workspace and tell me which cell.</div>
+  <h3>Cell 1 · Schema + landing volume (SQL)</h3>
+  <div class="codewrap"><pre><code>USE CATALOG workspace;
+CREATE SCHEMA IF NOT EXISTS dd_w1;
+USE SCHEMA dd_w1;
+CREATE VOLUME IF NOT EXISTS landing;        <span class="c-com">-- managed volume</span></code></pre></div>
+  <h3>Cell 2 · Drop two "vendor" files into the volume (Python)</h3>
+  <div class="codewrap"><pre><code>%python
+base = "/Volumes/workspace/dd_w1/landing/orders"
+dbutils.fs.put(f"{base}/day1.csv",
+  "order_id,vendor_id,order_ts,amount\n"
+  "1,41,2026-11-18 09:00:00,120.50\n2,42,2026-11-18 10:15:00,80.00\n3,42,2026-11-18 11:30:00,35.25\n", True)
+dbutils.fs.put(f"{base}/day2.csv",
+  "order_id,vendor_id,order_ts,amount\n"
+  "4,41,2026-11-19 08:05:00,60.00\n5,43,2026-11-19 09:40:00,99.90\n6,42,2026-11-19 12:10:00,15.75\n", True)
+display(dbutils.fs.ls(base))                  <span class="c-com"># 2 files</span></code></pre></div>
+  <h3>Cell 3 · Bronze as a managed table (SQL)</h3>
+  <div class="codewrap"><pre><code>CREATE OR REPLACE TABLE bronze_vendor_orders AS
+SELECT order_id, vendor_id, order_ts,
+       CAST(amount AS DECIMAL(10,2)) AS amount,
+       _metadata.file_path            AS source_file,
+       current_timestamp()            AS ingested_at
+FROM read_files('/Volumes/workspace/dd_w1/landing/orders/', format => 'csv', header => true);
+SELECT count(*) AS n, sum(amount) AS total FROM bronze_vendor_orders;   <span class="c-com">-- 6 | 411.40</span>
+DESCRIBE TABLE EXTENDED bronze_vendor_orders;                           <span class="c-com">-- Type: MANAGED</span></code></pre></div>
+  <h3>Cell 4 · The bad update, then RESTORE (SQL)</h3>
+  <div class="codewrap"><pre><code>UPDATE bronze_vendor_orders SET amount = 0 WHERE vendor_id = 42;
+SELECT sum(amount) FROM bronze_vendor_orders;                     <span class="c-com">-- 280.40 (vendor 42 lost 131.00)</span>
+DESCRIBE HISTORY bronze_vendor_orders;                            <span class="c-com">-- v0 CREATE OR REPLACE TABLE AS SELECT, v1 UPDATE</span>
+SELECT sum(amount) FROM bronze_vendor_orders VERSION AS OF 0;     <span class="c-com">-- 411.40</span>
+RESTORE TABLE bronze_vendor_orders TO VERSION AS OF 0;
+SELECT sum(amount) FROM bronze_vendor_orders;                     <span class="c-com">-- 411.40, and history now shows v2 RESTORE</span></code></pre></div>
+  <h3>Cell 5 · Gold view (SQL)</h3>
+  <div class="codewrap"><pre><code>CREATE OR REPLACE VIEW gold_daily_vendor_revenue AS
+SELECT vendor_id, CAST(order_ts AS DATE) AS order_date, SUM(amount) AS revenue
+FROM bronze_vendor_orders GROUP BY ALL;
+SELECT * FROM gold_daily_vendor_revenue ORDER BY order_date, vendor_id;
+<span class="c-com">-- 5 rows: 11-18 → 41: 120.50, 42: 115.25 · 11-19 → 41: 60.00, 42: 15.75, 43: 99.90</span></code></pre></div>
+  <h3>Cell 6 · Drop it, try RESTORE, then UNDROP (SQL, run one line at a time)</h3>
+  <div class="codewrap"><pre><code>DROP TABLE bronze_vendor_orders;
+SELECT * FROM gold_daily_vendor_revenue;                  <span class="c-com">-- fails: the view's source is gone</span>
+RESTORE TABLE bronze_vendor_orders TO VERSION AS OF 0;    <span class="c-com">-- fails: TABLE_OR_VIEW_NOT_FOUND (nothing to roll back)</span>
+SHOW TABLES DROPPED IN dd_w1;                             <span class="c-com">-- 1 row, tabletype managed</span>
+UNDROP TABLE bronze_vendor_orders;
+SELECT count(*) FROM gold_daily_vendor_revenue;           <span class="c-com">-- 5 again; DESCRIBE HISTORY still shows v0–v2</span></code></pre></div>
+  <h3>Cell 7 · Feel the VACUUM safety check, then clean up (SQL)</h3>
+  <div class="codewrap"><pre><code>VACUUM bronze_vendor_orders DRY RUN;                      <span class="c-com">-- likely 0 files: nothing is older than 7 days yet</span>
+VACUUM bronze_vendor_orders RETAIN 0 HOURS;               <span class="c-com">-- expect DELTA_VACUUM_RETENTION_PERIOD_TOO_SHORT</span>
+DROP SCHEMA dd_w1 CASCADE;                                <span class="c-com">-- when you're done</span></code></pre></div>
+  <h3>Checklist (saved)</h3>
+  <div id="checks"></div>
+</section>
+
+<!-- ============ 11. SCENARIO CHECK ============ -->
+<section class="lesson" data-title="Scenario check · 11 questions" data-min="8">
+  <div class="eyebrow">11 · Scenario check · ~8 min</div>
+  <h2>Eleven original questions, tagged by exam section</h2>
+  <p class="lead">Pick one option; the explanation shows why the right one is right and why each other one is wrong. Answers are saved. When you're done, copy your answers and paste them in chat so misses go into Monday's review.</p>
+  <div id="drill"></div>
+  <p class="score" id="drillScore"></p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn primary small" id="copyAnswers">📋 Copy my answers</button>
+    <button class="btn small" id="drillReset">↺ Reset answers</button>
+    <span id="copyMsg" class="muted" style="font-size:13px;align-self:center"></span>
+  </div>
+</section>
+
+<!-- ============ 12. INTERVIEW ============ -->
+<section class="lesson" data-title="Interview questions" data-min="6">
+  <div class="eyebrow">12 · Interview questions · ~6 min</div>
+  <h2>Say it out loud first, then reveal</h2>
+  <p class="lead">Each answer is about a minute spoken. The grey line says what makes it sound senior.</p>
+  <details class="qa"><summary>Q1. Walk me through how you'd onboard a new vendor file feed into the lakehouse.</summary>
+    <p>I start with <b>ownership</b>. The vendor owns the files, so I govern them in place: a storage credential and external location (usually admin-owned), then an <b>external volume</b> over their folder so engineers use <code>/Volumes</code> paths and UC grants, never raw keys. I load into a <b>managed Bronze</b> Delta table with lineage columns (source file, ingest time), so the platform handles layout, predictive optimization and <code>UNDROP</code>. The load is incremental (Auto Loader or <code>COPY INTO</code>), runs as a serverless job, and Gold is a view or table with least-privilege grants. I keep the raw files replayable, because that's my real backup.</p>
+    <p class="why-senior">Why it sounds senior: it opens with an ownership decision, names the recovery story, and separates "govern files" from "own tables".</p></details>
+  <details class="qa"><summary>Q2. Managed or external tables: what's your default, and when do you go external?</summary>
+    <p><b>Managed by default.</b> UC owns the files, so I get automatic maintenance (OPTIMIZE, VACUUM, ANALYZE through predictive optimization), clean drop/undrop semantics and no path sprawl. I go <b>external</b> when something outside Databricks must <i>write</i> those files at a path I don't control, or data must stay at a fixed location for contractual reasons. When the outside writer goes away, I convert with <code>SET MANAGED</code>, which keeps name, grants and history and gives me a 14-day <code>UNSET MANAGED</code> rollback.</p>
+    <p class="why-senior">Why it sounds senior: a clear default, a specific exception, and a migration path with its rollback.</p></details>
+  <details class="qa"><summary>Q3. Object storage has no transactions. How does Delta give you ACID on it?</summary>
+    <p>Through the <b>transaction log</b>. Data files are immutable Parquet; each change is recorded as one numbered JSON commit listing files added and removed. A commit is <b>one atomic put-if-absent</b> of the next version file: it either exists or it doesn't, so readers never see half a write. Writers use <b>optimistic concurrency</b>: read a snapshot, write files, try to claim the next version; if someone else won, check for logical conflicts and retry or fail. Readers get snapshot isolation. Periodic Parquet checkpoints keep reconstruction fast.</p>
+    <p class="why-senior">Why it sounds senior: it names the primitive (atomic file creation) instead of saying "Delta handles it".</p></details>
+  <details class="qa"><summary>Q4. "We have time travel, so we don't need backups." How do you respond?</summary>
+    <p>Time travel is an <b>undo button, not a backup</b>. Removed data files are kept 7 days by default, and on managed tables predictive optimization really runs <code>VACUUM</code>, so older versions disappear. History entries last 30 days, but entries without files aren't readable. A dropped table is recoverable for 7 days. And everything sits in the same storage account, so it doesn't protect against account-level mistakes. For real backups: keep raw input replayable, <code>DEEP CLONE</code> critical tables to another location on a schedule, and raise retention deliberately where the business needs longer undo.</p>
+    <p class="why-senior">Why it sounds senior: it knows the actual clocks and separates "undo" from "disaster recovery".</p></details>
+  <details class="qa"><summary>Q5. An analyst says "I can't read the revenue view." How do you debug it?</summary>
+    <p>I read the <b>error class</b> first. <code>TABLE_OR_VIEW_NOT_FOUND</code> can mean "not visible to you", so I check the usage gates: <code>USE CATALOG</code> and <code>USE SCHEMA</code> on every parent, then <code>SELECT</code> on the view itself (direct or inherited) with <code>SHOW GRANTS</code>, and whether the grant went to a group the analyst is actually in. If the view fails for everyone, the <b>view owner</b> probably lost <code>SELECT</code> on the source, since views run with the owner's rights. For discovery problems I grant <code>BROWSE</code>; for "who changed what" I check the audit system table.</p>
+    <p class="why-senior">Why it sounds senior: a top-down checklist, plus the view-owner subtlety most people miss.</p></details>
+</section>
+
+<!-- ============ 13. CHEAT SHEET ============ -->
+<section class="lesson" id="cheatsheet" data-title="Cheat sheet" data-min="3">
+  <div class="eyebrow noprint">13 · Cheat sheet · ~3 min · <a href="#" id="printCheat2">print it (A4 landscape)</a></div>
+  <div class="cheat">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px">
+      <h2 style="margin:0;font-size:20px">W1 cheat sheet · Anatomy of a governed table</h2>
+      <span style="font-size:12px;color:var(--muted)">Databricks DE Associate · §1 §2 §3 §6 §7 · Nov 16–22, 2026</span>
+    </div>
+    <p style="margin:4px 0 10px"><b>The split that decides everything:</b> outside owner of the <i>files</i> → external (location + volume). Your pipeline owns the <i>table</i> → managed.</p>
+    <div class="cols">
+      <div class="blk"><h4>Platform + compute §1</h4><ul>
+        <li>Control plane: web app, jobs, <b>UC</b>, queries. Compute plane: classic (your account) or serverless (Databricks').</li>
+        <li><b>Serverless</b> = default for notebooks + jobs. <b>SQL warehouse</b> = SQL/BI only.</li>
+        <li><b>Classic</b> when you must configure compute: init scripts, most Spark confs, RDD API, pools, policies, &gt;7-day runs.</li>
+        <li>Python deps on serverless: <code>%pip</code> / environment.</li>
+        <li>No Spark UI on serverless → <b>query profile</b>. Streams: <code>availableNow</code>.</li>
+      </ul></div>
+      <div class="blk"><h4>Unity Catalog + storage §7 §2</h4><ul>
+        <li><code>catalog.schema.object</code>, one metastore per region.</li>
+        <li>Credential → <b>external location</b> (credential + path) → external tables / volumes / managed roots.</li>
+        <li>Managed data root: <b>schema &gt; catalog &gt; metastore</b>. Paths can't overlap.</li>
+        <li>Read = <code>USE CATALOG</code> + <code>USE SCHEMA</code> + <code>SELECT</code>. Container grants inherit to current + future children.</li>
+        <li>Volumes govern files at <code>/Volumes/c/s/v/…</code>; never registered as tables.</li>
+        <li>External table at a path: <code>CREATE EXTERNAL TABLE</code> on the location.</li>
+      </ul></div>
+      <div class="blk"><h4>Delta + safety §1 §6</h4><ul>
+        <li>Commit = one atomic JSON in <code>_delta_log</code>. No commit → no change.</li>
+        <li>Checkpoints (Parquet) speed up reads. Blind appends never conflict.</li>
+        <li><code>RESTORE</code> = undo a <b>change</b> · <code>UNDROP</code> = undo a <b>delete</b> (7 d).</li>
+        <li>Files kept <b>7 d</b> (<code>deletedFileRetentionDuration</code>), history <b>30 d</b> (<code>logRetentionDuration</code>). Need both to time travel.</li>
+        <li>Predictive optimization: OPTIMIZE/VACUUM/ANALYZE, <b>managed only</b>.</li>
+        <li><code>SET MANAGED</code> keeps name/grants/history; <code>UNSET MANAGED</code> ≤ 14 d.</li>
+      </ul></div>
+    </div>
+    <div class="cols" style="margin-top:10px">
+      <div class="blk traps"><h4>Exam traps</h4><ul>
+        <li>Serverless limits are about <b>configuring compute</b>, not Python vs SQL.</li>
+        <li>Source files in a volume ≠ external table. Only <code>LOCATION</code> makes it external.</li>
+        <li><code>SELECT</code> alone isn't enough; <code>MODIFY</code> never helps a read.</li>
+        <li>Everyone has <code>USE CATALOG</code> on <code>main</code> by default.</li>
+        <li><code>RESTORE</code> on a dropped table fails; <code>UNDROP</code> it.</li>
+      </ul></div>
+      <div class="blk"><h4>Don't confuse</h4><ul>
+        <li><b>Plain view</b> (SQL only, always fresh) vs <b>MV</b> (stored, refresh lag).</li>
+        <li><b>Managed volume</b> (drop deletes, 7 d) vs <b>external volume</b> (files stay).</li>
+        <li><b>DROP external table</b> (files stay) vs <b>DROP managed</b> (UNDROP 7 d, then purge).</li>
+        <li><b>VACUUM LITE</b> (log only) vs <b>FULL</b> (also orphans from crashes).</li>
+        <li><b>BROWSE</b> (see it exists) vs <b>SELECT</b> (read data).</li>
+      </ul></div>
+      <div class="blk"><h4>Self-test (answer aloud)</h4><ol style="margin:0;padding-left:18px">
+        <li>Where do a managed table's files go if only the catalog has a root?</li>
+        <li>Two blind appends collide. Result?</li>
+        <li>Auditor wants day −12. Possible by default?</li>
+        <li>Job needs an init script. Compute?</li>
+        <li>Analyst has SELECT but no access. Why?</li>
+      </ol>
+      <p style="margin:4px 0 0;font-size:11.5px;color:var(--muted)">1 catalog root · 2 both commit · 3 no, files kept 7 d · 4 classic jobs compute · 5 missing USE SCHEMA</p></div>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin:8px 0 0">Facts re-checked on docs.databricks.com on 2026-11-22. Diagrams: Databricks docs + Databricks blog (see section 14).</p>
+  </div>
+</section>
+
+<!-- ============ 14. CONNECTIONS + GO DEEPER ============ -->
+<section class="lesson" data-title="Connections + go deeper" data-min="3">
+  <div class="eyebrow">14 · Connections and go deeper · ~3 min</div>
+  <h2>Where this week comes back</h2>
+  <div class="tablewrap"><table>
+    <tr><th>This week's idea</th><th>Comes back in</th><th>How</th></tr>
+    <tr><td>Volumes + replayable raw files</td><td><b>W2 Ingestion</b> (next week)</td><td><code>COPY INTO</code> and Auto Loader read <code>/Volumes</code> paths and load only new files. Older: <a href="https://github.com/mariusss21/databricks-study/blob/main/weekly-study/2026-W43-ingestion-into-bronze/deepdive-db-governed-ingestion-to-bronze.html" target="_blank" rel="noopener">W43 deep dive: governed ingestion to Bronze</a></td></tr>
+    <tr><td>Managed Bronze table + <code>_rescued_data</code></td><td>W2 Wed, W3</td><td>Schema inference, evolution and rescued data; then cleaning into Silver</td></tr>
+    <tr><td>Plain view vs MV</td><td>W4 Tue</td><td>Gold objects: table vs view vs MV vs streaming table</td></tr>
+    <tr><td>Data skipping stats, predictive optimization, query profile</td><td>W4 Fri</td><td>"Why is it slow?": file layout, liquid clustering, tuning</td></tr>
+    <tr><td>Serverless vs classic jobs compute</td><td>W5</td><td>Lakeflow Jobs task compute, cluster startup failures</td></tr>
+    <tr><td>Grants and inheritance</td><td>W6</td><td>GRANT/REVOKE, row filters, column masks, ABAC</td></tr>
+    <tr><td>Concurrent writers</td><td>W5 Fri</td><td>Two jobs hitting one table, safe-to-retry design</td></tr>
+  </table></div>
+  <h3>Your older material, still useful</h3>
+  <ul>
+    <li><a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/platform-delta-unity-catalog-compute.md" target="_blank" rel="noopener">Platform wrap: Delta, Unity Catalog and compute</a></li>
+    <li><a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/acid-on-delta.md" target="_blank" rel="noopener">ACID on Delta</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/delta-time-travel-and-retention.md" target="_blank" rel="noopener">Delta time travel and retention</a></li>
+    <li><a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/unity-catalog-volumes-and-external-locations.md" target="_blank" rel="noopener">UC volumes, storage credentials and external locations</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/medallion-architecture.md" target="_blank" rel="noopener">Medallion architecture</a></li>
+    <li>This week's pills: <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/P1-delta-acid-and-the-lakehouse.md" target="_blank" rel="noopener">P1</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/P2-compute-and-storage-compute-separation.md" target="_blank" rel="noopener">P2</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/P3-unity-catalog-managed-vs-external-tables.md" target="_blank" rel="noopener">P3</a></li>
+  </ul>
+  <h3>Official docs (each opened on 2026-11-22)</h3>
+  <ul>
+    <li><a href="https://docs.databricks.com/aws/en/getting-started/high-level-architecture" target="_blank" rel="noopener">High-level architecture</a> · <a href="https://docs.databricks.com/aws/en/compute/serverless/limitations" target="_blank" rel="noopener">Serverless compute limitations</a> · <a href="https://docs.databricks.com/aws/en/compute/choose-compute" target="_blank" rel="noopener">Choose compute</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/data-governance/unity-catalog/" target="_blank" rel="noopener">What is Unity Catalog?</a> · <a href="https://docs.databricks.com/aws/en/data-governance/unity-catalog/access-control/permissions-concepts" target="_blank" rel="noopener">Permissions model concepts</a> · <a href="https://docs.databricks.com/aws/en/data-governance/unity-catalog/manage-privileges/privileges" target="_blank" rel="noopener">Privileges reference</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/connect/unity-catalog/cloud-storage/external-locations" target="_blank" rel="noopener">External locations</a> · <a href="https://docs.databricks.com/aws/en/connect/unity-catalog/cloud-storage/managed-storage" target="_blank" rel="noopener">Managed storage locations</a> · <a href="https://docs.databricks.com/aws/en/volumes/" target="_blank" rel="noopener">Volumes</a> · <a href="https://docs.databricks.com/aws/en/sql/language-manual/functions/read_files" target="_blank" rel="noopener">read_files</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/delta/history" target="_blank" rel="noopener">History and data retention</a> · <a href="https://docs.databricks.com/aws/en/delta/vacuum" target="_blank" rel="noopener">VACUUM</a> · <a href="https://docs.databricks.com/aws/en/delta/concurrency-control" target="_blank" rel="noopener">Isolation levels and write conflicts</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/tables/managed" target="_blank" rel="noopener">Managed tables</a> · <a href="https://docs.databricks.com/aws/en/sql/language-manual/sql-ref-syntax-ddl-undrop-table" target="_blank" rel="noopener">UNDROP</a> · <a href="https://docs.databricks.com/aws/en/tables/convert-external-managed" target="_blank" rel="noopener">SET MANAGED</a> · <a href="https://docs.databricks.com/aws/en/optimizations/predictive-optimization" target="_blank" rel="noopener">Predictive optimization</a></li>
+    <li><a href="https://docs.databricks.com/aws/en/error-messages/error-classes" target="_blank" rel="noopener">Error classes</a> · <a href="https://www.databricks.com/blog/2019/08/21/diving-into-delta-lake-unpacking-the-transaction-log.html" target="_blank" rel="noopener">Blog: Unpacking the transaction log</a> · <a href="https://www.databricks.com/learn/certification/data-engineer-associate" target="_blank" rel="noopener">Exam page</a></li>
+  </ul>
+  <p class="muted" style="font-size:14px">Optional, not homework: <a href="https://github.com/kengio/databricks-certification-study-guide/tree/main/certifications/data-engineer-associate" target="_blank" rel="noopener">kengio study guide: DE Associate</a>.</p>
+  <div class="okbox"><b>Last step, 1 minute:</b> close this tab and write the three things you remember most. Then paste your scenario-check answers in chat. Monday's review picks up your misses.</div>
+</section>
+</main>
+</div>
+<script>
+(function(){
+  "use strict";
+  var KEY = "dd-2026-11-20-w1-anatomy-governed-table-v2";
+  var state = {done:{}, current:0, drill:{}, checks:{}, theme:null, step:0};
+  function load(){ try{ var s = JSON.parse(localStorage.getItem(KEY) || "null"); if(s && typeof s === "object"){ for(var k in state){ if(s[k] !== undefined) state[k] = s[k]; } } }catch(e){} }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+  load();
+
+  var root = document.documentElement;
+  if(state.theme) root.setAttribute("data-theme", state.theme);
+  document.getElementById("themeBtn").addEventListener("click", function(){
+    var cur = root.getAttribute("data-theme") || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    state.theme = cur === "dark" ? "light" : "dark"; root.setAttribute("data-theme", state.theme); save();
+  });
+
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.lesson"));
+  var navList = document.getElementById("navList");
+  var sidebar = document.getElementById("sidebar");
+  var links = [];
+  sections.forEach(function(sec, i){
+    if(sec.getAttribute("data-part")){
+      var ph = document.createElement("li"); ph.className = "part"; ph.textContent = sec.getAttribute("data-part"); navList.appendChild(ph);
+    }
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = "#s" + (i+1);
+    a.innerHTML = '<span class="dot">✓</span><span>' + (i+1) + ". " + sec.getAttribute("data-title") + ' <small style="color:var(--muted)">· ' + sec.getAttribute("data-min") + "m</small></span>";
+    a.addEventListener("click", function(ev){ ev.preventDefault(); show(i); sidebar.classList.remove("open"); });
+    li.appendChild(a); navList.appendChild(li); links.push(a);
+
+    var foot = document.createElement("div");
+    foot.className = "footer-nav";
+    var lab = document.createElement("label"); lab.className = "done-label";
+    var cb = document.createElement("input"); cb.type = "checkbox"; cb.className = "doneBox"; cb.checked = !!state.done[i];
+    cb.addEventListener("change", function(){ state.done[i] = cb.checked; save(); refresh(); });
+    lab.appendChild(cb); lab.appendChild(document.createTextNode(" Mark section complete"));
+    var btns = document.createElement("div"); btns.style.display = "flex"; btns.style.gap = "8px";
+    if(i > 0){ var p = document.createElement("button"); p.className = "btn"; p.textContent = "← Back"; p.addEventListener("click", function(){ show(i-1); }); btns.appendChild(p); }
+    if(i < sections.length - 1){ var n = document.createElement("button"); n.className = "btn primary"; n.textContent = "Complete & continue →"; n.addEventListener("click", function(){ state.done[i] = true; save(); show(i+1); }); btns.appendChild(n); }
+    else { var f = document.createElement("button"); f.className = "btn primary"; f.textContent = "Finish ✓"; f.addEventListener("click", function(){ state.done[i] = true; save(); refresh(); }); btns.appendChild(f); }
+    foot.appendChild(lab); foot.appendChild(btns); sec.appendChild(foot);
+  });
+
+  function show(i){
+    if(isNaN(i) || i < 0 || i >= sections.length) i = 0;
+    state.current = i; save();
+    sections.forEach(function(s, j){ s.classList.toggle("active", j === i); });
+    refresh();
+    window.scrollTo(0, 0);
+    try{ if(history.replaceState) history.replaceState(null, "", "#s" + (i+1)); }catch(e){}
+  }
+  function refresh(){
+    var n = 0;
+    sections.forEach(function(s, j){
+      if(state.done[j]) n++;
+      links[j].classList.toggle("done", !!state.done[j]);
+      links[j].classList.toggle("active", j === state.current);
+      var cb = s.querySelector(".doneBox"); if(cb) cb.checked = !!state.done[j];
+    });
+    var pct = Math.round(100 * n / sections.length);
+    document.getElementById("pct").textContent = pct + "%";
+    document.getElementById("pctMobile").textContent = pct + "%";
+    document.getElementById("bar").style.width = pct + "%";
+    document.getElementById("barMobile").style.width = pct + "%";
+    document.getElementById("progMeta").textContent = n + " of " + sections.length + " sections complete";
+  }
+  document.getElementById("resetBtn").addEventListener("click", function(){
+    if(!window.confirm("Reset progress, answers and checklist for this deep dive?")) return;
+    state.done = {}; state.drill = {}; state.checks = {}; state.step = 0; save();
+    renderDrill(); renderChecks(); renderStep(0); show(0);
+  });
+  document.getElementById("menuBtn").addEventListener("click", function(){ sidebar.classList.toggle("open"); });
+
+  /* print the cheat sheet only */
+  function printCheat(ev){ if(ev) ev.preventDefault(); document.body.classList.add("print-cheat"); window.print(); setTimeout(function(){ document.body.classList.remove("print-cheat"); }, 500); }
+  document.getElementById("printCheat").addEventListener("click", printCheat);
+  document.getElementById("printCheat2").addEventListener("click", printCheat);
+
+  /* copy buttons on code blocks */
+  Array.prototype.forEach.call(document.querySelectorAll(".codewrap"), function(w){
+    var b = document.createElement("button"); b.className = "copy"; b.textContent = "Copy";
+    b.addEventListener("click", function(){
+      var t = w.querySelector("pre").innerText;
+      try{ navigator.clipboard.writeText(t).then(function(){ b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy"; }, 1200); }); }catch(e){}
+    });
+    w.appendChild(b);
+  });
+
+  /* official images open full size in a new tab */
+  Array.prototype.forEach.call(document.querySelectorAll("figure.official img"), function(img){
+    img.style.cursor = "zoom-in"; img.title = "Open full size";
+    img.addEventListener("click", function(){ window.open(img.getAttribute("src"), "_blank"); });
+  });
+
+  /* walkthrough stepper */
+  var wts = Array.prototype.slice.call(document.querySelectorAll("#wtBody .wt"));
+  var wtSteps = document.getElementById("wtSteps");
+  wts.forEach(function(w, i){
+    var b = document.createElement("button"); b.textContent = w.getAttribute("data-t");
+    b.addEventListener("click", function(){ renderStep(i); }); wtSteps.appendChild(b);
+  });
+  function renderStep(i){
+    if(i < 0) i = 0; if(i >= wts.length) i = wts.length - 1;
+    state.step = i; save();
+    wts.forEach(function(w, j){ w.classList.toggle("on", j === i); });
+    Array.prototype.forEach.call(wtSteps.children, function(b, j){ b.classList.toggle("on", j === i); });
+    document.getElementById("wtPrev").disabled = (i === 0);
+    document.getElementById("wtNext").disabled = (i === wts.length - 1);
+  }
+  document.getElementById("wtPrev").addEventListener("click", function(){ renderStep(state.step - 1); });
+  document.getElementById("wtNext").addEventListener("click", function(){ renderStep(state.step + 1); });
+
+  /* scenario check: original questions, balanced options */
+  var L = ["A","B","C","D"];
+  var drill = [
+    {s:"§7", q:"The vendor will keep writing CSVs to their own bucket. Engineers must list and read those files by a Unity Catalog path, with UC privileges. What do you create?",
+     o:["A managed volume in main.landing, then copy the files into it","An external volume on a path under an external location","An external table with LOCATION set to the vendor's folder","A storage credential granted directly to each engineer"], a:1,
+     why:"The files have an outside writer, so you govern them in place. An external volume gives <code>/Volumes</code> paths plus <code>READ VOLUME</code>/<code>WRITE VOLUME</code> grants.",
+     w:{0:"Copying breaks \"govern in place\": the vendor would have to write into UC managed storage, which they can't.",2:"A table governs rows, not files. You'd get no <code>/Volumes</code> file access for listing or reprocessing.",3:"Credentials are used to define external locations, not handed to users. Users reach paths through locations and volumes."}},
+    {s:"§1", q:"A nightly Python task needs a compute-scoped init script that installs an OS-level package. Which compute fits?",
+     o:["Serverless jobs compute with a larger environment","A serverless SQL warehouse running the task as SQL","Classic jobs compute with dedicated access mode","Serverless notebook compute plus %pip install"], a:2,
+     why:"Serverless doesn't run compute-scoped init scripts, whatever the language. Scheduled work that needs one goes to classic jobs compute.",
+     w:{0:"A bigger serverless environment still can't run init scripts.",1:"A SQL warehouse runs SQL only. It can't run a Python task or an init script.",3:"<code>%pip</code> installs Python packages, not OS-level setup from an init script."}},
+    {s:"§2 §3", q:"You load Bronze with <code>CREATE TABLE main.bronze.vendor_orders AS SELECT … FROM read_files('/Volumes/main/landing/vendor_raw/orders/')</code>. What kind of table is it?",
+     o:["Managed, because no LOCATION clause was given","External, because the source volume is external","External, because its source files sit in a volume","Managed, but only after you run SET MANAGED on it"], a:0,
+     why:"No <code>LOCATION</code> (and no <code>.option(\"path\")</code> in Python) means managed. Where the input came from doesn't matter.",
+     w:{1:"Mixes up the source with the table's own storage. The volume being external says nothing about the table.",2:"Same mix-up: reading from a volume doesn't make the output external.",3:"<code>SET MANAGED</code> converts tables that are already external. This one is managed from the start."}},
+    {s:"§6", q:"A job crashes halfway through an <code>INSERT</code> into a Delta table while analysts are querying it. What do analysts see?",
+     o:["The last committed version, without the new rows","The rows written before the crash, until a repair","An error until someone runs FSCK REPAIR TABLE","A mix of old and new rows across the data files"], a:0,
+     why:"A write becomes visible only when its commit file lands in <code>_delta_log</code>. No commit → readers stay on the last version.",
+     w:{1:"Partial writes are never visible: the new Parquet files aren't referenced by any commit.",2:"Nothing needs repairing. FSCK is for data files deleted by hand from storage.",3:"Readers always see one consistent snapshot. That's isolation."}},
+    {s:"§3", q:"Analysts want vendor revenue that always matches Bronze the moment they query it. The query is light. Which object fits best?",
+     o:["A materialized view refreshed every hour","A plain view over the Bronze table","A managed table rebuilt by a nightly job","A streaming table reading from Bronze"], a:1,
+     why:"A plain view stores only SQL and runs it on each query, so it's always as fresh as Bronze. Light query → no need to precompute. (Your diagnostic Q6.)",
+     w:{0:"Hourly refresh means up to an hour of lag.",2:"A nightly rebuild means up to a day of lag.",3:"Streaming tables are for incremental ingestion and keep their own copy of the data."}},
+    {s:"§7", q:"An analyst has <code>SELECT</code> on <code>main.gold.daily_vendor_revenue</code> but still gets INSUFFICIENT_PERMISSIONS. The view owner's grants on Bronze are fine. What's the most likely gap?",
+     o:["MODIFY granted on the view itself","READ VOLUME on the landing volume","USE SCHEMA on the main.gold schema","CREATE TABLE on the main.gold schema"], a:2,
+     why:"Reading needs USE CATALOG + USE SCHEMA + SELECT. Everyone has USE CATALOG on <code>main</code> by default, so USE SCHEMA is the missing gate.",
+     w:{0:"MODIFY is for changing data, never for reading it.",1:"The view reads a table, not volume files, and it runs with its owner's rights anyway.",3:"CREATE TABLE is for making new objects, not reading existing ones."}},
+    {s:"§6", q:"Two nightly jobs run plain <code>INSERT INTO main.bronze.vendor_orders</code> at the same moment. Neither reads the table first. What happens?",
+     o:["The second always fails with ConcurrentAppendException","Their new rows are merged into one shared commit file","The table stays locked until the first job finishes","Both succeed; the loser retries as the next version"], a:3,
+     why:"Under the default WriteSerializable level, appends that don't read the table never conflict. The one that loses the race for version N checks, finds no conflict, and commits N+1.",
+     w:{0:"Concurrent-append errors come from operations that <i>read</i> data a concurrent commit changed, like MERGE or UPDATE, not from two blind appends.",1:"Each successful write gets its own commit file. Commits are never merged.",2:"Delta uses optimistic concurrency. There are no table locks, and readers never block."}},
+    {s:"§6", q:"Bronze has default retention settings and predictive optimization is on. An auditor asks to query the table as of 12 days ago. What happens?",
+     o:["It works, since the log keeps 30 days of history entries","It's blocked: old data files are kept 7 days by default","It works, but only from a SQL warehouse, not serverless","It works once you RESTORE the table to that version"], a:1,
+     why:"Reading an old version needs its data files. They're kept 7 days (<code>deletedFileRetentionDuration</code>), predictive optimization really vacuums, and UC managed tables block time travel past that window.",
+     w:{0:"The 30-day log keeps <i>history entries</i>, but entries without data files can't be read.",2:"Retention is a table property. The compute type doesn't change it.",3:"RESTORE needs the same old files, so it fails for the same reason."}},
+    {s:"§7", q:"The metastore root is <code>s3://acme-uc/root/</code>, catalog <code>main</code> has MANAGED LOCATION <code>s3://acme-uc/main/</code>, and schema <code>main.bronze</code> has MANAGED LOCATION <code>s3://acme-uc/bronze/</code>. Where do a new managed table's files go?",
+     o:["Under the metastore root, since it sits at the top","Under the catalog root, since catalogs isolate data","Under the schema root, as the most specific one","In the vendor's bucket, next to the source CSV files"], a:2,
+     why:"Managed storage resolves schema → catalog → metastore. The most specific root that's set wins, and UC adds hashed sub-folders under it.",
+     w:{0:"The metastore root is only the fallback when neither the schema nor the catalog has one.",1:"The catalog root is used only when the schema has none. Catalog-level is the recommended place to set it, not an override.",3:"The source files' location never decides where a managed table lives."}},
+    {s:"§7", q:"Last week you ran <code>ALTER TABLE … SET MANAGED</code> on <code>main.bronze.legacy_events</code>. A non-Databricks reader still reads the old S3 path directly and now sees stale data. What's the quickest safe way back, within the window?",
+     o:["Run UNDROP TABLE to bring back the external version","Run ALTER TABLE … UNSET MANAGED on the table","Run RESTORE TABLE to the version before conversion","DEEP CLONE the managed table back to the old path"], a:1,
+     why:"<code>UNSET MANAGED</code> points the table back at its original external location within 14 days and keeps writes made after the conversion.",
+     w:{0:"Nothing was dropped, so there's nothing to UNDROP.",2:"RESTORE changes a table's <i>contents</i> to an older version. It doesn't change where the table lives.",3:"A clone creates a second table to keep in sync, which is slower and riskier than the built-in rollback."}},
+    {s:"§7", q:"You ran <code>GRANT USE SCHEMA, SELECT ON SCHEMA main.gold TO analysts</code>. Next month someone creates the view <code>main.gold.weekly_kpis</code>. Can analysts query it?",
+     o:["No, every new view needs its own SELECT grant","Only after its owner runs GRANT on the new view","Only once a metastore admin approves the view","Yes, schema grants cover objects created later"], a:3,
+     why:"Privileges on a container apply to all its current <b>and future</b> children. That's privilege inheritance.",
+     w:{0:"That was the behavior of the legacy model; UC's current privilege model inherits.",1:"The owner can add grants, but the schema-level SELECT already covers it.",2:"There's no approval step for new objects in Unity Catalog."}}
+  ];
+  var drillEl = document.getElementById("drill");
+  function renderDrill(){
+    drillEl.innerHTML = "";
+    drill.forEach(function(s, i){
+      var box = document.createElement("div"); box.className = "scenario";
+      box.innerHTML = '<span class="stag">' + s.s + '</span><b>Q' + (i+1) + ".</b> " + s.q;
+      var ch = document.createElement("div"); ch.className = "choices";
+      var fb = document.createElement("div"); fb.className = "feedback";
+      s.o.forEach(function(t, k){
+        var b = document.createElement("button"); b.textContent = L[k] + ") " + t;
+        b.addEventListener("click", function(){ state.drill[i] = k; save(); paint(); });
+        ch.appendChild(b);
+      });
+      function paint(){
+        var pick = state.drill[i];
+        if(pick === undefined){ fb.className = "feedback"; fb.innerHTML = ""; return; }
+        Array.prototype.forEach.call(ch.children, function(b, k){
+          b.disabled = true;
+          b.classList.toggle("right", k === s.a);
+          b.classList.toggle("wrong", k === pick && k !== s.a);
+        });
+        var html = (pick === s.a ? "✅ <b>Right: " : "❌ <b>Answer: ") + L[s.a] + ".</b> " + s.why + "<ul>";
+        for(var k = 0; k < 4; k++){ if(k !== s.a) html += "<li><b>" + L[k] + "</b> " + s.w[k] + "</li>"; }
+        fb.className = "feedback show " + (pick === s.a ? "good" : "bad");
+        fb.innerHTML = html + "</ul>";
+        score();
+      }
+      box.appendChild(ch); box.appendChild(fb); drillEl.appendChild(box);
+      paint();
+    });
+    score();
+  }
+  function score(){
+    var answered = 0, right = 0;
+    drill.forEach(function(s, i){ if(state.drill[i] !== undefined){ answered++; if(state.drill[i] === s.a) right++; } });
+    document.getElementById("drillScore").textContent = answered ? ("Score: " + right + " / " + answered + " answered (" + drill.length + " total)") : "";
+  }
+  document.getElementById("drillReset").addEventListener("click", function(){ state.drill = {}; save(); renderDrill(); });
+  document.getElementById("copyAnswers").addEventListener("click", function(){
+    var parts = [];
+    drill.forEach(function(s, i){ parts.push("Q" + (i+1) + " " + (state.drill[i] === undefined ? "-" : L[state.drill[i]])); });
+    var txt = "W1 deep dive: " + parts.join(", ");
+    var msg = document.getElementById("copyMsg");
+    try{ navigator.clipboard.writeText(txt).then(function(){ msg.textContent = "Copied: " + txt; }, function(){ msg.textContent = txt; }); }catch(e){ msg.textContent = txt; }
+  });
+
+  /* hands-on checklist */
+  var checks = [
+    "Cell 2: two CSV files listed in the volume",
+    "Cell 3: 6 rows, total 411.40, Type MANAGED",
+    "Cell 4: UPDATE dropped the total to 280.40; RESTORE brought back 411.40",
+    "Cell 5: the view returns 5 rows",
+    "Cell 6: RESTORE failed on the dropped table; UNDROP brought it back with history",
+    "Cell 7: saw the VACUUM retention safety error; cleaned up the schema"
+  ];
+  var checksEl = document.getElementById("checks");
+  function renderChecks(){
+    checksEl.innerHTML = "";
+    checks.forEach(function(t, i){
+      var lab = document.createElement("label"); lab.className = "check";
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!state.checks[i];
+      cb.addEventListener("change", function(){ state.checks[i] = cb.checked; save(); });
+      lab.appendChild(cb); lab.appendChild(document.createTextNode(t)); checksEl.appendChild(lab);
+    });
+  }
+
+  renderDrill(); renderChecks(); renderStep(state.step || 0);
+  var h = parseInt((location.hash || "").replace("#s", ""), 10);
+  show(!isNaN(h) ? h - 1 : state.current);
+})();
+</script>
+</body>
+</html>
