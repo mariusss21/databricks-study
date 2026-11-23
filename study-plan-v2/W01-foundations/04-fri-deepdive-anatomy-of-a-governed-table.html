@@ -311,9 +311,9 @@ details.qa[open] summary{margin-bottom:8px}
   <h2>Control plane, compute plane, and where your data sits</h2>
   <p class="lead">Databricks splits into a <b>control plane</b> (web app, job orchestration, Unity Catalog, your queries and code) and a <b>compute plane</b> where the work runs. Classic compute runs in <i>your</i> cloud account; serverless compute runs in Databricks' account. Your data stays in your storage either way.</p>
   <div class="grid2">
-    <figure class="official"><img src="assets/deepdive-w1/databricks-architecture-aws.png" alt="Databricks architecture for AWS: control plane, serverless compute plane, classic compute plane in your cloud account">
+    <figure class="official"><img src="assets/databricks-architecture-aws.png" alt="Databricks architecture for AWS: control plane, serverless compute plane, classic compute plane in your cloud account">
       <figcaption><span class="src">Official</span><b>Classic + serverless.</b> Classic compute lives in your cloud account next to the workspace storage bucket. Source: <a href="https://docs.databricks.com/aws/en/getting-started/high-level-architecture" target="_blank" rel="noopener">Databricks docs · High-level architecture</a></figcaption></figure>
-    <figure class="official"><img src="assets/deepdive-w1/serverless-workspace-architecture.png" alt="Databricks serverless workspace architecture">
+    <figure class="official"><img src="assets/serverless-workspace-architecture.png" alt="Databricks serverless workspace architecture">
       <figcaption><span class="src">Official</span><b>Serverless workspace.</b> Compute runs in Databricks' account and reaches your buckets; default storage can be Databricks-managed. Source: <a href="https://docs.databricks.com/aws/en/getting-started/high-level-architecture" target="_blank" rel="noopener">Databricks docs · High-level architecture</a></figcaption></figure>
   </div>
   <p>This is the P2 idea in a picture: storage (S3 + Delta) never moves, and any engine can point at the same table because <b>Unity Catalog in the control plane</b> tells each engine what the table is and whether you're allowed in.</p>
@@ -383,7 +383,7 @@ details.qa[open] summary{margin-bottom:8px}
   <div class="eyebrow">4 · Unity Catalog: objects and privileges · ~7 min <span class="sec">§7</span></div>
   <h2>Three-level names, securables beside them, and grants that flow down</h2>
   <p class="lead">Every table you'll ever query is <code>catalog.schema.object</code> inside one <b>metastore</b> (one per region). Next to catalogs sit the securables that govern <i>access to things outside</i>: storage credentials, external locations, connections, shares.</p>
-  <figure class="official"><img src="assets/deepdive-w1/uc-object-model.png" alt="Unity Catalog object model: metastore, then credentials, external locations, catalogs, connections, shares; catalog, then schema, then tables, views, volumes, functions, models">
+  <figure class="official"><img src="assets/uc-object-model.png" alt="Unity Catalog object model: metastore, then credentials, external locations, catalogs, connections, shares; catalog, then schema, then tables, views, volumes, functions, models">
     <figcaption><span class="src">Official</span><b>Unity Catalog object model.</b> Data objects sit under catalog → schema. Storage credentials and external locations hang off the metastore directly, not under a catalog. Source: <a href="https://docs.databricks.com/aws/en/data-governance/unity-catalog/" target="_blank" rel="noopener">Databricks docs · What is Unity Catalog?</a></figcaption></figure>
 
   <h3>How privileges flow: inheritance + "usage gates"</h3>
@@ -448,7 +448,7 @@ GRANT BROWSE ON CATALOG main TO `account users`;</code></pre></div>
   <div class="eyebrow">5 · Storage: credentials, locations, volumes, managed storage · ~6 min <span class="sec">§7</span><span class="sec">§2</span></div>
   <h2>Who is allowed to touch which path, and where managed data lands</h2>
   <p class="lead">A <b>storage credential</b> wraps a cloud identity (an IAM role on AWS). An <b>external location</b> pairs a credential with a path. External tables, external volumes and managed storage roots are all created <i>under</i> external locations.</p>
-  <figure class="official"><img src="assets/deepdive-w1/external-locations-overview.png" alt="Storage credentials, external locations and cloud storage paths for external tables and volumes">
+  <figure class="official"><img src="assets/external-locations-overview.png" alt="Storage credentials, external locations and cloud storage paths for external tables and volumes">
     <figcaption><span class="src">Official</span><b>Credential → external location → path.</b> One credential can back several locations; each location governs one path; external tables and volumes live under those paths. Source: <a href="https://docs.databricks.com/aws/en/connect/unity-catalog/cloud-storage/external-locations" target="_blank" rel="noopener">Databricks docs · External locations</a></figcaption></figure>
   <h3>Where does a managed table's data go? The most specific root wins</h3>
   <div class="svgwrap">
@@ -480,7 +480,7 @@ GRANT BROWSE ON CATALOG main TO `account users`;</code></pre></div>
     </ul></div>
   <h3>Volumes: governed files, not tables</h3>
   <div class="grid2">
-    <figure class="official"><img src="assets/deepdive-w1/uc-volume-object-model.png" alt="Unity Catalog object model focused on volume, sibling of table, view and function under schema">
+    <figure class="official"><img src="assets/uc-volume-object-model.png" alt="Unity Catalog object model focused on volume, sibling of table, view and function under schema">
       <figcaption><span class="src">Official</span><b>A volume is a schema-level sibling of a table.</b> Source: <a href="https://docs.databricks.com/aws/en/volumes/" target="_blank" rel="noopener">Databricks docs · What are Unity Catalog volumes?</a></figcaption></figure>
     <div class="card">
       <div class="tablewrap"><table>
@@ -518,9 +518,9 @@ df = spark.read.option("header", True).csv("/Volumes/main/landing/vendor_raw/ord
   <h2>A table version is a list of files, written down in order</h2>
   <p class="lead">A Delta table is Parquet data files plus a <code>_delta_log/</code> folder. Each successful write adds exactly one numbered commit file. The table at version N = everything the commits 0…N say is "added" and not later "removed".</p>
   <div class="grid2">
-    <figure class="official"><img src="assets/deepdive-w1/delta-log-structure.png" alt="Delta table directory with _delta_log commit JSON files and Parquet data files">
+    <figure class="official"><img src="assets/delta-log-structure.png" alt="Delta table directory with _delta_log commit JSON files and Parquet data files">
       <figcaption><span class="src">Official · Databricks blog</span><b>Table folder = log + data files.</b> Source: <a href="https://www.databricks.com/blog/2019/08/21/diving-into-delta-lake-unpacking-the-transaction-log.html" target="_blank" rel="noopener">Diving into Delta Lake: Unpacking the transaction log</a> (2019; partition folders are optional and today's tables usually skip them).</figcaption></figure>
-    <figure class="official"><img src="assets/deepdive-w1/delta-log-checkpoint.png" alt="Reader uses a Parquet checkpoint plus later JSON commits to compute table state">
+    <figure class="official"><img src="assets/delta-log-checkpoint.png" alt="Reader uses a Parquet checkpoint plus later JSON commits to compute table state">
       <figcaption><span class="src">Official · Databricks blog</span><b>Checkpoints save replaying.</b> A reader starts at the latest Parquet checkpoint and applies only the later JSON commits. The blog's "every 10 commits" is the classic open-source default; Databricks now tunes checkpoint frequency itself. Source: <a href="https://www.databricks.com/blog/2019/08/21/diving-into-delta-lake-unpacking-the-transaction-log.html" target="_blank" rel="noopener">same post</a></figcaption></figure>
   </div>
   <h3>What one commit contains (illustrative, trimmed)</h3>
@@ -554,7 +554,7 @@ df = spark.read.option("header", True).csv("/Volumes/main/landing/vendor_raw/ord
     <text x="10" y="222" font-size="12" class="muted">VACUUM (FULL, the default) removes orphans once they're older than the retention window.</text>
     <text x="10" y="240" font-size="12" class="muted">VACUUM LITE only reads the log, so it never sees files from aborted transactions.</text>
   </svg></div>
-  <figure class="official"><img src="assets/deepdive-w1/delta-log-occ.png" alt="Two users read version 0; user 1 commits version 1; user 2 fails on 1 and retries as version 2" style="max-width:440px">
+  <figure class="official"><img src="assets/delta-log-occ.png" alt="Two users read version 0; user 1 commits version 1; user 2 fails on 1 and retries as version 2" style="max-width:440px">
     <figcaption><span class="src">Official · Databricks blog</span><b>The retry case.</b> Both users read v0 and append. User 1 wins v1; user 2's attempt on v1 fails, it checks for conflicts, finds none, and commits v2. Source: <a href="https://www.databricks.com/blog/2019/08/21/diving-into-delta-lake-unpacking-the-transaction-log.html" target="_blank" rel="noopener">Unpacking the transaction log</a></figcaption></figure>
   <div class="grid2">
     <div class="card"><b>Rules that come up</b>
@@ -623,7 +623,7 @@ from pyspark.sql import functions as F
       <div class="codewrap"><pre><code>DESCRIBE HISTORY main.bronze.vendor_orders;               <span class="c-com">-- find the UPDATE (say v8) → good version is 7</span>
 SELECT count(*), sum(amount) FROM main.bronze.vendor_orders VERSION AS OF 7 WHERE vendor_id = 42;
 RESTORE TABLE main.bronze.vendor_orders TO VERSION AS OF 7; <span class="c-com">-- itself a new commit (v9)</span></code></pre></div>
-      <figure class="official"><img src="assets/deepdive-w1/restore-metrics.png" alt="RESTORE output metrics: table size, number of files, removed and restored files">
+      <figure class="official"><img src="assets/restore-metrics.png" alt="RESTORE output metrics: table size, number of files, removed and restored files">
         <figcaption><span class="src">Official</span><b>What RESTORE returns.</b> It re-adds the old files and removes the newer ones in one commit, so you can even undo the restore. Source: <a href="https://docs.databricks.com/aws/en/delta/history" target="_blank" rel="noopener">Databricks docs · History and data retention</a></figcaption></figure>
       <details class="call"><summary>Could you restore to 12 days ago?</summary><p>Not by default. Time travel needs the old <b>data files</b>, kept 7 days (<code>delta.deletedFileRetentionDuration</code>). On UC managed tables, queries older than that are blocked even before <code>VACUUM</code> runs. See section 8.</p></details>
     </div>
@@ -721,7 +721,7 @@ UNDROP TABLE main.bronze.vendor_orders;</code></pre></div>
         <li><b>Consequence:</b> <code>VACUUM</code> will actually run on your managed tables, so the 7-day time-travel limit is real, not theoretical.</li>
       </ul>
     </div>
-    <figure class="official" style="margin:0"><img src="assets/deepdive-w1/po-history-catalog-explorer.png" alt="Catalog Explorer history tab listing MERGE operations and an automatic AUTO LIQUID operation marked Not applied">
+    <figure class="official" style="margin:0"><img src="assets/po-history-catalog-explorer.png" alt="Catalog Explorer history tab listing MERGE operations and an automatic AUTO LIQUID operation marked Not applied">
       <figcaption><span class="src">Official</span><b>Automatic runs show up in table history</b> next to your own commits (filter "Automatic runs"). Source: <a href="https://docs.databricks.com/aws/en/optimizations/predictive-optimization" target="_blank" rel="noopener">Databricks docs · Predictive optimization</a></figcaption></figure>
   </div>
   <details class="call"><summary>P3 W3 again: yesterday someone dropped the managed table <code>main.silver.customers</code>. <code>RESTORE</code> or <code>UNDROP</code>?</summary>
@@ -936,7 +936,7 @@ DROP SCHEMA dd_w1 CASCADE;                                <span class="c-com">--
     <li><a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/platform-delta-unity-catalog-compute.md" target="_blank" rel="noopener">Platform wrap: Delta, Unity Catalog and compute</a></li>
     <li><a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/acid-on-delta.md" target="_blank" rel="noopener">ACID on Delta</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/delta-time-travel-and-retention.md" target="_blank" rel="noopener">Delta time travel and retention</a></li>
     <li><a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/unity-catalog-volumes-and-external-locations.md" target="_blank" rel="noopener">UC volumes, storage credentials and external locations</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/medallion-architecture.md" target="_blank" rel="noopener">Medallion architecture</a></li>
-    <li>This week's pills: <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/P1-delta-acid-and-the-lakehouse.md" target="_blank" rel="noopener">P1</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/P2-compute-and-storage-compute-separation.md" target="_blank" rel="noopener">P2</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/P3-unity-catalog-managed-vs-external-tables.md" target="_blank" rel="noopener">P3</a></li>
+    <li>This week's pills: <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/01-tue-delta-acid-and-the-lakehouse.md" target="_blank" rel="noopener">P1</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/02-wed-compute-and-storage-compute-separation.md" target="_blank" rel="noopener">P2</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/03-thu-unity-catalog-managed-vs-external-tables.md" target="_blank" rel="noopener">P3</a></li>
   </ul>
   <h3>Official docs (each opened on 2026-11-22)</h3>
   <ul>

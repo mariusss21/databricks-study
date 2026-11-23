@@ -11,6 +11,44 @@ Official sources (exam published May 4, 2026; guide updated August 6, 2026):
 
 The exam is 45 scored multiple-choice questions, 90 minutes, no aids. Code is in SQL when possible, otherwise Python.
 
+## Naming convention
+
+Each week lives in a folder `W0N-topic/`. Files are named by weekday so a week reads in order:
+
+| File | What it is |
+|---|---|
+| `00-mon-review.md` | Monday review of the previous week |
+| `00-mon-diagnostic.md` | Week 1 only. Monday was a baseline diagnostic, because there was no previous week to review |
+| `01-tue-<slug>.md` | Tuesday pill |
+| `02-wed-<slug>.md` | Wednesday pill |
+| `03-thu-<slug>.md` | Thursday pill |
+| `04-fri-deepdive-<slug>.md` | Friday deep dive, Markdown |
+| `04-fri-deepdive-<slug>.html` | The same deep dive as HTML |
+| `recall/recall-*.md` | Evening recall answers, when that week has any |
+| `assets/` | That week's images |
+| `README.md` | Kept when a week has its own readme |
+
+`<slug>` is the short kebab-case topic taken from the piece. Missed questions are logged in [`misses.md`](misses.md).
+
+## Index
+
+Link text is each file's title. Weeks 3–8 are on the schedule further down and do not have files yet.
+
+### Week 1 — Foundations
+
+- [Week 1 kickoff — baseline diagnostic](W01-foundations/00-mon-diagnostic.md)
+- [W1 · P1 — Delta Lake, ACID and the lakehouse](W01-foundations/01-tue-delta-acid-and-the-lakehouse.md)
+- [W1 · P2 — Compute choices and separating storage from compute](W01-foundations/02-wed-compute-and-storage-compute-separation.md)
+- [W1 · P3 — Unity Catalog: managed vs external tables](W01-foundations/03-thu-unity-catalog-managed-vs-external-tables.md)
+- [W1 · Friday deep dive: Anatomy of a governed table (v2)](W01-foundations/04-fri-deepdive-anatomy-of-a-governed-table.md)
+- [Anatomy of a governed table](W01-foundations/04-fri-deepdive-anatomy-of-a-governed-table.html) (HTML)
+
+### Week 2 — Ingestion
+
+- [Monday review — Week 1: Foundations](W02-ingestion/00-mon-review.md)
+
+[Missed questions](misses.md) — three so far, with a count by exam section.
+
 ## Weekly rhythm
 
 Times are America/Fortaleza (UTC-3). Weekends are off.
@@ -44,7 +82,7 @@ Times are America/Fortaleza (UTC-3). Weekends are off.
 
 Delta Lake, ACID, and the lakehouse; compute choices and storage/compute separation; Unity Catalog managed vs external tables.
 
-- **Mon 16:** Baseline diagnostic ([`W01-foundations/00-diagnostic.md`](W01-foundations/00-diagnostic.md)) — 10 questions across all 7 exam sections. Reply with answers like `1B 2C ...` so misses can be tracked.
+- **Mon 16:** Baseline diagnostic ([Week 1 kickoff — baseline diagnostic](W01-foundations/00-mon-diagnostic.md)) — 10 questions across all 7 exam sections. Reply with answers like `1B 2C ...` so misses can be tracked in [`misses.md`](misses.md).
 - **Tue:** Delta Lake: transaction log, ACID, time travel, paired with warehouse vs data lake vs lakehouse (what ACID actually guarantees).
 - **Wed:** Compute: serverless, classic jobs/all-purpose, SQL warehouses; limits and cost, paired with storage/compute separation and elasticity.
 - **Thu:** Unity Catalog: metastore → catalog → schema → object; managed vs external tables (create, alter, drop, convert), paired with metadata, ownership, and lifecycle.
@@ -57,7 +95,7 @@ Older material: [ACID on Delta](../explanations/acid-on-delta.md), [Delta time t
 
 COPY INTO, Auto Loader, and Lakeflow Connect. Mostly review of work already in the repo.
 
-- **Mon:** Review of Week 1.
+- **Mon:** Review of Week 1 ([Monday review — Week 1: Foundations](W02-ingestion/00-mon-review.md)).
 - **Tue:** Batch vs streaming vs incremental; COPY INTO, paired with idempotent loads and delivery semantics.
 - **Wed:** Auto Loader: schema inference, enforcement, evolution, rescued data, directory listing vs file notification, paired with schema-on-read vs schema-on-write and data contracts.
 - **Thu:** Lakeflow Connect standard vs managed connectors; JDBC/ODBC/REST from notebooks scheduled by Jobs, paired with CDC and API constraints.
@@ -158,15 +196,19 @@ Sections 2 and 3 are already well covered in the old weekly folders, so those we
 ```
 study-plan-v2/
   README.md                          this file
+  misses.md                          missed questions, by exam section
   W01-foundations/
-    00-diagnostic.md                 Week 1 Monday kickoff (this week)
-    review.md                        later Mondays: quiz + cheat sheet notes
-    P1-<slug>.md                     Tuesday pill
-    P2-<slug>.md                     Wednesday pill
-    P3-<slug>.md                     Thursday pill
-    deepdive-<slug>.md               Friday scenario (section-tagged)
+    00-mon-diagnostic.md             Week 1 Monday (diagnostic, not a review)
+    01-tue-<slug>.md                 Tuesday pill
+    02-wed-<slug>.md                 Wednesday pill
+    03-thu-<slug>.md                 Thursday pill
+    04-fri-deepdive-<slug>.md        Friday scenario (Markdown)
+    04-fri-deepdive-<slug>.html      Friday scenario (HTML)
+    assets/                          this week's images
+    recall/                          evening recall answers, when any exist
   W02-ingestion/
+    00-mon-review.md                 Monday review of the previous week
   ...
 ```
 
-Pills and deep dives will be added week by week. You do not need a full folder on day one.
+Pills and deep dives are added week by week. You do not need a full folder on day one. The [index](#index) lists every piece that exists, and [Naming convention](#naming-convention) says what each filename means.

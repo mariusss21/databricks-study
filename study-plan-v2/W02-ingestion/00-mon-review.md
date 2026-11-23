@@ -166,7 +166,7 @@ Reply with your answers like `1B 2C ... 11A` and I'll track anything you miss.
 
 ## Want more? (optional, never homework)
 
-- Your Friday deep dive: [Anatomy of a governed table (HTML)](https://raw.githack.com/mariusss21/databricks-study/main/study-plan-v2/W01-foundations/deepdive-anatomy-of-a-governed-table.html)
+- Your Friday deep dive: [Anatomy of a governed table (HTML)](https://raw.githack.com/mariusss21/databricks-study/main/study-plan-v2/W01-foundations/04-fri-deepdive-anatomy-of-a-governed-table.html)
 - Older notes: [Delta time travel and retention](../../explanations/delta-time-travel-and-retention.md) · [Platform wrap: Delta, UC and compute](../../explanations/platform-delta-unity-catalog-compute.md)
 - Optional further reading: [community guide, compute and clusters](https://github.com/kengio/databricks-certification-study-guide/blob/main/certifications/data-engineer-associate/01-databricks-intelligence-platform/03-compute-clusters.md)
 

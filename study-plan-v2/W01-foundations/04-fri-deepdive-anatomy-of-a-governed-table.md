@@ -3,7 +3,7 @@
 **Fri Nov 20, 2026 (rebuilt Nov 22) · ~65 min core + 10 min optional hands-on · closes P1 (Delta/ACID), P2 (compute), P3 (Unity Catalog)**
 Exam sections: **§1** Databricks Intelligence Platform · **§2** Data Ingestion and Loading · **§3** Data Transformation and Modeling · **§6** Troubleshooting, Monitoring, and Optimization · **§7** Governance and Security
 
-> **Best experience:** download [`deepdive-anatomy-of-a-governed-table.html`](deepdive-anatomy-of-a-governed-table.html) together with the `assets/deepdive-w1/` folder and open it in a browser. It has the same content with progress tracking, a step-by-step walkthrough, clickable quiz answers and a printable cheat sheet. This Markdown copy is for reading on GitHub.
+> **Best experience:** download [`04-fri-deepdive-anatomy-of-a-governed-table.html`](04-fri-deepdive-anatomy-of-a-governed-table.html) together with the `assets/` folder and open it in a browser. It has the same content with progress tracking, a step-by-step walkthrough, clickable quiz answers and a printable cheat sheet. This Markdown copy is for reading on GitHub.
 >
 > **How to use it:** one section at a time. In each 🤔 *Your call*, answer in your head before you open it. There are two ⏸ pause points. Scenario-check answers are folded at the bottom.
 
@@ -41,7 +41,7 @@ This closes Week 1. P1, P2 and P3 each gave you one layer. Today you stack them 
 
 A vendor drops daily CSV order files into **their own** S3 bucket. You make them reachable with governance, load a Bronze Delta table, and give analysts a small Gold object.
 
-![Flow from the vendor bucket to the Gold view](assets/deepdive-w1/diagram-map.svg)
+![Flow from the vendor bucket to the Gold view](assets/diagram-map.svg)
 <sub>Diagram drawn for this deep dive.</sub>
 
 | | Volume | Bronze table | Gold view |
@@ -67,7 +67,7 @@ Databricks has two parts. The **control plane** holds the web app, job orchestra
 
 | Classic + serverless | Serverless workspace |
 |---|---|
-| ![Databricks architecture for AWS](assets/deepdive-w1/databricks-architecture-aws.png) | ![Serverless workspace architecture](assets/deepdive-w1/serverless-workspace-architecture.png) |
+| ![Databricks architecture for AWS](assets/databricks-architecture-aws.png) | ![Serverless workspace architecture](assets/serverless-workspace-architecture.png) |
 | *Classic compute lives in your account next to the workspace bucket.* | *Compute runs in Databricks' account; default storage can be Databricks-managed.* |
 
 <sub>Official diagrams. Source: [Databricks docs · High-level architecture](https://docs.databricks.com/aws/en/getting-started/high-level-architecture)</sub>
@@ -76,7 +76,7 @@ This is the P2 idea as a picture: storage never moves, and any engine can point 
 
 ### Pick the engine
 
-![Compute decision flow](assets/deepdive-w1/diagram-compute-decision.svg)
+![Compute decision flow](assets/diagram-compute-decision.svg)
 <sub>Diagram drawn for this deep dive.</sub>
 
 The deciding question is **how much you need to configure the compute**, not Python vs SQL. Python and SQL run on every compute type except the SQL warehouse, which is SQL only.
@@ -116,12 +116,12 @@ Cost check: `SELECT sku_name, usage_date, SUM(usage_quantity) AS dbus FROM syste
 
 Every table is `catalog.schema.object` inside one **metastore** (one per region). Next to the catalogs sit the securables that govern access to things *outside*: storage credentials, external locations, connections and shares.
 
-![Unity Catalog object model](assets/deepdive-w1/uc-object-model.png)
+![Unity Catalog object model](assets/uc-object-model.png)
 <sub>Official. Data objects sit under catalog → schema; credentials and external locations hang off the metastore. Source: [Databricks docs · What is Unity Catalog?](https://docs.databricks.com/aws/en/data-governance/unity-catalog/)</sub>
 
 ### How privileges flow: inheritance + usage gates
 
-![Privilege inheritance from catalog to schema to objects](assets/deepdive-w1/diagram-privilege-inheritance.svg)
+![Privilege inheritance from catalog to schema to objects](assets/diagram-privilege-inheritance.svg)
 <sub>Diagram drawn for this deep dive.</sub>
 
 - **Inheritance:** a privilege on a **container** (catalog, schema) applies to all its **current and future** children.
@@ -164,12 +164,12 @@ GRANT BROWSE ON CATALOG main TO `account users`;   -- discoverable, no data acce
 - An **external location** pairs a credential with a path.
 - External tables, external volumes and managed storage roots are all created *under* external locations.
 
-![Storage credentials, external locations and paths](assets/deepdive-w1/external-locations-overview.png)
+![Storage credentials, external locations and paths](assets/external-locations-overview.png)
 <sub>Official. One credential can back several locations; each location governs one path. Source: [Databricks docs · External locations](https://docs.databricks.com/aws/en/connect/unity-catalog/cloud-storage/external-locations)</sub>
 
 ### Where a managed table's data goes: the most specific root wins
 
-![Managed storage resolution: schema, then catalog, then metastore](assets/deepdive-w1/diagram-managed-storage.svg)
+![Managed storage resolution: schema, then catalog, then metastore](assets/diagram-managed-storage.svg)
 <sub>Diagram drawn for this deep dive.</sub>
 
 - Databricks recommends setting the root at the **catalog** level, for data isolation.
@@ -182,7 +182,7 @@ GRANT BROWSE ON CATALOG main TO `account users`;   -- discoverable, no data acce
 
 ### Volumes: governed files, not tables
 
-![Volume in the UC object model](assets/deepdive-w1/uc-volume-object-model.png)
+![Volume in the UC object model](assets/uc-volume-object-model.png)
 <sub>Official. A volume is a schema-level sibling of a table. Source: [Databricks docs · Volumes](https://docs.databricks.com/aws/en/volumes/)</sub>
 
 | | Managed volume | External volume |
@@ -234,7 +234,7 @@ A Delta table is Parquet data files plus a `_delta_log/` folder.
 
 | Table folder = log + data files | Checkpoints save replaying |
 |---|---|
-| ![Delta table directory](assets/deepdive-w1/delta-log-structure.png) | ![Checkpoint plus later commits](assets/deepdive-w1/delta-log-checkpoint.png) |
+| ![Delta table directory](assets/delta-log-structure.png) | ![Checkpoint plus later commits](assets/delta-log-checkpoint.png) |
 
 <sub>Official, from the Databricks blog: [Diving into Delta Lake: Unpacking the transaction log](https://www.databricks.com/blog/2019/08/21/diving-into-delta-lake-unpacking-the-transaction-log.html). The post is from 2019. Partition folders are optional, and its "checkpoint every 10 commits" is the classic open-source default; Databricks now tunes checkpoint frequency itself ([History and data retention](https://docs.databricks.com/aws/en/delta/history)).</sub>
 
@@ -253,10 +253,10 @@ A Delta table is Parquet data files plus a `_delta_log/` folder.
 
 ### Atomic commits and optimistic concurrency
 
-![Optimistic concurrency: read, write, try to commit, check, retry or fail](assets/deepdive-w1/diagram-optimistic-concurrency.svg)
+![Optimistic concurrency: read, write, try to commit, check, retry or fail](assets/diagram-optimistic-concurrency.svg)
 <sub>Diagram drawn for this deep dive.</sub>
 
-![Two users, retry on conflict](assets/deepdive-w1/delta-log-occ.png)
+![Two users, retry on conflict](assets/delta-log-occ.png)
 <sub>Official, from the Databricks blog (same post). Both users read v0. User 1 wins v1; user 2's attempt at v1 fails, it finds no logical conflict, and it commits v2.</sub>
 
 - **Crash between steps 2 and 3:** no commit is written, so readers stay on v11 and the new files become orphans. `VACUUM` in FULL mode (the default) removes them once they're past retention. **LITE** mode reads only the log, so it never sees them.
@@ -324,7 +324,7 @@ SELECT count(*), sum(amount) FROM main.bronze.vendor_orders VERSION AS OF 7 WHER
 RESTORE TABLE main.bronze.vendor_orders TO VERSION AS OF 7; -- itself a new commit (v9)
 ```
 
-![RESTORE output metrics](assets/deepdive-w1/restore-metrics.png)
+![RESTORE output metrics](assets/restore-metrics.png)
 <sub>Official. RESTORE re-adds old files and removes newer ones in one commit, so you can undo the restore too. Source: [Databricks docs · History and data retention](https://docs.databricks.com/aws/en/delta/history)</sub>
 
 <details><summary>🤔 <b>Your call:</b> could you restore to 12 days ago?</summary>
@@ -372,7 +372,7 @@ Older: [W46 DB3 Gold layer objects](../../weekly-study/2026-W46-gold-objects-and
 
 Every recovery tool has a clock.
 
-![Recovery windows: 7, 14 and 30 days](assets/deepdive-w1/diagram-retention-clocks.svg)
+![Recovery windows: 7, 14 and 30 days](assets/diagram-retention-clocks.svg)
 <sub>Diagram drawn for this deep dive.</sub>
 
 | Tool | Fixes | Needs | Gotcha |
@@ -409,7 +409,7 @@ UNDROP TABLE main.bronze.vendor_orders;
 - It's billed as serverless jobs, and it doesn't run `ZORDER`.
 - **Consequence:** `VACUUM` really runs on your managed tables, so the 7-day time-travel limit is real, not theoretical.
 
-![Predictive optimization runs in table history](assets/deepdive-w1/po-history-catalog-explorer.png)
+![Predictive optimization runs in table history](assets/po-history-catalog-explorer.png)
 <sub>Official. Automatic runs show up in table history next to your own commits. Source: [Databricks docs · Predictive optimization](https://docs.databricks.com/aws/en/optimizations/predictive-optimization)</sub>
 
 <details><summary>🤔 <b>Your call (P3 W3 again):</b> someone dropped the managed table <code>main.silver.customers</code> yesterday. RESTORE or UNDROP?</summary>
@@ -712,7 +712,7 @@ For discovery problems I grant `BROWSE`; to find who changed what, I check the a
 - [Platform wrap: Delta, Unity Catalog and compute](../../explanations/platform-delta-unity-catalog-compute.md)
 - [ACID on Delta](../../explanations/acid-on-delta.md) · [Delta time travel and retention](../../explanations/delta-time-travel-and-retention.md)
 - [UC volumes and external locations](../../explanations/unity-catalog-volumes-and-external-locations.md) · [Medallion architecture](../../explanations/medallion-architecture.md)
-- This week's pills: [P1](P1-delta-acid-and-the-lakehouse.md) · [P2](P2-compute-and-storage-compute-separation.md) · [P3](P3-unity-catalog-managed-vs-external-tables.md)
+- This week's pills: [P1](01-tue-delta-acid-and-the-lakehouse.md) · [P2](02-wed-compute-and-storage-compute-separation.md) · [P3](03-thu-unity-catalog-managed-vs-external-tables.md)
 
 **Official docs (each opened on 2026-11-22):**
 - **Platform and compute:** [High-level architecture](https://docs.databricks.com/aws/en/getting-started/high-level-architecture) · [Serverless limitations](https://docs.databricks.com/aws/en/compute/serverless/limitations) · [Choose compute](https://docs.databricks.com/aws/en/compute/choose-compute)
