@@ -46,6 +46,7 @@ Link text is each file's title. Weeks 3–8 are on the schedule further down and
 ### Week 2 — Ingestion
 
 - [Monday review — Week 1: Foundations](W02-ingestion/00-mon-review.md)
+- [W2 · P1 — Batch, streaming, incremental, and COPY INTO](W02-ingestion/01-tue-batch-streaming-incremental-copy-into.md)
 
 [Missed questions](misses.md) — three so far, with a count by exam section.
 
