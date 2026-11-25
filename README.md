@@ -2,7 +2,7 @@
 
 Mario Carvalho's study notes toward the **Databricks Certified Data Engineer Associate** exam (scheduled for 2026-12-18).
 
-[`bots/`](bots/README.md) holds backups of the assistants' setups so they can be rebuilt on another account.
+Bot backups moved to https://github.com/mariusss21/grok-bots.
 
 ## Courses
 
