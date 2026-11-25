@@ -60,7 +60,7 @@ The key point is that incremental needs **memory of what was already done**. Who
 
 **Idempotent** means running it twice gives the same result as running it once. That's what makes a load "safe to rerun." It's the most useful property in data engineering, because retries, backfills and "oops, I clicked Run again" all become harmless. Common ways to get it: track processed files, `MERGE` on a business key instead of `INSERT`, or overwrite a whole partition.
 
-Your older notes go deeper: [Delivery semantics and idempotency](../../weekly-study/2026-W43-ingestion-into-bronze/DE2-delivery-semantics-idempotency.md), [Incremental extraction](../../weekly-study/2026-W43-ingestion-into-bronze/DE4-incremental-extraction.md), [End-to-end Bronze pipeline, safe to rerun](../../weekly-study/2026-W43-ingestion-into-bronze/DB7-end-to-end-bronze-pipeline-safe-to-rerun.md).
+Your older notes go deeper: Delivery semantics and idempotency (older note, removed), Incremental extraction (older note, removed), End-to-end Bronze pipeline, safe to rerun (older note, removed).
 
 ## 3) How Databricks does it
 
@@ -113,7 +113,7 @@ CREATE OR REFRESH STREAMING TABLE main.bronze.orders_st
 AS SELECT * FROM STREAM read_files('/Volumes/main/raw/landing/orders', format => 'csv');
 ```
 
-In Python it's still the same command: `spark.sql("COPY INTO ...")`. Your older tool-choice note: [Choosing an ingestion tool](../../weekly-study/2026-W43-ingestion-into-bronze/DB5-choosing-an-ingestion-tool.md).
+In Python it's still the same command: `spark.sql("COPY INTO ...")`. Your older tool-choice note: Choosing an ingestion tool (older note, removed).
 
 ## 4) Tradeoffs and exam traps
 

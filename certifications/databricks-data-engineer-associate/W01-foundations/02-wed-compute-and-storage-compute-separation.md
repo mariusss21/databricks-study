@@ -88,7 +88,7 @@ ORDER BY dbus DESC;
 
 Storage/compute separation in action: the *same* table can be read by a SQL warehouse for a dashboard and by a serverless job for ETL at the same time. No copy, and Delta's snapshot isolation (P1) keeps both consistent.
 
-Your older notes go deeper: [`explanations/platform-delta-unity-catalog-compute.md`](../../explanations/platform-delta-unity-catalog-compute.md) and [`explanations/spark-parallelism-single-node-and-serverless.md`](../../explanations/spark-parallelism-single-node-and-serverless.md).
+Your older notes go deeper: [`explanations/platform-delta-unity-catalog-compute.md`](../../../explanations/platform-delta-unity-catalog-compute.md) and [`explanations/spark-parallelism-single-node-and-serverless.md`](../../../explanations/spark-parallelism-single-node-and-serverless.md).
 
 ## 4) Tradeoffs and exam traps
 

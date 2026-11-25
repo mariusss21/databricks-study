@@ -84,7 +84,7 @@ Two retention knobs to keep apart:
 - `delta.deletedFileRetentionDuration` (default **7 days**) — how long removed data files stay around before `VACUUM` may delete them. This is what limits time travel in practice.
 - `delta.logRetentionDuration` (default **30 days**) — how long the history (log entries) is kept.
 
-Your older notes go deeper on both: [`explanations/acid-on-delta.md`](../../explanations/acid-on-delta.md) and [`explanations/delta-time-travel-and-retention.md`](../../explanations/delta-time-travel-and-retention.md). For the platform overview: [`explanations/platform-delta-unity-catalog-compute.md`](../../explanations/platform-delta-unity-catalog-compute.md).
+Your older notes go deeper on both: [`explanations/acid-on-delta.md`](../../../explanations/acid-on-delta.md) and [`explanations/delta-time-travel-and-retention.md`](../../../explanations/delta-time-travel-and-retention.md). For the platform overview: [`explanations/platform-delta-unity-catalog-compute.md`](../../../explanations/platform-delta-unity-catalog-compute.md).
 
 ## 4) Tradeoffs and exam traps
 

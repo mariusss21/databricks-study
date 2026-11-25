@@ -105,7 +105,7 @@ Checked against [Serverless compute limitations](https://docs.databricks.com/aws
 
 > ⚠️ **Exam trap:** "use a larger serverless environment" or "run it on a SQL warehouse" sound plausible. Neither one adds init scripts, and a SQL warehouse can't run a Python task.
 
-Cost check: `SELECT sku_name, usage_date, SUM(usage_quantity) AS dbus FROM system.billing.usage GROUP BY ALL ORDER BY usage_date DESC`. Older note: [Spark parallelism on single-node and serverless](../../explanations/spark-parallelism-single-node-and-serverless.md).
+Cost check: `SELECT sku_name, usage_date, SUM(usage_quantity) AS dbus FROM system.billing.usage GROUP BY ALL ORDER BY usage_date DESC`. Older note: [Spark parallelism on single-node and serverless](../../../explanations/spark-parallelism-single-node-and-serverless.md).
 
 **Takeaway:** serverless by default; classic only when you must configure the machine.
 
@@ -219,7 +219,7 @@ The vendor keeps **writing** into their own bucket, so the files have an outside
 - An **external table** governs rows, not files. It wouldn't give you `/Volumes` file access for inspection, reprocessing, or Auto Loader next week.
 </details>
 
-Older note: [UC volumes, storage credentials and external locations](../../explanations/unity-catalog-volumes-and-external-locations.md).
+Older note: [UC volumes, storage credentials and external locations](../../../explanations/unity-catalog-volumes-and-external-locations.md).
 
 **Takeaway:** credentials and locations govern *paths*, volumes govern *files*, and tables govern *rows*. Managed data lands at the most specific managed root.
 
@@ -270,7 +270,7 @@ A Delta table is Parquet data files plus a `_delta_log/` folder.
 Both plain appends succeed; the one that loses the race retries as the next version. The **MERGE** is the one that can fail with a concurrent-modification error, because it *read* data that may have changed under it. To fix it, narrow the MERGE condition, schedule the jobs apart, or retry.
 </details>
 
-Older notes: [ACID on Delta](../../explanations/acid-on-delta.md) · [Course: Using Apache Spark with Delta Lake](../../courses/monitoring-and-optimization/02-using-apache-spark-with-delta-lake.html).
+Older notes: [ACID on Delta](../../../explanations/acid-on-delta.md) · [Course: Using Apache Spark with Delta Lake](../../../courses/monitoring-and-optimization/02-using-apache-spark-with-delta-lake.html).
 
 **Takeaway:** a commit is one atomic file creation, so no commit means no change. Writers race optimistically, and only real overlaps fail.
 
@@ -350,7 +350,7 @@ GRANT SELECT     ON VIEW   main.gold.daily_vendor_revenue TO `analysts`;
 | Freshness | Always current | As of the last refresh |
 | Pick when | The query is light and freshness matters | The query is heavy, read often, and lag is OK |
 
-Older: [W46 DB3 Gold layer objects](../../weekly-study/2026-W46-gold-objects-and-jobs/DB3-gold-layer-objects.md) · [W47 DB1 streaming tables vs MVs](../../weekly-study/2026-W47-lakeflow-pipelines-and-jobs/DB1-sdp-streaming-tables-vs-mvs.md).
+Older: W46 DB3 Gold layer objects (older note, removed) · W47 DB1 streaming tables vs MVs (older note, removed).
 
 **Step 6 · Friday's cleanup script (lifecycle).**
 
@@ -417,7 +417,7 @@ UNDROP TABLE main.bronze.vendor_orders;
 **`UNDROP TABLE main.silver.customers`.** `RESTORE` rolls back a table that still *exists*; on a dropped table it fails with `TABLE_OR_VIEW_NOT_FOUND`. If a new table has already taken the name, rename that one first, or use `SHOW TABLES DROPPED` and then `UNDROP TABLE WITH ID`.
 </details>
 
-Older note: [Delta time travel and retention](../../explanations/delta-time-travel-and-retention.md).
+Older note: [Delta time travel and retention](../../../explanations/delta-time-travel-and-retention.md).
 
 **Takeaway:** data files and `UNDROP` last 7 days, `UNSET MANAGED` 14 days, and history entries 30 days. `RESTORE` undoes a change; `UNDROP` undoes a delete.
 
@@ -700,7 +700,7 @@ For discovery problems I grant `BROWSE`; to find who changed what, I check the a
 
 | This week's idea | Comes back in | How |
 |---|---|---|
-| Volumes and replayable raw files | **W2 Ingestion** | `COPY INTO` and Auto Loader read `/Volumes` paths and load only new files. Older: [W43 deep dive: governed ingestion to Bronze](../../weekly-study/2026-W43-ingestion-into-bronze/deepdive-db-governed-ingestion-to-bronze.html) |
+| Volumes and replayable raw files | **W2 Ingestion** | `COPY INTO` and Auto Loader read `/Volumes` paths and load only new files. Older: W43 deep dive: governed ingestion to Bronze (older note, removed) |
 | Managed Bronze + `_rescued_data` | W2 Wed, W3 | Schema inference, evolution and rescued data, then cleaning into Silver |
 | Plain view vs MV | W4 Tue | Gold objects: table vs view vs MV vs streaming table |
 | Data-skipping stats, predictive optimization, query profile | W4 Fri | "Why is it slow?": file layout, liquid clustering, tuning |
@@ -709,9 +709,9 @@ For discovery problems I grant `BROWSE`; to find who changed what, I check the a
 | Grants and inheritance | W6 | GRANT/REVOKE, row filters, column masks, ABAC |
 
 **Your older material:**
-- [Platform wrap: Delta, Unity Catalog and compute](../../explanations/platform-delta-unity-catalog-compute.md)
-- [ACID on Delta](../../explanations/acid-on-delta.md) · [Delta time travel and retention](../../explanations/delta-time-travel-and-retention.md)
-- [UC volumes and external locations](../../explanations/unity-catalog-volumes-and-external-locations.md) · [Medallion architecture](../../explanations/medallion-architecture.md)
+- [Platform wrap: Delta, Unity Catalog and compute](../../../explanations/platform-delta-unity-catalog-compute.md)
+- [ACID on Delta](../../../explanations/acid-on-delta.md) · [Delta time travel and retention](../../../explanations/delta-time-travel-and-retention.md)
+- [UC volumes and external locations](../../../explanations/unity-catalog-volumes-and-external-locations.md) · [Medallion architecture](../../../explanations/medallion-architecture.md)
 - This week's pills: [P1](01-tue-delta-acid-and-the-lakehouse.md) · [P2](02-wed-compute-and-storage-compute-separation.md) · [P3](03-thu-unity-catalog-managed-vs-external-tables.md)
 
 **Official docs (each opened on 2026-11-22):**

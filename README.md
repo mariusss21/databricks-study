@@ -1,31 +1,37 @@
-# Databricks study notes
+# Certification Study Log, AI-assisted
 
-Mario Carvalho's study notes toward the **Databricks Certified Data Engineer Associate** exam (scheduled for 2026-12-18).
+Mario Carvalho, a data engineer, studies for certifications with an AI study coach (Grok Bot). The coach writes original daily pills, retrieval-practice recall checks, and weekly reviews, and tracks mistakes by exam section. All questions are original, never exam dumps.
 
-Bot backups moved to https://github.com/mariusss21/grok-bots.
+## How it works
 
-## Courses
+- Light load, designed around focus: one short piece on weekdays.
+- Spaced review on Mondays: a quiz plus a one-page cheat sheet.
+- Evening recall checks, to pull the day's ideas back from memory.
+- A misses log, grouped by exam section and brought back in later reviews.
+- Everything is committed here, week by week.
 
-- [Introduction to Apache Spark](courses/introduction-to-apache-spark/README.md) (Databricks Academy)
-- [Developing Applications with Apache Spark](courses/developing-applications-with-apache-spark/README.md) (Databricks Academy)
-- [Structured Streaming](courses/structured-streaming/README.md) (Databricks Academy)
-- [Monitoring and Optimization](courses/monitoring-and-optimization/README.md) (Databricks Academy)
+## Certifications
 
-## Explanations
+| Certification | Folder | Status |
+|---|---|---|
+| Databricks Certified Data Engineer Associate | [certifications/databricks-data-engineer-associate/](certifications/databricks-data-engineer-associate/) | In progress (exam Jan 2027) |
 
-- [The Spark Driver, explained](explanations/spark-driver.md)
-- [ACID on Delta](explanations/acid-on-delta.md)
-- [Adaptive Query Execution (AQE)](explanations/adaptive-query-execution.md)
-- [Columnar storage, row updates, liquid clustering, and Z-order](explanations/columnar-storage-updates-and-clustering.md)
-- [Delta time travel and retention](explanations/delta-time-travel-and-retention.md)
-- [Medallion architecture](explanations/medallion-architecture.md)
-- [Platform wrap: Delta, Unity Catalog, and compute](explanations/platform-delta-unity-catalog-compute.md)
-- [Schema enforcement vs. schema evolution](explanations/schema-enforcement-and-evolution.md)
-- [Spark parallelism on single-node and serverless compute](explanations/spark-parallelism-single-node-and-serverless.md)
-- [Unity Catalog volumes, storage credentials, and external locations](explanations/unity-catalog-volumes-and-external-locations.md)
+## Repo structure
 
-## Weekly study pills and deep dives
+Each certification is one folder:
 
-Each week shares one theme: Gerald leads it with the Databricks pills, and NJ in Dollar's Data Engineering pills and Zé Carlos's deep dives follow it.
+```
+certifications/<cert-slug>/
+  README.md       plan, weekly rhythm, and an index of every piece
+  misses.md       questions missed, grouped by exam section
+  W01-<theme>/    that week's pills, Friday deep dive, recall/, and assets/
+  W02-<theme>/
+  ...
+```
 
-- [Weekly study](weekly-study/README.md): one folder per week with Gerald's Databricks pills, NJ in Dollar's Data Engineering pills, and Zé Carlos's deep dives
+A future certification is a new sibling folder under `certifications/`, with the same layout.
+
+## Other material
+
+- `explanations/`: short explainers on Delta and ACID, Unity Catalog, compute, the medallion architecture, and related topics.
+- `courses/`: Databricks Academy notes (Introduction to Apache Spark, Developing Applications with Apache Spark, Structured Streaming, Monitoring and Optimization).

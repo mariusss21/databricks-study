@@ -643,7 +643,7 @@ GRANT SELECT     ON VIEW   main.gold.daily_vendor_revenue TO `analysts`;</code><
         <tr><td>Freshness</td><td>Always current</td><td>As of the last refresh</td></tr>
         <tr><td>Pick when</td><td>Query is light, freshness matters</td><td>Query is heavy, read often, lag OK</td></tr>
       </table></div>
-      <p class="muted" style="font-size:14px">Older: <a href="https://github.com/mariusss21/databricks-study/blob/main/weekly-study/2026-W46-gold-objects-and-jobs/DB3-gold-layer-objects.md" target="_blank" rel="noopener">W46 DB3 Gold layer objects</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/weekly-study/2026-W47-lakeflow-pipelines-and-jobs/DB1-sdp-streaming-tables-vs-mvs.md" target="_blank" rel="noopener">W47 DB1 streaming tables vs MVs</a>.</p>
+      <p class="muted" style="font-size:14px">Older: W46 DB3 Gold layer objects (older note, removed) · W47 DB1 streaming tables vs MVs (older note, removed).</p>
     </div>
     <div class="wt" data-t="6 · Clean up">
       <h3>Step 6 · Friday's cleanup script <span class="sec">§7 lifecycle</span></h3>
@@ -923,7 +923,7 @@ DROP SCHEMA dd_w1 CASCADE;                                <span class="c-com">--
   <h2>Where this week comes back</h2>
   <div class="tablewrap"><table>
     <tr><th>This week's idea</th><th>Comes back in</th><th>How</th></tr>
-    <tr><td>Volumes + replayable raw files</td><td><b>W2 Ingestion</b> (next week)</td><td><code>COPY INTO</code> and Auto Loader read <code>/Volumes</code> paths and load only new files. Older: <a href="https://github.com/mariusss21/databricks-study/blob/main/weekly-study/2026-W43-ingestion-into-bronze/deepdive-db-governed-ingestion-to-bronze.html" target="_blank" rel="noopener">W43 deep dive: governed ingestion to Bronze</a></td></tr>
+    <tr><td>Volumes + replayable raw files</td><td><b>W2 Ingestion</b> (next week)</td><td><code>COPY INTO</code> and Auto Loader read <code>/Volumes</code> paths and load only new files. Older: W43 deep dive: governed ingestion to Bronze (older note, removed)</td></tr>
     <tr><td>Managed Bronze table + <code>_rescued_data</code></td><td>W2 Wed, W3</td><td>Schema inference, evolution and rescued data; then cleaning into Silver</td></tr>
     <tr><td>Plain view vs MV</td><td>W4 Tue</td><td>Gold objects: table vs view vs MV vs streaming table</td></tr>
     <tr><td>Data skipping stats, predictive optimization, query profile</td><td>W4 Fri</td><td>"Why is it slow?": file layout, liquid clustering, tuning</td></tr>
@@ -936,7 +936,7 @@ DROP SCHEMA dd_w1 CASCADE;                                <span class="c-com">--
     <li><a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/platform-delta-unity-catalog-compute.md" target="_blank" rel="noopener">Platform wrap: Delta, Unity Catalog and compute</a></li>
     <li><a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/acid-on-delta.md" target="_blank" rel="noopener">ACID on Delta</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/delta-time-travel-and-retention.md" target="_blank" rel="noopener">Delta time travel and retention</a></li>
     <li><a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/unity-catalog-volumes-and-external-locations.md" target="_blank" rel="noopener">UC volumes, storage credentials and external locations</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/explanations/medallion-architecture.md" target="_blank" rel="noopener">Medallion architecture</a></li>
-    <li>This week's pills: <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/01-tue-delta-acid-and-the-lakehouse.md" target="_blank" rel="noopener">P1</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/02-wed-compute-and-storage-compute-separation.md" target="_blank" rel="noopener">P2</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/study-plan-v2/W01-foundations/03-thu-unity-catalog-managed-vs-external-tables.md" target="_blank" rel="noopener">P3</a></li>
+    <li>This week's pills: <a href="https://github.com/mariusss21/databricks-study/blob/main/certifications/databricks-data-engineer-associate/W01-foundations/01-tue-delta-acid-and-the-lakehouse.md" target="_blank" rel="noopener">P1</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/certifications/databricks-data-engineer-associate/W01-foundations/02-wed-compute-and-storage-compute-separation.md" target="_blank" rel="noopener">P2</a> · <a href="https://github.com/mariusss21/databricks-study/blob/main/certifications/databricks-data-engineer-associate/W01-foundations/03-thu-unity-catalog-managed-vs-external-tables.md" target="_blank" rel="noopener">P3</a></li>
   </ul>
   <h3>Official docs (each opened on 2026-11-22)</h3>
   <ul>

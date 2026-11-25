@@ -116,7 +116,7 @@ ALTER TABLE sales.bronze.vendor_feed UNSET MANAGED;
 
 In Python it's the same rule: `df.write.saveAsTable("sales.silver.customers")` makes a **managed** table; adding `.option("path", "s3://...")` makes it **external**.
 
-Your older notes go deeper on the storage side: [`explanations/unity-catalog-volumes-and-external-locations.md`](../../explanations/unity-catalog-volumes-and-external-locations.md) and [`explanations/platform-delta-unity-catalog-compute.md`](../../explanations/platform-delta-unity-catalog-compute.md).
+Your older notes go deeper on the storage side: [`explanations/unity-catalog-volumes-and-external-locations.md`](../../../explanations/unity-catalog-volumes-and-external-locations.md) and [`explanations/platform-delta-unity-catalog-compute.md`](../../../explanations/platform-delta-unity-catalog-compute.md).
 
 ## 4) Tradeoffs and exam traps
 
