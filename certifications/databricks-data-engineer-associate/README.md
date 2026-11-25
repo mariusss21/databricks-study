@@ -43,5 +43,6 @@ Link text is each file's title. Weeks 3–8 are on the schedule above and do not
 - [Monday review — Week 1: Foundations](W02-ingestion/00-mon-review.md)
 - [W2 · P1 — Batch, streaming, incremental, and COPY INTO](W02-ingestion/01-tue-batch-streaming-incremental-copy-into.md)
 - [Evening recall · W2 Tue · Batch, streaming, incremental, and COPY INTO](W02-ingestion/recall/recall-01-tue-batch-streaming-incremental-copy-into.md)
+- [W2 · P2 — Auto Loader, schema inference and schema evolution](W02-ingestion/02-wed-auto-loader-and-schema-evolution.md)
 
-[Missed questions](misses.md) — three so far, with a count by exam section.
+[Missed questions](misses.md) — four so far, with a count by exam section.
