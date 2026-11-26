@@ -44,5 +44,7 @@ Link text is each file's title. Weeks 3–8 are on the schedule above and do not
 - [W2 · P1 — Batch, streaming, incremental, and COPY INTO](W02-ingestion/01-tue-batch-streaming-incremental-copy-into.md)
 - [Evening recall · W2 Tue · Batch, streaming, incremental, and COPY INTO](W02-ingestion/recall/recall-01-tue-batch-streaming-incremental-copy-into.md)
 - [W2 · P2 — Auto Loader, schema inference and schema evolution](W02-ingestion/02-wed-auto-loader-and-schema-evolution.md)
+- [Evening recall · W2 Wed · Auto Loader, schema inference and schema evolution](W02-ingestion/recall/recall-02-wed-auto-loader-and-schema-evolution.md)
+- [W2 · P3 — Lakeflow Connect: managed connectors, CDC and picking an ingestion path](W02-ingestion/03-thu-lakeflow-connect-managed-connectors.md)
 
 [Missed questions](misses.md) — four so far, with a count by exam section.
